@@ -23,3 +23,5 @@ Build and run (**will cause segmentation fault 8-)**).
 `beautifulsoup 4`
 
 `lxml`
+
+`html5lib`
