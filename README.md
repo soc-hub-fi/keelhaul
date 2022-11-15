@@ -12,7 +12,7 @@ Build testcases without parsing.
 
 `NO_PARSE=1 cargo build`
 
-Build and run.
+Build and run (**will cause segmentation fault 8-)**).
 
 `cargo run`
 
