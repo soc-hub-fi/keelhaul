@@ -4,3 +4,4 @@
 Cargo.lock
 **_cache
 /src/register_tests.rs
+**/__pycache__/**

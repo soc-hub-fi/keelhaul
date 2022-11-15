@@ -2,40 +2,12 @@ from pathlib import Path
 import logging
 import sys
 from typing import List, Dict
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 import json
 
 from bs4 import BeautifulSoup
 
-
-@dataclass
-class Register:
-    name: str
-    address_base: int
-    address_offset_cluster: int
-    address_offset_register: int
-    value_reset: int
-    can_read: bool
-    can_write: bool
-
-    def __str__(self) -> str:
-        return f"name: {self.name}, base: {self.address_base}, cluster: {self.address_offset_cluster}, register: {self.address_offset_register}, reset: {self.value_reset}, read: {self.can_read}, write: {self.can_write}"
-
-    def __eq__(self, other: object) -> bool:
-        assert isinstance(other, Register)
-        if self.address_base != other.address_base:
-            return False
-        if self.address_base != other.address_base:
-            return False
-        if self.address_base != other.address_base:
-            return False
-        if self.address_base != other.address_base:
-            return False
-        if self.address_base != other.address_base:
-            return False
-        if self.address_base != other.address_base:
-            return False
-        return True
+from register import Register
 
 
 if __name__ == "__main__":
@@ -99,7 +71,7 @@ if __name__ == "__main__":
                 )
                 if full_address in addresses.keys():
                     logging.warning(
-                        f"Register {name}'s full address is already taken by register {addresses[full_address]}. Ignoring this register."
+                        f"Register {name}'s full address is already taken by register {addresses[full_address]}. This register is ignored."
                     )
                 else:
                     addresses[full_address] = name
