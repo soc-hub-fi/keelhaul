@@ -4,17 +4,19 @@ Simple skeleton for register test case generation.
 
 ## How to use
 
+Set path to Python-interpreter to `Justfile`.
+
 Build testcases.
 
-`cargo build`
+`just build`
 
 Build testcases without parsing.
 
-`NO_PARSE=1 cargo build`
+`just build-without-parsing`
 
 Build and run (**will cause segmentation fault 8-)**).
 
-`cargo run`
+`just run`
 
 ## Dependencies
 
@@ -25,3 +27,5 @@ Build and run (**will cause segmentation fault 8-)**).
 `lxml`
 
 `html5lib`
+
+`just`
