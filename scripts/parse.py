@@ -50,7 +50,9 @@ if __name__ == "__main__":
                 address_offset_register = int(address_offset_register, 16)
                 access = register.find("access")
                 if not access:
-                    logging.warning(f"Register {name} does not have access value.")
+                    logging.warning(
+                        f"Register {name} does not have access value. Access is assumed to be 'read-write'."
+                    )
                     access = "read-write"
                 else:
                     access = access.text
