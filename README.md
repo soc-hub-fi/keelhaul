@@ -21,3 +21,5 @@ Build and run (**will cause segmentation fault 8-)**).
 `python3.10`
 
 `beautifulsoup 4`
+
+`lxml`
