@@ -20,7 +20,18 @@ Build and run (**will cause segmentation fault 8-)**).
 
 ## Dependencies
 
-`python3.10`
+- `cargo`
+    - `curl https://sh.rustup.rs -sSf | sh`
+- `python3.10`
+    - `sudo apt install python3.10`
+- `just`
+    - `cargo install just`
+- `libxml2`
+    - `sudo apt install libxml2-dev`
+- `libxslt`
+    - `sudo apt install libxslt-dev`
+
+### Python modules
 
 `beautifulsoup 4`
 
@@ -28,4 +39,7 @@ Build and run (**will cause segmentation fault 8-)**).
 
 `html5lib`
 
-`just`
+Python dependencies can be installed from `requirements.txt`.
+
+- `pip install -r requirements.txt`
+
