@@ -1,4 +1,4 @@
-# register_testing2
+# register_testing
 
 Simple skeleton for register test case generation.
 
