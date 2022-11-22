@@ -1,13 +1,20 @@
-python := "python3.10"
-
 default:
     just --list --unsorted
 
-build:
-    PATH_PYTHON={{python}} cargo build
+parse:
+    PATH_SVD=data/tackle.svd PATH_OUTPUT=temp/parsed.json cargo run --bin parse
 
-build-without-parsing:
-    NO_PARSE=1 PATH_PYTHON={{python}} cargo build
+generate:
+    PATH_INPUT=temp/parsed.json PATH_OUTPUT=runner/src/register_tests.rs cargo run --bin generate
+
+build:
+    just parse
+    just generate
+    cargo build --bin runner
+
+# TODO: build-without-parsing
+# TODO: build.rs
 
 run:
-    PATH_PYTHON={{python}} cargo run
+    just build
+    cargo run --bin runner

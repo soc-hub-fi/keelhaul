@@ -1,7 +1,4 @@
-/target
-/data/*.svd
-/temp
-Cargo.lock
-**_cache
-/src/register_tests.rs
-**/__pycache__/**
+target/**
+*.svd
+*.json
+*.lock
