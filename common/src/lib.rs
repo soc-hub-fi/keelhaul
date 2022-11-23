@@ -1,3 +1,5 @@
+//! Common types for register test generator.
+
 use std::collections::HashMap;
 
 pub struct Register {
@@ -11,6 +13,9 @@ pub struct Register {
 }
 
 impl Register {
+    /// Transform register structure to hashmap.
+    #[inline]
+    #[must_use]
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
             ("name", self.name.clone()),
@@ -27,5 +32,12 @@ impl Register {
             ("can_read", self.can_read.to_string()),
             ("can_write", self.can_write.to_string()),
         ])
+    }
+
+    /// Get register's absolute memory address.
+    #[inline]
+    #[must_use]
+    pub const fn full_address(&self) -> u64 {
+        self.address_base + self.address_offset_cluster + self.address_offset_register
     }
 }
