@@ -54,7 +54,7 @@ fn get_svd_content() -> String {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    let path_str = get_environment_variable("PATH_OUTPUT");
+    let path_str = get_environment_variable("PATH_JSON");
     force_path_existence(&path_str)
 }
 

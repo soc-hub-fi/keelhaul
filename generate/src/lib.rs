@@ -89,7 +89,7 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
 
 /// Get register objects.
 fn get_registers() -> Vec<Register> {
-    let path_input = get_environment_variable("PATH_INPUT");
+    let path_input = get_environment_variable("PATH_JSON");
     let content = read_to_string(path_input).expect("Failed to read parser results.");
     let json = json::parse(&content).expect("Failed to parse parser results.");
     get_parsed_registers(json)
