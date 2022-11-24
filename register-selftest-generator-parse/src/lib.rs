@@ -34,11 +34,35 @@ fn maybe_get_excludes() -> Option<Vec<String>> {
             let registers = content
                 .split('\n')
                 .into_iter()
-                .map(|n| remove_illegal_characters(&n.to_owned()))
+                .map(remove_illegal_characters)
                 .collect_vec();
             Some(registers)
         }
         None => None,
+    }
+}
+
+fn maybe_get_included_peripherals() -> Option<Vec<String>> {
+    match env::var("INCLUDE_PERIPHERALS") {
+        Ok(included) => {
+            let peripherals = included.to_lowercase();
+            let peripherals = peripherals.split(',').map(|s| s.to_owned()).collect_vec();
+            // TODO: validate peripherals
+            Some(peripherals)
+        }
+        Err(_error) => None,
+    }
+}
+
+fn maybe_get_excluded_peripherals() -> Option<Vec<String>> {
+    match env::var("EXCLUDE_PERIPHERALS") {
+        Ok(excluded) => {
+            let peripherals = excluded.to_lowercase();
+            let peripherals = peripherals.split(',').map(|s| s.to_owned()).collect_vec();
+            // TODO: validate peripherals
+            Some(peripherals)
+        }
+        Err(_error) => None,
     }
 }
 
@@ -134,7 +158,12 @@ fn remove_illegal_characters(name: &str) -> String {
 }
 
 /// Find registers from XML-document.
-fn find_registers(parsed: &Document, excludes: &Option<Vec<String>>) -> Vec<Register> {
+fn find_registers(
+    parsed: &Document,
+    excludes: &Option<Vec<String>>,
+    maybe_included_peripherals: &Option<Vec<String>>,
+    maybe_excluded_peripherals: &Option<Vec<String>>,
+) -> Vec<Register> {
     let mut registers: Vec<Register> = Vec::new();
     let mut addresses: HashMap<u64, String> = HashMap::new();
     for peripheral in parsed
@@ -144,6 +173,26 @@ fn find_registers(parsed: &Document, excludes: &Option<Vec<String>>) -> Vec<Regi
         let address_base = get_node_text_with_name(&peripheral, "baseAddress");
         let address_base = hex_to_int(&address_base);
         let name_peripheral = get_node_text_with_name(&peripheral, "name");
+
+        if let Some(included_peripherals) = maybe_included_peripherals {
+            let name_peripheral_lowercase = name_peripheral.to_lowercase();
+            if !included_peripherals.contains(&name_peripheral_lowercase) {
+                println!(
+                    "cargo:warning=Peripheral {} was not included.",
+                    name_peripheral
+                );
+                continue;
+            }
+        }
+
+        if let Some(excluded_peripherals) = maybe_excluded_peripherals {
+            let name_peripheral_lowercase = name_peripheral.to_lowercase();
+            if excluded_peripherals.contains(&name_peripheral_lowercase) {
+                println!("cargo:warning=Peripheral {} was excluded.", name_peripheral);
+                continue;
+            }
+        }
+
         for cluster in peripheral
             .descendants()
             .filter(|n| n.has_tag_name("cluster"))
@@ -209,11 +258,19 @@ fn write_output(registers: &[Register], file: &mut File) {
 }
 
 pub fn parse() {
+    let included_peripherals = maybe_get_included_peripherals();
+    let excluded_peripherals = maybe_get_excluded_peripherals();
+
     let mut file_output = get_output_file();
     let excludes = maybe_get_excludes();
     let content = get_svd_content();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &excludes);
+    let registers = find_registers(
+        &parsed,
+        &excludes,
+        &included_peripherals,
+        &excluded_peripherals,
+    );
     println!("Found {} registers.", registers.len());
     write_output(&registers, &mut file_output);
 }
