@@ -147,9 +147,10 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         output.push(line);
         //function_names.push(function_name);
         let test_case = format!(
-            "TestCase {{ name: {}, function: {} }}",
+            "TestCase {{ name: {}, function: {}, addr: {} }}",
             format!("\"{}\"", register.name),
-            function_name
+            function_name,
+            register.full_address(),
         );
 
         test_cases.push(test_case);
@@ -169,7 +170,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         test_cases: vec![
             "use core::ptr::read_volatile;\n".to_owned(),
             "use core::ptr::write_volatile;\n".to_owned(),
-            "pub struct TestCase<'a> { pub name: &'a str, pub function: fn() -> u32, }".to_owned(),
+            "pub struct TestCase<'a> { pub name: &'a str, pub function: fn() -> u32, pub addr: usize }".to_owned(),
             output_combined,
             function_array,
         ],
