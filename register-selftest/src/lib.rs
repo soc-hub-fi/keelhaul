@@ -1,11 +1,17 @@
 #![no_std]
 use core::ptr::*;
 
+#[non_exhaustive]
+pub enum FuncRet {
+    None,
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+}
+
 pub struct TestCase<'a> {
-    pub function8: Option<fn() -> u8>,
-    pub function16: Option<fn() -> u16>,
-    pub function32: Option<fn() -> u32>,
-    pub function64: Option<fn() -> u64>,
+    pub function: fn() -> FuncRet,
     pub addr: usize,
     pub uid: &'a str,
 }

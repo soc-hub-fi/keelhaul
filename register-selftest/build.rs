@@ -163,59 +163,28 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
         let statements_combined = statements.join("");
-        let statements_combined_with_result = format!("{} 0", statements_combined);
+        let result_type = match register.size {
+            8 => "FuncRet::U8",
+            16 => "FuncRet::U16",
+            32 => "FuncRet::U32",
+            64 => "FuncRet::U64",
+            other => panic!("Invalid register size: {}", other),
+        };
+        let statements_combined_with_result = format!("{} {}(0)", statements_combined, result_type);
         let line = format!(
-            "#[allow(non_snake_case)] pub fn {}() -> {} {{{}}}\n",
-            function_name, variable_type, statements_combined_with_result
+            "#[allow(non_snake_case)] pub fn {}() -> FuncRet {{{}}}\n",
+            function_name, statements_combined_with_result
         );
         let uid = format!("\"{}\"", register.uid());
 
-        let (fu8, fu16, fu32, fu64) = match register.size {
-            8 => (
-                format!(
-                    "Some({}::{})",
-                    register.name_peripheral.to_lowercase(),
-                    function_name
-                ),
-                "None".to_owned(),
-                "None".to_owned(),
-                "None".to_owned(),
-            ),
-            16 => (
-                "None".to_owned(),
-                format!(
-                    "Some({}::{})",
-                    register.name_peripheral.to_lowercase(),
-                    function_name
-                ),
-                "None".to_owned(),
-                "None".to_owned(),
-            ),
-            32 => (
-                "None".to_owned(),
-                "None".to_owned(),
-                format!(
-                    "Some({}::{})",
-                    register.name_peripheral.to_lowercase(),
-                    function_name
-                ),
-                "None".to_owned(),
-            ),
-            64 => (
-                "None".to_owned(),
-                "None".to_owned(),
-                "None".to_owned(),
-                format!(
-                    "Some({}::{})",
-                    register.name_peripheral.to_lowercase(),
-                    function_name
-                ),
-            ),
-            other => panic!("Invalid register size: {}", other),
-        };
+        let function = format!(
+            "{}::{}",
+            register.name_peripheral.to_lowercase(),
+            function_name
+        );
         let test_case = format!(
-            "TestCase {{ function8: {}, function16: {}, function32: {}, function64: {}, addr: {}, uid: {} }}",
-            fu8,fu16,fu32,fu64,
+            "TestCase {{ function: {}, addr: {}, uid: {} }}",
+            function,
             register.full_address(),
             uid,
         );
