@@ -100,7 +100,7 @@ fn hex_to_int(hex: &str) -> u64 {
 /// Remove illegal characters from register name.
 fn remove_illegal_characters(name: &str) -> String {
     let mut name_new = name.to_owned();
-    let illegals = ['(', ')'];
+    let illegals = ['(', ')', '[', ']', '%'];
     let mut found_illegals = Vec::new();
     for illegal in illegals {
         if name_new.contains(illegal) {
