@@ -1,5 +1,7 @@
-use common::{force_path_existence, get_environment_variable, Register};
 use json::JsonValue;
+use register_selftest_generator_common::{
+    force_path_existence, get_environment_variable, maybe_get_environment_variable, Register,
+};
 use std::{
     fs::{self, read_to_string, File},
     io::Write,
@@ -13,6 +15,12 @@ struct TestCases {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
+    // WIP
+    /*let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {}
+    else {
+        get_environment_variable("PATH_")
+    }*/
+
     let path_str = get_environment_variable("PATH_OUTPUT");
     force_path_existence(&path_str)
 }

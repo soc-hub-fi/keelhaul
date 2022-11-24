@@ -1,18 +1,18 @@
 [package]
-name = "generate"
+name = "register-selftest-generator"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-common = { path = "../common" }
+register-selftest-generator-common = { path = "../register-selftest-generator-common" }
 json = "*"
 
 [lib]
-name = "generate"
+name = "register_selftest_generator"
 path = "src/lib.rs"
 
 [[bin]]
-name = "generate"
+name = "register_selftest_generator"
 path = "src/main.rs"

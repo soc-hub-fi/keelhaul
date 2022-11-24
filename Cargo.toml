@@ -1,2 +1,7 @@
 [workspace]
-members = ["common", "parse", "generate", "runner"]
+members = [
+    "register-selftest-generator-common",
+    "register-selftest-generator-parse",
+    "register-selftest-generator",
+    "register-selftest-generator-runner"
+]

@@ -1,10 +1,10 @@
 //! SVD-file parser for register test generator.
 
-use common::{
+use itertools::Itertools;
+use register_selftest_generator_common::{
     force_path_existence, get_environment_variable, maybe_get_environment_variable,
     validate_path_existence, Register,
 };
-use itertools::Itertools;
 use roxmltree::{Document, Node};
 use std::{
     collections::HashMap,
@@ -188,10 +188,7 @@ fn find_registers(parsed: &Document, excludes: &Option<Vec<String>>) -> Vec<Regi
 
 /// Write found registers to output file.
 fn write_output(registers: &[Register], file: &mut File) {
-    let registers_as_hashmaps = registers
-        .iter()
-        .map(common::Register::to_hashmap)
-        .collect_vec();
+    let registers_as_hashmaps = registers.iter().map(Register::to_hashmap).collect_vec();
     let output = json::stringify(registers_as_hashmaps);
     file.write_all(output.as_bytes())
         .expect("Failed to write to output file.");
