@@ -10,3 +10,11 @@ common = { path = "../common" }
 roxmltree = "*"
 itertools = "*"
 json = "*"
+
+[lib]
+name = "parse"
+path = "src/lib.rs"
+
+[[bin]]
+name = "parse"
+path = "src/main.rs"
