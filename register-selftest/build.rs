@@ -7,6 +7,8 @@ use register_selftest_generator_common::{
 };
 use std::{
     collections::HashMap,
+    env,
+    ffi::OsString,
     fs::{self, read_to_string, File},
     io::{self, Write},
     path::{Path, PathBuf},
@@ -20,13 +22,10 @@ struct TestCases {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        println!("cargo:warning=Because OUT_DIR exists, generator output is written there.");
-        format!("{}/register_selftest.rs", path_str)
-    } else {
-        get_environment_variable("PATH_OUTPUT")
-    };
-    force_path_existence(&path_str)
+    // Safety: OUT_DIR always exists at build time
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = PathBuf::from(out_dir);
+    out_dir.join("register_selftest.rs")
 }
 
 /// Get handle to output file.

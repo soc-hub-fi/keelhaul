@@ -8,8 +8,10 @@ use register_selftest_generator_common::{
 use roxmltree::{Document, Node};
 use std::{
     collections::HashMap,
+    env,
     fs::{self, read_to_string, File},
     io::Write,
+    panic,
     path::PathBuf,
 };
 
@@ -42,8 +44,17 @@ fn maybe_get_excludes() -> Option<Vec<String>> {
 
 /// Extract path to SVD-file from environment variable.
 fn get_path_to_svd() -> PathBuf {
-    let path_str = get_environment_variable("PATH_SVD");
-    validate_path_existence(&path_str)
+    let svd_path = env::var("PATH_SVD").expect("PATH_SVD env var must exist");
+    let svd_path = PathBuf::from(svd_path);
+
+    if !svd_path.exists() {
+        panic!(
+            "PATH_SVD must be an absolute path to a valid file, was {}",
+            svd_path.display()
+        );
+    }
+
+    svd_path
 }
 
 /// Read SVD-file's content.
