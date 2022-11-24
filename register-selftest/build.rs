@@ -102,6 +102,12 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
                             .to_string()
                             .parse()
                             .expect("Failed to parse 'can_write'-field as integer."),
+                        size: object
+                            .get("size")
+                            .expect("JSON object does not contain 'size'-field.")
+                            .to_string()
+                            .parse()
+                            .expect("Failed to parse 'size'-field as integer."),
                     },
                     _ => panic!("Illegal JSON object type."),
                 };
@@ -128,36 +134,88 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     for register in registers {
+        let variable_type = match register.size {
+            8 => "u8",
+            16 => "u16",
+            32 => "u32",
+            64 => "u64",
+            other => panic!("Invalid register size: {}", other),
+        };
         let function_name = format!(
             "test_{}_{}",
             register.name_register,
             register.full_address()
         );
         let mut statements = vec![format!(
-            "#[allow(unused)] let address: *mut u32 = {} as *mut u32;",
-            register.full_address()
+            "#[allow(unused)] let address: *mut {} = {} as *mut {};",
+            variable_type,
+            register.full_address(),
+            variable_type,
         )];
         if register.can_read {
             statements.push("let _ = unsafe { read_volatile(address) };".to_owned());
         }
         if register.can_write {
             statements.push(format!(
-                "#[allow(unused)] let reset_value: u32 = {};",
-                register.value_reset
+                "#[allow(unused)] let reset_value: {} = {};",
+                variable_type, register.value_reset
             ));
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
         let statements_combined = statements.join("");
         let statements_combined_with_result = format!("{} 0", statements_combined);
         let line = format!(
-            "#[allow(non_snake_case)] pub fn {}() -> u32 {{{}}}\n",
-            function_name, statements_combined_with_result
+            "#[allow(non_snake_case)] pub fn {}() -> {} {{{}}}\n",
+            function_name, variable_type, statements_combined_with_result
         );
         let uid = format!("\"{}\"", register.uid());
+
+        let (fu8, fu16, fu32, fu64) = match register.size {
+            8 => (
+                format!(
+                    "Some({}::{})",
+                    register.name_peripheral.to_lowercase(),
+                    function_name
+                ),
+                "None".to_owned(),
+                "None".to_owned(),
+                "None".to_owned(),
+            ),
+            16 => (
+                "None".to_owned(),
+                format!(
+                    "Some({}::{})",
+                    register.name_peripheral.to_lowercase(),
+                    function_name
+                ),
+                "None".to_owned(),
+                "None".to_owned(),
+            ),
+            32 => (
+                "None".to_owned(),
+                "None".to_owned(),
+                format!(
+                    "Some({}::{})",
+                    register.name_peripheral.to_lowercase(),
+                    function_name
+                ),
+                "None".to_owned(),
+            ),
+            64 => (
+                "None".to_owned(),
+                "None".to_owned(),
+                "None".to_owned(),
+                format!(
+                    "Some({}::{})",
+                    register.name_peripheral.to_lowercase(),
+                    function_name
+                ),
+            ),
+            other => panic!("Invalid register size: {}", other),
+        };
         let test_case = format!(
-            "TestCase {{ function: {}::{}, addr: {}, uid: {} }}",
-            register.name_peripheral.to_lowercase(),
-            function_name,
+            "TestCase {{ function8: {}, function16: {}, function32: {}, function64: {}, addr: {}, uid: {} }}",
+            fu8,fu16,fu32,fu64,
             register.full_address(),
             uid,
         );
@@ -241,6 +299,14 @@ fn run_cmd(cmd: &str, params: &[impl AsRef<str>]) -> io::Result<()> {
 }
 
 pub fn main() {
+    println!("cargo:rerun-if-env-changed=INCLUDE_PERIPHERALS");
+    println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
+    println!("cargo:rerun-if-env-changed=PATH_SVD");
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=../register-selftest-generator-common");
+    println!("cargo:rerun-if-changed=../register-selftest-generator-parse");
+    println!("cargo:rerun-if-changed=../register-selftest-generator-runner");
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
     let registers = get_registers();

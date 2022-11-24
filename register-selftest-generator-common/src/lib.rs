@@ -61,6 +61,7 @@ pub struct Register {
     pub value_reset: u64,
     pub can_read: bool,
     pub can_write: bool,
+    pub size: u64,
 }
 
 impl Register {
@@ -84,6 +85,7 @@ impl Register {
             ("value_reset", self.value_reset.to_string()),
             ("can_read", self.can_read.to_string()),
             ("can_write", self.can_write.to_string()),
+            ("size", self.size.to_string()),
         ])
     }
 

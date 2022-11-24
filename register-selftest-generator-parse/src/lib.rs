@@ -226,6 +226,11 @@ fn find_registers(
                     "write-only" => (false, true),
                     _ => panic!("Invalid register access value: {}", access),
                 };
+                let size_str = get_node_text_with_name(&register, "size");
+                let size: u64 = size_str.parse().unwrap_or_else(|_error| {
+                    panic!("Failed to parse {} as register size.", size_str)
+                });
+
                 let full_address = address_base + address_offset_cluster + address_offset_register;
                 if addresses.contains_key(&full_address) {
                     eprintln!("Register {}'s full address is already taken by register {}. This register is ignored.", name, addresses.get(&full_address).expect("Failed to find register name by key."));
@@ -241,6 +246,7 @@ fn find_registers(
                         value_reset,
                         can_read,
                         can_write,
+                        size,
                     })
                 }
             }
@@ -260,7 +266,6 @@ fn write_output(registers: &[Register], file: &mut File) {
 pub fn parse() {
     let included_peripherals = maybe_get_included_peripherals();
     let excluded_peripherals = maybe_get_excluded_peripherals();
-
     let mut file_output = get_output_file();
     let excludes = maybe_get_excludes();
     let content = get_svd_content();
