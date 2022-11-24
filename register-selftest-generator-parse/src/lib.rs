@@ -133,15 +133,17 @@ fn find_registers(parsed: &Document, excludes: &Option<Vec<String>>) -> Vec<Regi
     {
         let address_base = get_node_text_with_name(&peripheral, "baseAddress");
         let address_base = hex_to_int(&address_base);
+        let name_peripheral = get_node_text_with_name(&peripheral, "name");
         for cluster in peripheral
             .descendants()
             .filter(|n| n.has_tag_name("cluster"))
         {
             let address_offset_cluster = get_node_text_with_name(&cluster, "addressOffset");
             let address_offset_cluster = hex_to_int(&address_offset_cluster);
+            let name_cluster = get_node_text_with_name(&cluster, "name");
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = get_node_text_with_name(&register, "name");
-                let name = remove_illegal_characters(&name);
+                let name_register = remove_illegal_characters(&name);
                 if let Some(excluded_names) = &excludes {
                     if excluded_names.contains(&name) {
                         println!("Register {} is excluded.", name);
@@ -171,7 +173,9 @@ fn find_registers(parsed: &Document, excludes: &Option<Vec<String>>) -> Vec<Regi
                 } else {
                     addresses.insert(full_address, name.clone());
                     registers.push(Register {
-                        name,
+                        name_peripheral: name_peripheral.clone(),
+                        name_cluster: name_cluster.clone(),
+                        name_register,
                         address_base,
                         address_offset_cluster,
                         address_offset_register,

@@ -57,7 +57,9 @@ pub fn force_path_existence(path_str: &str) -> PathBuf {
 }
 
 pub struct Register {
-    pub name: String,
+    pub name_peripheral: String,
+    pub name_cluster: String,
+    pub name_register: String,
     pub address_base: u64,
     pub address_offset_cluster: u64,
     pub address_offset_register: u64,
@@ -72,7 +74,9 @@ impl Register {
     #[must_use]
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
-            ("name", self.name.clone()),
+            ("name_peripheral", self.name_peripheral.clone()),
+            ("name_cluster", self.name_cluster.clone()),
+            ("name_register", self.name_register.clone()),
             ("address_base", self.address_base.to_string()),
             (
                 "address_offset_cluster",
@@ -93,5 +97,15 @@ impl Register {
     #[must_use]
     pub const fn full_address(&self) -> u64 {
         self.address_base + self.address_offset_cluster + self.address_offset_register
+    }
+
+    /// Get register's unique identifier.
+    #[inline]
+    #[must_use]
+    pub fn uid(&self) -> String {
+        format!(
+            "{}-{}-{}",
+            self.name_peripheral, self.name_cluster, self.name_register
+        )
     }
 }

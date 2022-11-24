@@ -60,9 +60,17 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
             for value in array {
                 let register = match value {
                     JsonValue::Object(object) => Register {
-                        name: object
-                            .get("name")
-                            .expect("JSON object does not contain 'name'-field.")
+                        name_peripheral: object
+                            .get("name_peripheral")
+                            .expect("JSON object does not contain 'name_peripheral'-field.")
+                            .to_string(),
+                        name_cluster: object
+                            .get("name_cluster")
+                            .expect("JSON object does not contain 'name_cluster'-field.")
+                            .to_string(),
+                        name_register: object
+                            .get("name_register")
+                            .expect("JSON object does not contain 'name_register'-field.")
                             .to_string(),
                         address_base: object
                             .get("address_base")
@@ -126,7 +134,11 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
 
     //let mut function_names = Vec::new();
     for register in registers {
-        let function_name = format!("test_{}_{}", register.name, register.full_address());
+        let function_name = format!(
+            "test_{}_{}",
+            register.name_register,
+            register.full_address()
+        );
         let mut statements = vec![format!(
             "#[allow(unused)] let address: *mut u32 = {} as *mut u32;",
             register.full_address()
@@ -147,10 +159,11 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         output.push(line);
         //function_names.push(function_name);
         let test_case = format!(
-            "TestCase {{ name: {}, function: {}, addr: {} }}",
-            format!("\"{}\"", register.name),
+            "TestCase {{ name: {}, function: {}, addr: {}, uid: {} }}",
+            format!("\"{}\"", register.name_register),
             function_name,
             register.full_address(),
+            format!("\"{}\"", register.uid()),
         );
 
         test_cases.push(test_case);
@@ -170,7 +183,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         test_cases: vec![
             "use core::ptr::read_volatile;\n".to_owned(),
             "use core::ptr::write_volatile;\n".to_owned(),
-            "pub struct TestCase<'a> { pub name: &'a str, pub function: fn() -> u32, pub addr: usize }".to_owned(),
+            "pub struct TestCase<'a> { pub name: &'a str, pub function: fn() -> u32, pub addr: usize, pub uid: &'a str }".to_owned(),
             output_combined,
             function_array,
         ],
