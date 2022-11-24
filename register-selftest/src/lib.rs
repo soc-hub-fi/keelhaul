@@ -1,3 +1,4 @@
+#![no_std]
 use core::ptr::*;
 
 pub struct TestCase<'a> {
