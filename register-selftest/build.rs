@@ -5,14 +5,12 @@ use register_selftest_generator_common::{
     force_path_existence, get_environment_variable, maybe_get_environment_variable,
     validate_path_existence, Register,
 };
-use register_selftest_generator_parse;
 use std::{
-    ffi::OsString,
+    collections::HashMap,
     fs::{self, read_to_string, File},
-    io::{self, Read, Write},
+    io::{self, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    str::FromStr,
+    process::Command,
 };
 
 struct TestCases {
@@ -129,10 +127,9 @@ fn get_registers() -> Vec<Register> {
 
 /// Generate test cases for each register.
 fn create_test_cases(registers: &Vec<Register>) -> TestCases {
-    let mut output = Vec::new();
     let mut test_cases = Vec::new();
 
-    //let mut function_names = Vec::new();
+    let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     for register in registers {
         let function_name = format!(
             "test_{}_{}",
@@ -156,38 +153,46 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             "#[allow(non_snake_case)] pub fn {}() -> u32 {{{}}}\n",
             function_name, statements_combined_with_result
         );
-        output.push(line);
-        //function_names.push(function_name);
+        //output.push(line);
         let test_case = format!(
-            "TestCase {{ function: {}, addr: {}, uid: {} }}",
-            //format!("\"{}\"", register.name_register),
+            "TestCase {{ function: {}::{}, addr: {}, uid: {} }}",
+            register.name_peripheral,
             function_name,
             register.full_address(),
             format!("\"{}\"", register.uid()),
         );
-
         test_cases.push(test_case);
+
+        if test_cases_per_peripheral.contains_key(&register.name_peripheral) {
+            test_cases_per_peripheral
+                .get_mut(&register.name_peripheral)
+                .unwrap()
+                .push(line);
+        } else {
+            test_cases_per_peripheral.insert(register.name_peripheral.clone(), vec![line]);
+        }
     }
-    let output_combined = output.join("");
+
+    let mut modules = Vec::new();
+    for (name_peripheral, test_cases) in test_cases_per_peripheral {
+        let test_cases_combined = test_cases.join("");
+        let module = format!(
+            "pub mod {} {{ use super::*; {} }}",
+            name_peripheral, test_cases_combined
+        );
+        modules.push(module);
+    }
+
+    let output_combined = modules.join("");
     let test_case_count = test_cases.len();
-    //let function_count = function_names.len();
-    //let function_names_combined = function_names.join(",");
     let test_cases_combined = test_cases.join(",");
-    let function_array = format!(
+    let test_case_array = format!(
         "pub static TEST_CASES: [TestCase;{}] = [{}];",
-        //function_count, //function_names_combined
-        test_case_count,
-        test_cases_combined
+        test_case_count, test_cases_combined
     );
     TestCases {
-        test_cases: vec![
-            "use core::ptr::read_volatile;\n".to_owned(),
-            "use core::ptr::write_volatile;\n".to_owned(),
-            "pub struct TestCase<'a> { pub function: fn() -> u32, pub addr: usize, pub uid: &'a str }".to_owned(),
-            output_combined,
-            function_array,
-        ],
-        test_case_count: test_case_count, //function_count,
+        test_cases: vec![output_combined, test_case_array],
+        test_case_count: test_case_count,
     }
 }
 
