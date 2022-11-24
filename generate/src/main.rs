@@ -6,16 +6,38 @@
 //!
 //! `PATH_INPUT=temp/parsed.json PATH_OUTPUT=runner/src/register_tests.rs cargo run`
 
-use common::Register;
+use common::{force_path_existence, get_environment_variable, Register};
 use json::JsonValue;
 use std::{
-    env,
-    fs::{self, read_to_string},
+    fs::{self, read_to_string, File},
     io::Write,
+    path::PathBuf,
 };
 
+struct TestCases {
+    test_cases: Vec<String>,
+    test_case_count: usize,
+}
+
+/// Extract path to output file from environment variable.
+fn get_path_to_output() -> PathBuf {
+    let path_str = get_environment_variable("PATH_OUTPUT");
+    force_path_existence(&path_str)
+}
+
+/// Get handle to output file.
+fn get_output_file() -> File {
+    let path = get_path_to_output();
+    fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .expect("Failed to open output file.")
+}
+
 /// Extract registers from JSON object.
-fn get_registers(content: JsonValue) -> Vec<Register> {
+fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
     let mut registers = Vec::new();
     match content {
         JsonValue::Array(array) => {
@@ -73,21 +95,16 @@ fn get_registers(content: JsonValue) -> Vec<Register> {
     registers
 }
 
-fn main() {
-    let path_input = env::var("PATH_INPUT").expect("Missing environment variable: PATH_INPUT");
-    let path_output = env::var("PATH_OUTPUT").expect("Missing environment variable: PATH_OUTPUT");
-    let mut file_output = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path_output)
-        .expect("Failed to open output file.");
-
+/// Get register objects.
+fn get_registers() -> Vec<Register> {
+    let path_input = get_environment_variable("PATH_INPUT");
     let content = read_to_string(path_input).expect("Failed to read parser results.");
-    let content = json::parse(&content).expect("Failed to parse parser results.");
+    let json = json::parse(&content).expect("Failed to parse parser results.");
+    get_parsed_registers(json)
+}
 
-    let registers = get_registers(content);
-
+/// Generate test cases for each register.
+fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let mut output = Vec::new();
     let mut function_names = Vec::new();
     for register in registers {
@@ -103,32 +120,45 @@ fn main() {
             statements.push(format!("let reset_value = {};", register.value_reset));
             statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
-        let statements = statements.join("");
-        let statements = format!("{} 0", statements);
+        let statements_combined = statements.join("");
+        let statements_combined_with_result = format!("{} 0", statements_combined);
         let line = format!(
             "#[allow(non_snake_case)] pub fn {}() -> u32 {{{}}}\n",
-            function_name, statements
+            function_name, statements_combined_with_result
         );
         output.push(line);
         function_names.push(function_name);
     }
-    let output = output.join("");
+    let output_combined = output.join("");
     let function_count = function_names.len();
-    let function_names = function_names.join(",");
+    let function_names_combined = function_names.join(",");
     let function_array = format!(
         "pub static FUNCTIONS: [fn()->u32;{}] = [{}];",
-        function_count, function_names
+        function_count, function_names_combined
     );
-    let lines = vec![
-        "use core::ptr::read_volatile;\n",
-        "use core::ptr::write_volatile;\n",
-        &output,
-        &function_array,
-    ];
+    TestCases {
+        test_cases: vec![
+            "use core::ptr::read_volatile;\n".to_owned(),
+            "use core::ptr::write_volatile;\n".to_owned(),
+            output_combined,
+            function_array,
+        ],
+        test_case_count: function_count,
+    }
+}
+
+/// Write test cases to output file.
+fn write_output(lines: &Vec<String>, file: &mut File) {
     for line in lines {
-        file_output
-            .write_all(line.as_bytes())
+        file.write_all(line.as_bytes())
             .expect("Failed to write to output file.");
     }
-    println!("Wrote {} test cases.", function_count);
+}
+
+fn main() {
+    let mut file_output = get_output_file();
+    let registers = get_registers();
+    let output = create_test_cases(&registers);
+    write_output(&output.test_cases, &mut file_output);
+    println!("Wrote {} test cases.", output.test_case_count);
 }

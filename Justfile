@@ -21,3 +21,9 @@ build:
 run:
     just build
     cargo run --bin runner
+
+doc:
+    cargo doc --no-deps
+
+doc-open:
+    cargo doc --no-deps --open
