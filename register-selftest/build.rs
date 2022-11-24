@@ -130,6 +130,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let mut test_cases = Vec::new();
 
     let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
+    let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     for register in registers {
         let function_name = format!(
             "test_{}_{}",
@@ -153,7 +154,6 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             "#[allow(non_snake_case)] pub fn {}() -> u32 {{{}}}\n",
             function_name, statements_combined_with_result
         );
-        //output.push(line);
         let test_case = format!(
             "TestCase {{ function: {}::{}, addr: {}, uid: {} }}",
             register.name_peripheral,
@@ -161,7 +161,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             register.full_address(),
             format!("\"{}\"", register.uid()),
         );
-        test_cases.push(test_case);
+        test_cases.push(test_case.clone());
 
         if test_cases_per_peripheral.contains_key(&register.name_peripheral) {
             test_cases_per_peripheral
@@ -171,14 +171,33 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         } else {
             test_cases_per_peripheral.insert(register.name_peripheral.clone(), vec![line]);
         }
+
+        if test_case_structs_per_peripheral.contains_key(&register.name_peripheral) {
+            test_case_structs_per_peripheral
+                .get_mut(&register.name_peripheral)
+                .unwrap()
+                .push(test_case.clone());
+        } else {
+            test_case_structs_per_peripheral
+                .insert(register.name_peripheral.clone(), vec![test_case]);
+        }
     }
 
     let mut modules = Vec::new();
     for (name_peripheral, test_cases) in test_cases_per_peripheral {
         let test_cases_combined = test_cases.join("");
+        let module_test_case_count = test_cases.len();
+        let module_test_cases_combined = test_case_structs_per_peripheral
+            .get(&name_peripheral)
+            .unwrap()
+            .join(",");
+        let module_test_case_array = format!(
+            "pub static TEST_CASES: [TestCase;{}] = [{}];",
+            module_test_case_count, module_test_cases_combined
+        );
         let module = format!(
-            "pub mod {} {{ use super::*; {} }}",
-            name_peripheral, test_cases_combined
+            "pub mod {} {{ use super::*; {} {} }}",
+            name_peripheral, test_cases_combined, module_test_case_array,
         );
         modules.push(module);
     }
