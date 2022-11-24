@@ -1,5 +1,5 @@
 [package]
-name = "register-selftest-generator"
+name = "register-selftest"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,9 +11,9 @@ register-selftest-generator-parse = { path = "../register-selftest-generator-par
 json = "*"
 
 [lib]
-name = "register_selftest_generator"
+name = "register_selftest"
 path = "src/lib.rs"
 
 [[bin]]
-name = "register_selftest_generator"
+name = "register_selftest"
 path = "src/main.rs"

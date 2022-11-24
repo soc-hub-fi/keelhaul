@@ -2,6 +2,6 @@
 members = [
     "register-selftest-generator-common",
     "register-selftest-generator-parse",
-    "register-selftest-generator",
+    "register-selftest",
     "register-selftest-generator-runner"
 ]
