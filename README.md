@@ -20,3 +20,9 @@ Build and run (**will cause segmentation fault 8-)**).
     - `curl https://sh.rustup.rs -sSf | sh`
 - `just`
     - `cargo install just`
+
+## TODO
+
+- fix error messages "*svd not found"
+- too many warning messages?
+- replace "tackle.svd" with environment variables
