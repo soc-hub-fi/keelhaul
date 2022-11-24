@@ -1,3 +1,5 @@
+// TODO: add structs and usages to lib.rs, no necessary to write in generator
+
 use json::JsonValue;
 use register_selftest_generator_common::{
     force_path_existence, get_environment_variable, maybe_get_environment_variable,
@@ -146,7 +148,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         //function_names.push(function_name);
         let test_case = format!(
             "TestCase {{ name: {}, function: {} }}",
-            format!("\"{}\"", function_name),
+            format!("\"{}\"", register.name),
             function_name
         );
 
