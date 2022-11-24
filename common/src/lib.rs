@@ -1,6 +1,60 @@
-//! Common types for register test generator.
+//! Common types and functions for register test generator.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    env,
+    fs::{self, File},
+    path::PathBuf,
+};
+
+pub fn get_environment_variable(name: &str) -> String {
+    env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {}", name))
+}
+
+pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
+    match env::var(name) {
+        Ok(variable) => Some(variable),
+        Err(_error) => {
+            println!("Optional environment variable not used: {}", name);
+            None
+        }
+    }
+}
+
+pub fn validate_path_existence(path_str: &str) -> PathBuf {
+    match PathBuf::from(path_str).canonicalize() {
+        Ok(path) => match path.try_exists() {
+            Ok(exists) => {
+                assert!(exists, "Path {} does not exist.", path.display());
+                path
+            }
+            Err(error) => panic!("Path {} does not exist. {}", path.display(), error),
+        },
+        Err(error) => panic!("Path {} does not exist. {}", path_str, error),
+    }
+}
+
+pub fn force_path_existence(path_str: &str) -> PathBuf {
+    match PathBuf::from(path_str).canonicalize() {
+        Ok(path) => match path.try_exists() {
+            Ok(exists) => {
+                assert!(exists, "Path {} does not exist.", path.display());
+                path
+            }
+            Err(error) => panic!("Path {} does not exist. {}", path.display(), error),
+        },
+        Err(error) => {
+            println!("Path {} does not exist. {}", path_str, error);
+            match File::create(path_str) {
+                Ok(_file) => {
+                    println!("Created new file to path {}.", path_str);
+                    validate_path_existence(path_str)
+                }
+                Err(error) => panic!("Failed to create new file to path {}. {}", path_str, error),
+            }
+        }
+    }
+}
 
 pub struct Register {
     pub name: String,
