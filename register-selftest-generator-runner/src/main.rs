@@ -7,9 +7,7 @@ fn main() {
         println!("{}", test_case.uid);
     }
 
-    /*for (index, test_case) in register_selftest::TEST_CASES.iter().enumerate() {
-        //let name = test_case.name;
-        let result = (test_case.function)();
-        //println!("{index} {name}: {result}");
-    }*/
+    for (index, test_case) in register_selftest::TEST_CASES.iter().enumerate() {
+        println!("{}", test_case.uid);
+    }
 }
