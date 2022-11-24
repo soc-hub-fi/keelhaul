@@ -130,7 +130,6 @@ fn get_registers() -> Vec<Register> {
 /// Generate test cases for each register.
 fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let mut test_cases = Vec::new();
-
     let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     for register in registers {
@@ -170,10 +169,12 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             64 => "FuncRet::U64",
             other => panic!("Invalid register size: {}", other),
         };
-        let statements_combined_with_result = format!("{} {}(0)", statements_combined, result_type);
+        //let statements_combined_with_result = format!("{} {}(0)", statements_combined, result_type);
         let line = format!(
-            "#[allow(non_snake_case)] pub fn {}() -> FuncRet {{{}}}\n",
-            function_name, statements_combined_with_result
+            "#[allow(non_snake_case)] pub fn {}() {{{}}}\n",
+            //function_name, statements_combined_with_result
+            function_name,
+            statements_combined
         );
         let uid = format!("\"{}\"", register.uid());
 

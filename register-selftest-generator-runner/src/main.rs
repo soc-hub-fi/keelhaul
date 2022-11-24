@@ -1,4 +1,4 @@
-use register_selftest::{self, FuncRet};
+use register_selftest;
 
 fn main() {
     // TODO: enum TestType { Read, Reset, }
@@ -9,10 +9,6 @@ fn main() {
 
     for (_index, test_case) in register_selftest::TEST_CASES.iter().enumerate() {
         println!("{}", test_case.uid);
-        let result = (test_case.function)();
-        match result {
-            FuncRet::U8(byte) => {}
-            _ => {}
-        }
+        (test_case.function)();
     }
 }
