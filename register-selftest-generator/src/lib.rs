@@ -1,6 +1,7 @@
 use json::JsonValue;
 use register_selftest_generator_common::{
-    force_path_existence, get_environment_variable, maybe_get_environment_variable, Register,
+    force_path_existence, get_environment_variable, maybe_get_environment_variable,
+    validate_path_existence, Register,
 };
 use std::{
     fs::{self, read_to_string, File},
@@ -15,13 +16,12 @@ struct TestCases {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    // WIP
-    /*let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {}
-    else {
-        get_environment_variable("PATH_")
-    }*/
-
-    let path_str = get_environment_variable("PATH_OUTPUT");
+    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
+        println!("cargo:warning=Because OUT_DIR exists, generator output is written there.");
+        format!("{}/register_tests.rs", path_str)
+    } else {
+        get_environment_variable("PATH_OUTPUT")
+    };
     force_path_existence(&path_str)
 }
 
@@ -34,6 +34,16 @@ fn get_output_file() -> File {
         .truncate(true)
         .open(path)
         .expect("Failed to open output file.")
+}
+
+fn get_input_path() -> PathBuf {
+    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
+        println!("cargo:warning=Because OUT_DIR exists, generator input is read from there.");
+        format!("{}/parsed.json", path_str)
+    } else {
+        get_environment_variable("PATH_JSON")
+    };
+    validate_path_existence(&path_str)
 }
 
 /// Extract registers from JSON object.
@@ -97,7 +107,7 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
 
 /// Get register objects.
 fn get_registers() -> Vec<Register> {
-    let path_input = get_environment_variable("PATH_JSON");
+    let path_input = get_input_path();
     let content = read_to_string(path_input).expect("Failed to read parser results.");
     let json = json::parse(&content).expect("Failed to parse parser results.");
     get_parsed_registers(json)
