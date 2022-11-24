@@ -120,7 +120,9 @@ fn get_registers() -> Vec<Register> {
 /// Generate test cases for each register.
 fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let mut output = Vec::new();
-    let mut function_names = Vec::new();
+    let mut test_cases = Vec::new();
+
+    //let mut function_names = Vec::new();
     for register in registers {
         let function_name = format!("test_{}_{}", register.name, register.full_address());
         let mut statements = vec![format!(
@@ -141,23 +143,35 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             function_name, statements_combined_with_result
         );
         output.push(line);
-        function_names.push(function_name);
+        //function_names.push(function_name);
+        let test_case = format!(
+            "TestCase {{ name: {}, function: {} }}",
+            format!("\"{}\"", function_name),
+            function_name
+        );
+
+        test_cases.push(test_case);
     }
     let output_combined = output.join("");
-    let function_count = function_names.len();
-    let function_names_combined = function_names.join(",");
+    let test_case_count = test_cases.len();
+    //let function_count = function_names.len();
+    //let function_names_combined = function_names.join(",");
+    let test_cases_combined = test_cases.join(",");
     let function_array = format!(
-        "pub static FUNCTIONS: [fn()->u32;{}] = [{}];",
-        function_count, function_names_combined
+        "pub static TEST_CASES: [TestCase;{}] = [{}];",
+        //function_count, //function_names_combined
+        test_case_count,
+        test_cases_combined
     );
     TestCases {
         test_cases: vec![
             "use core::ptr::read_volatile;\n".to_owned(),
             "use core::ptr::write_volatile;\n".to_owned(),
+            "pub struct TestCase<'a> { pub name: &'a str, pub function: fn() -> u32, }".to_owned(),
             output_combined,
             function_array,
         ],
-        test_case_count: function_count,
+        test_case_count: test_case_count, //function_count,
     }
 }
 
