@@ -2,13 +2,11 @@
 
 use json::JsonValue;
 use register_selftest_generator_common::{
-    force_path_existence, get_environment_variable, maybe_get_environment_variable,
-    validate_path_existence, Register,
+    get_environment_variable, maybe_get_environment_variable, validate_path_existence, Register,
 };
 use std::{
     collections::HashMap,
     env,
-    ffi::OsString,
     fs::{self, read_to_string, File},
     io::{self, Write},
     path::{Path, PathBuf},
@@ -41,7 +39,6 @@ fn get_output_file() -> File {
 
 fn get_input_path() -> PathBuf {
     let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        println!("cargo:warning=Because OUT_DIR exists, generator input is read from there.");
         format!("{}/parsed.json", path_str)
     } else {
         get_environment_variable("PATH_JSON")
@@ -144,7 +141,10 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             statements.push("let _ = unsafe { read_volatile(address) };".to_owned());
         }
         if register.can_write {
-            statements.push(format!("let reset_value: u32 = {};", register.value_reset));
+            statements.push(format!(
+                "#[allow(unused)] let reset_value: u32 = {};",
+                register.value_reset
+            ));
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
         let statements_combined = statements.join("");
@@ -153,12 +153,13 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             "#[allow(non_snake_case)] pub fn {}() -> u32 {{{}}}\n",
             function_name, statements_combined_with_result
         );
+        let uid = format!("\"{}\"", register.uid());
         let test_case = format!(
             "TestCase {{ function: {}::{}, addr: {}, uid: {} }}",
-            register.name_peripheral,
+            register.name_peripheral.to_lowercase(),
             function_name,
             register.full_address(),
-            format!("\"{}\"", register.uid()),
+            uid,
         );
         test_cases.push(test_case.clone());
 
@@ -196,7 +197,9 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         );
         let module = format!(
             "pub mod {} {{ use super::*; {} {} }}",
-            name_peripheral, test_cases_combined, module_test_case_array,
+            name_peripheral.to_lowercase(),
+            test_cases_combined,
+            module_test_case_array,
         );
         modules.push(module);
     }

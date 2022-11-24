@@ -1,11 +1,6 @@
 //! Common types and functions for register test generator.
 
-use std::{
-    collections::HashMap,
-    env,
-    fs::{self, File},
-    path::PathBuf,
-};
+use std::{collections::HashMap, env, fs::File, path::PathBuf};
 
 pub fn get_environment_variable(name: &str) -> String {
     env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {}", name))
