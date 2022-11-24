@@ -5,9 +5,12 @@ use register_selftest_generator_common::{
 };
 use register_selftest_generator_parse;
 use std::{
+    ffi::OsString,
     fs::{self, read_to_string, File},
-    io::Write,
-    path::PathBuf,
+    io::{self, Read, Write},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    str::FromStr,
 };
 
 struct TestCases {
@@ -166,13 +169,28 @@ fn write_output(lines: &Vec<String>, file: &mut File) {
     }
 }
 
-pub fn main() {
-    // TODO: add formatting via CMD call
+fn rustfmt_file(f: impl AsRef<Path>) -> io::Result<()> {
+    let f = f.as_ref();
+    run_cmd("rustfmt", &[format!("{}", f.display())])?;
+    Ok(())
+}
 
+fn run_cmd(cmd: &str, params: &[impl AsRef<str>]) -> io::Result<()> {
+    let mut cmd = &mut Command::new(cmd);
+    for param in params {
+        cmd = cmd.arg(param.as_ref());
+    }
+    cmd.spawn()?;
+    Ok(())
+}
+
+pub fn main() {
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
     let registers = get_registers();
     let output = create_test_cases(&registers);
     write_output(&output.test_cases, &mut file_output);
+    let path = get_path_to_output();
+    rustfmt_file(path).unwrap();
     println!("Wrote {} test cases.", output.test_case_count);
 }
