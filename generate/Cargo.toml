@@ -8,3 +8,11 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 json = "*"
+
+[lib]
+name = "generate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "generate"
+path = "src/main.rs"
