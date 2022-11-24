@@ -147,8 +147,8 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             statements.push("let _ = unsafe { read_volatile(address) };".to_owned());
         }
         if register.can_write {
-            statements.push(format!("let reset_value = {};", register.value_reset));
-            statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
+            statements.push(format!("let reset_value: u32 = {};", register.value_reset));
+            //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
         let statements_combined = statements.join("");
         let statements_combined_with_result = format!("{} 0", statements_combined);
