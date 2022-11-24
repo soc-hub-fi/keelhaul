@@ -10,8 +10,6 @@ parse-with-excludes:
 generate:
     PATH_JSON=temp/parsed.json PATH_OUTPUT=runner/src/register_tests.rs cargo run --bin generate
 
-
-
 # TODO: build-without-parsing
 # TODO: build.rs
 

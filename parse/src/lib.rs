@@ -54,7 +54,12 @@ fn get_svd_content() -> String {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    let path_str = get_environment_variable("PATH_JSON");
+    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
+        println!("cargo:warning=Because OUT_DIR exists, parser output is written there.");
+        format!("{}/parsed.json", path_str)
+    } else {
+        get_environment_variable("PATH_JSON")
+    };
     force_path_existence(&path_str)
 }
 
