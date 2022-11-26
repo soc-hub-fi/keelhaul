@@ -1,4 +1,4 @@
-// TODO: add structs and usages to lib.rs, no necessary to write in generator
+//! Memory-mapped I/O peripheral register test case generator.
 
 use json::JsonValue;
 use register_selftest_generator_common::{
@@ -13,6 +13,7 @@ use std::{
     process::Command,
 };
 
+/// Collection of test cases.
 struct TestCases {
     test_cases: Vec<String>,
     test_case_count: usize,
@@ -37,6 +38,7 @@ fn get_output_file() -> File {
         .expect("Failed to open output file.")
 }
 
+/// Get path to parser output.
 fn get_input_path() -> PathBuf {
     let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
         format!("{}/parsed.json", path_str)
@@ -114,7 +116,7 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
                 registers.push(register);
             }
         }
-        _ => panic!("Illegal JSON object type."),
+        other => panic!("Illegal JSON object type: {:?}", other),
     }
     registers
 }
@@ -125,6 +127,34 @@ fn get_registers() -> Vec<Register> {
     let content = read_to_string(path_input).expect("Failed to read parser results.");
     let json = json::parse(&content).expect("Failed to parse parser results.");
     get_parsed_registers(json)
+}
+
+/// Place test cases to modules.
+fn create_modules(
+    test_cases_per_peripheral: &HashMap<String, Vec<String>>,
+    test_case_structs_per_peripheral: &HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    let mut modules = Vec::new();
+    for (name_peripheral, test_cases) in test_cases_per_peripheral {
+        let test_cases_combined = test_cases.join("");
+        let module_test_case_count = test_cases.len();
+        let module_test_cases_combined = test_case_structs_per_peripheral
+            .get(name_peripheral)
+            .unwrap()
+            .join(",");
+        let module_test_case_array = format!(
+            "pub static TEST_CASES: [TestCase;{}] = [{}];",
+            module_test_case_count, module_test_cases_combined
+        );
+        let module = format!(
+            "pub mod {} {{ use super::*; {} {} }}",
+            name_peripheral.to_lowercase(),
+            test_cases_combined,
+            module_test_case_array,
+        );
+        modules.push(module);
+    }
+    modules
 }
 
 /// Generate test cases for each register.
@@ -162,19 +192,9 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
         let statements_combined = statements.join("");
-        let result_type = match register.size {
-            8 => "FuncRet::U8",
-            16 => "FuncRet::U16",
-            32 => "FuncRet::U32",
-            64 => "FuncRet::U64",
-            other => panic!("Invalid register size: {}", other),
-        };
-        //let statements_combined_with_result = format!("{} {}(0)", statements_combined, result_type);
         let line = format!(
             "#[allow(non_snake_case)] pub fn {}() {{{}}}\n",
-            //function_name, statements_combined_with_result
-            function_name,
-            statements_combined
+            function_name, statements_combined
         );
         let uid = format!("\"{}\"", register.uid());
 
@@ -194,7 +214,12 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         if test_cases_per_peripheral.contains_key(&register.name_peripheral) {
             test_cases_per_peripheral
                 .get_mut(&register.name_peripheral)
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to find peripheral {}'s test case container.",
+                        &register.name_peripheral
+                    )
+                })
                 .push(line);
         } else {
             test_cases_per_peripheral.insert(register.name_peripheral.clone(), vec![line]);
@@ -203,7 +228,12 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         if test_case_structs_per_peripheral.contains_key(&register.name_peripheral) {
             test_case_structs_per_peripheral
                 .get_mut(&register.name_peripheral)
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to find peripheral {}'s test case container.",
+                        &register.name_peripheral
+                    )
+                })
                 .push(test_case.clone());
         } else {
             test_case_structs_per_peripheral
@@ -211,26 +241,10 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         }
     }
 
-    let mut modules = Vec::new();
-    for (name_peripheral, test_cases) in test_cases_per_peripheral {
-        let test_cases_combined = test_cases.join("");
-        let module_test_case_count = test_cases.len();
-        let module_test_cases_combined = test_case_structs_per_peripheral
-            .get(&name_peripheral)
-            .unwrap()
-            .join(",");
-        let module_test_case_array = format!(
-            "pub static TEST_CASES: [TestCase;{}] = [{}];",
-            module_test_case_count, module_test_cases_combined
-        );
-        let module = format!(
-            "pub mod {} {{ use super::*; {} {} }}",
-            name_peripheral.to_lowercase(),
-            test_cases_combined,
-            module_test_case_array,
-        );
-        modules.push(module);
-    }
+    let modules = create_modules(
+        &test_cases_per_peripheral,
+        &test_case_structs_per_peripheral,
+    );
 
     let output_combined = modules.join("");
     let test_case_count = test_cases.len();
@@ -253,18 +267,19 @@ fn write_output(lines: &Vec<String>, file: &mut File) {
     }
 }
 
-fn rustfmt_file(f: impl AsRef<Path>) -> io::Result<()> {
-    let f = f.as_ref();
-    run_cmd("rustfmt", &[format!("{}", f.display())])?;
-    Ok(())
-}
-
+/// Execute shell command.
 fn run_cmd(cmd: &str, params: &[impl AsRef<str>]) -> io::Result<()> {
     let mut cmd = &mut Command::new(cmd);
     for param in params {
         cmd = cmd.arg(param.as_ref());
     }
     cmd.spawn()?;
+    Ok(())
+}
+
+/// Format file in place.
+fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
+    run_cmd("rustfmt", &[format!("{}", path.as_ref().display())])?;
     Ok(())
 }
 
@@ -283,6 +298,7 @@ pub fn main() {
     let output = create_test_cases(&registers);
     write_output(&output.test_cases, &mut file_output);
     let path = get_path_to_output();
-    rustfmt_file(path).unwrap();
+    rustfmt_file(&path)
+        .unwrap_or_else(|error| panic!("Failed to format file {}. {}", path.display(), error));
     println!("Wrote {} test cases.", output.test_case_count);
 }

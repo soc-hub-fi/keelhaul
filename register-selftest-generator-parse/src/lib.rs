@@ -8,7 +8,6 @@ use register_selftest_generator_common::{
 use roxmltree::{Document, Node};
 use std::{
     collections::HashMap,
-    env,
     fs::{self, read_to_string, File},
     io::Write,
     panic,
@@ -42,43 +41,32 @@ fn maybe_get_excludes() -> Option<Vec<String>> {
     }
 }
 
+/// Try to get names of included peripherals.
 fn maybe_get_included_peripherals() -> Option<Vec<String>> {
-    match env::var("INCLUDE_PERIPHERALS") {
-        Ok(included) => {
-            let peripherals = included.to_lowercase();
-            let peripherals = peripherals.split(',').map(|s| s.to_owned()).collect_vec();
-            // TODO: validate peripherals
-            Some(peripherals)
-        }
-        Err(_error) => None,
+    if let Some(included_str) = maybe_get_environment_variable("INCLUDE_PERIPHERALS") {
+        let peripherals = included_str.split(',').map(ToOwned::to_owned).collect_vec();
+        // TODO: validate peripherals
+        Some(peripherals)
+    } else {
+        None
     }
 }
 
+/// Try to get names of excluded peripherals.
 fn maybe_get_excluded_peripherals() -> Option<Vec<String>> {
-    match env::var("EXCLUDE_PERIPHERALS") {
-        Ok(excluded) => {
-            let peripherals = excluded.to_lowercase();
-            let peripherals = peripherals.split(',').map(|s| s.to_owned()).collect_vec();
-            // TODO: validate peripherals
-            Some(peripherals)
-        }
-        Err(_error) => None,
+    if let Some(excluded_str) = maybe_get_environment_variable("EXCLUDE_PERIPHERALS") {
+        let peripherals = excluded_str.split(',').map(ToOwned::to_owned).collect_vec();
+        // TODO: validate peripherals
+        Some(peripherals)
+    } else {
+        None
     }
 }
 
 /// Extract path to SVD-file from environment variable.
 fn get_path_to_svd() -> PathBuf {
-    let svd_path = env::var("PATH_SVD").expect("PATH_SVD env var must exist");
-    let svd_path = PathBuf::from(svd_path);
-
-    if !svd_path.exists() {
-        panic!(
-            "PATH_SVD must be an absolute path to a valid file, was {}",
-            svd_path.display()
-        );
-    }
-
-    svd_path
+    let path_svd_str = get_environment_variable("PATH_SVD");
+    validate_path_existence(&path_svd_str)
 }
 
 /// Read SVD-file's content.
@@ -127,8 +115,8 @@ fn maybe_get_node_text_with_name(node: &Node, name: &str) -> Option<String> {
 
 /// Transform a hexadecimal value to integer.
 fn hex_to_int(hex: &str) -> u64 {
-    let hex = hex.trim_start_matches("0x").trim_start_matches("0X");
-    u64::from_str_radix(hex, 16).expect("Failed to transform string to integer.")
+    let hex_trimmed = hex.trim_start_matches("0x").trim_start_matches("0X");
+    u64::from_str_radix(hex_trimmed, 16).expect("Failed to transform string to integer.")
 }
 
 /// Remove illegal characters from register name.
@@ -147,8 +135,8 @@ fn remove_illegal_characters(name: &str) -> String {
             .iter()
             .map(|c| format!("\"{}\"", c.to_owned()))
             .join(", ");
-        eprintln!(
-            "Register {}'s name contains {} illegal characters: {}. These characters are removed.",
+        println!(
+            "cargo:warning=Register {}'s name contains {} illegal characters: {}. These characters are removed.",
             name,
             found_illegals.len(),
             symbols
@@ -157,7 +145,7 @@ fn remove_illegal_characters(name: &str) -> String {
     name_new
 }
 
-/// Find registers from XML-document.
+/// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
     excludes: &Option<Vec<String>>,
@@ -170,8 +158,8 @@ fn find_registers(
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"))
     {
-        let address_base = get_node_text_with_name(&peripheral, "baseAddress");
-        let address_base = hex_to_int(&address_base);
+        let address_base_str = get_node_text_with_name(&peripheral, "baseAddress");
+        let address_base = hex_to_int(&address_base_str);
         let name_peripheral = get_node_text_with_name(&peripheral, "name");
 
         if let Some(included_peripherals) = maybe_included_peripherals {
@@ -197,28 +185,30 @@ fn find_registers(
             .descendants()
             .filter(|n| n.has_tag_name("cluster"))
         {
-            let address_offset_cluster = get_node_text_with_name(&cluster, "addressOffset");
-            let address_offset_cluster = hex_to_int(&address_offset_cluster);
+            let address_offset_cluster_str = get_node_text_with_name(&cluster, "addressOffset");
+            let address_offset_cluster = hex_to_int(&address_offset_cluster_str);
             let name_cluster = get_node_text_with_name(&cluster, "name");
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = get_node_text_with_name(&register, "name");
                 let name_register = remove_illegal_characters(&name);
                 if let Some(excluded_names) = &excludes {
                     if excluded_names.contains(&name) {
-                        println!("Register {} is excluded.", name);
+                        println!("cargo:warning=Register {} is excluded.", name);
                         continue;
                     }
                 }
-                let value_reset = get_node_text_with_name(&register, "resetValue");
-                let value_reset = hex_to_int(&value_reset);
-                let address_offset_register = get_node_text_with_name(&register, "addressOffset");
-                let address_offset_register = hex_to_int(&address_offset_register);
-                let access = match maybe_get_node_text_with_name(&register, "access") {
-                    Some(access) => access,
-                    None => {
-                        eprintln!("Register {} does not have access value. Access is assumed to be 'read-write'.", name);
-                        "read-write".to_string()
-                    }
+                let value_reset_str = get_node_text_with_name(&register, "resetValue");
+                let value_reset = hex_to_int(&value_reset_str);
+                let address_offset_register_str =
+                    get_node_text_with_name(&register, "addressOffset");
+                let address_offset_register = hex_to_int(&address_offset_register_str);
+                let access = if let Some(access) =
+                    maybe_get_node_text_with_name(&register, "access")
+                {
+                    access
+                } else {
+                    println!("cargo:warning=Register {} does not have access value. Access is assumed to be 'read-write'.", name);
+                    "read-write".to_owned()
                 };
                 let (can_read, can_write) = match access.as_str() {
                     "read-write" | "read-writeOnce" => (true, true),
@@ -233,10 +223,12 @@ fn find_registers(
 
                 let full_address = address_base + address_offset_cluster + address_offset_register;
                 if addresses.contains_key(&full_address) {
-                    eprintln!("Register {}'s full address is already taken by register {}. This register is ignored.", name, addresses.get(&full_address).expect("Failed to find register name by key."));
+                    let address_holder = addresses
+                        .get(&full_address)
+                        .expect("Failed to find register name by key.");
+                    println!("cargo:warning=Register {}'s full address is already taken by register {}. This register is ignored.", name, address_holder);
                 } else {
-                    addresses.insert(full_address, name.clone());
-                    registers.push(Register {
+                    let register = Register {
                         name_peripheral: name_peripheral.clone(),
                         name_cluster: name_cluster.clone(),
                         name_register,
@@ -247,7 +239,9 @@ fn find_registers(
                         can_read,
                         can_write,
                         size,
-                    })
+                    };
+                    addresses.insert(full_address, name.clone());
+                    registers.push(register);
                 }
             }
         }
@@ -263,6 +257,8 @@ fn write_output(registers: &[Register], file: &mut File) {
         .expect("Failed to write to output file.");
 }
 
+/// Parse SVD-file.
+#[inline]
 pub fn parse() {
     let included_peripherals = maybe_get_included_peripherals();
     let excluded_peripherals = maybe_get_excluded_peripherals();
@@ -276,6 +272,6 @@ pub fn parse() {
         &included_peripherals,
         &excluded_peripherals,
     );
-    println!("Found {} registers.", registers.len());
+    println!("cargo:warning=Found {} registers.", registers.len());
     write_output(&registers, &mut file_output);
 }
