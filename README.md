@@ -1,10 +1,14 @@
-# register_testing
+# register-selftest-generator
 
-Simple skeleton for register test case generation.
+Memory-mapped I/O register test case generator.
 
 ## How to use
 
-Copy your SVD-file to path `data/tackle.svd`.
+Set following environment variables.
+
+- `PATH_SVD`
+- (optional) `INCLUDE_PERIPHERALS`
+- (optional) `EXCLUDE_PERIPHERALS`
 
 Build testcases.
 
@@ -20,9 +24,3 @@ Build and run (**will cause segmentation fault 8-)**).
     - `curl https://sh.rustup.rs -sSf | sh`
 - `just`
     - `cargo install just`
-
-## TODO
-
-- fix error messages "*svd not found"
-- too many warning messages?
-- replace "tackle.svd" with environment variables
