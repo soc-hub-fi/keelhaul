@@ -1,11 +1,23 @@
 //! Common types and functions for register test generator.
 
+// TODO: leave error handling to customer crate
+
 use std::{collections::HashMap, env, fs::File, path::PathBuf};
 
+/// Get environment variable as a string.
+///
+/// # Panics
+///
+/// This function panics if the environment variable does not exist.
+#[inline]
+#[must_use]
 pub fn get_environment_variable(name: &str) -> String {
     env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {}", name))
 }
 
+/// Try to get environment variable as a string.
+#[inline]
+#[must_use]
 pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
     match env::var(name) {
         Ok(variable) => Some(variable),
@@ -16,6 +28,13 @@ pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
     }
 }
 
+/// Check that path to a file exists.
+///
+/// # Panics
+///
+/// This function panics if the path does not exist.
+#[inline]
+#[must_use]
 pub fn validate_path_existence(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
@@ -29,6 +48,14 @@ pub fn validate_path_existence(path_str: &str) -> PathBuf {
     }
 }
 
+/// Checks if path to a file exists, and creates it if it does not exist.
+///
+/// # Panics
+///
+/// This function panics if path can not be accessed.
+/// This can happen if the operating system denies access to the path.
+#[inline]
+#[must_use]
 pub fn force_path_existence(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
@@ -51,6 +78,7 @@ pub fn force_path_existence(path_str: &str) -> PathBuf {
     }
 }
 
+/// Represents a single memory-mapped I/O register.
 pub struct Register {
     pub name_peripheral: String,
     pub name_cluster: String,
