@@ -9,8 +9,10 @@ Set following environment variables.
 - `PATH_SVD`
 - (optional) `INCLUDE_PERIPHERALS`
     - You must give peripheral name in lowercase.
+    - You must separate peripheral names using comma `,`.
 - (optional) `EXCLUDE_PERIPHERALS`
     - You must give peripheral name in lowercase.
+    - You must separate peripheral names using comma `,`.
 
 Build testcases.
 
