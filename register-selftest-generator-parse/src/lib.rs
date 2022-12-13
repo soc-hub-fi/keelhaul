@@ -152,6 +152,7 @@ fn find_registers(
     maybe_included_peripherals: &Option<Vec<String>>,
     maybe_excluded_peripherals: &Option<Vec<String>>,
 ) -> Vec<Register> {
+    let mut peripherals: Vec<String> = Vec::new();
     let mut registers: Vec<Register> = Vec::new();
     let mut addresses: HashMap<u64, String> = HashMap::new();
     for peripheral in parsed
@@ -161,6 +162,7 @@ fn find_registers(
         let address_base_str = get_node_text_with_name(&peripheral, "baseAddress");
         let address_base = hex_to_int(&address_base_str);
         let name_peripheral = get_node_text_with_name(&peripheral, "name");
+        peripherals.push(name_peripheral.clone());
 
         if let Some(included_peripherals) = maybe_included_peripherals {
             let name_peripheral_lowercase = name_peripheral.to_lowercase();
@@ -245,6 +247,10 @@ fn find_registers(
                 }
             }
         }
+    }
+    println!("cargo:warning=Found {} peripherals:", peripherals.len());
+    for peripheral in peripherals {
+        println!("cargo:warning=    {}", peripheral);
     }
     registers
 }
