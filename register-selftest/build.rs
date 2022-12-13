@@ -171,12 +171,12 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             other => panic!("Invalid register size: {}", other),
         };
         let function_name = format!(
-            "test_{}_{}",
+            "test_{}_{:#x}",
             register.name_register,
             register.full_address()
         );
         let mut statements = vec![format!(
-            "#[allow(unused)] let address: *mut {} = {} as *mut {};",
+            "#[allow(unused)] let address: *mut {} = {:#x} as *mut {};",
             variable_type,
             register.full_address(),
             variable_type,
@@ -204,7 +204,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             function_name
         );
         let test_case = format!(
-            "TestCase {{ function: {}, addr: {}, uid: {} }}",
+            "TestCase {{ function: {}, addr: {:#x}, uid: {} }}",
             function,
             register.full_address(),
             uid,
