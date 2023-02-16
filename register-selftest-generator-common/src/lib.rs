@@ -12,7 +12,7 @@ use std::{collections::HashMap, env, fs::File, path::PathBuf};
 #[inline]
 #[must_use]
 pub fn get_environment_variable(name: &str) -> String {
-    env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {}", name))
+    env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {name}"))
 }
 
 /// Try to get environment variable as a string.
@@ -22,7 +22,7 @@ pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
     match env::var(name) {
         Ok(variable) => Some(variable),
         Err(_error) => {
-            println!("Optional environment variable not used: {}", name);
+            println!("Optional environment variable not used: {name}");
             None
         }
     }
@@ -44,7 +44,7 @@ pub fn validate_path_existence(path_str: &str) -> PathBuf {
             }
             Err(error) => panic!("Path {} does not exist. {}", path.display(), error),
         },
-        Err(error) => panic!("Path {} does not exist. {}", path_str, error),
+        Err(error) => panic!("Path {path_str} does not exist. {error}"),
     }
 }
 
@@ -66,13 +66,13 @@ pub fn force_path_existence(path_str: &str) -> PathBuf {
             Err(error) => panic!("Path {} does not exist. {}", path.display(), error),
         },
         Err(error) => {
-            println!("Path {} does not exist. {}", path_str, error);
+            println!("Path {path_str} does not exist. {error}");
             match File::create(path_str) {
                 Ok(_file) => {
-                    println!("Created new file to path {}.", path_str);
+                    println!("Created new file to path {path_str}.");
                     validate_path_existence(path_str)
                 }
-                Err(error) => panic!("Failed to create new file to path {}. {}", path_str, error),
+                Err(error) => panic!("Failed to create new file to path {path_str}. {error}"),
             }
         }
     }
