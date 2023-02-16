@@ -78,7 +78,7 @@ fn get_svd_content() -> String {
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
     let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        format!("{}/parsed.json", path_str)
+        format!("{path_str}/parsed.json")
     } else {
         get_environment_variable("PATH_JSON")
     };
@@ -167,10 +167,7 @@ fn find_registers(
         if let Some(included_peripherals) = maybe_included_peripherals {
             let name_peripheral_lowercase = name_peripheral.to_lowercase();
             if !included_peripherals.contains(&name_peripheral_lowercase) {
-                println!(
-                    "cargo:warning=Peripheral {} was not included.",
-                    name_peripheral
-                );
+                println!("cargo:warning=Peripheral {name_peripheral} was not included.");
                 continue;
             }
         }
@@ -178,7 +175,7 @@ fn find_registers(
         if let Some(excluded_peripherals) = maybe_excluded_peripherals {
             let name_peripheral_lowercase = name_peripheral.to_lowercase();
             if excluded_peripherals.contains(&name_peripheral_lowercase) {
-                println!("cargo:warning=Peripheral {} was excluded.", name_peripheral);
+                println!("cargo:warning=Peripheral {name_peripheral} was excluded.");
                 continue;
             }
         }
@@ -195,7 +192,7 @@ fn find_registers(
                 let name_register = remove_illegal_characters(&name);
                 if let Some(excluded_names) = &excludes {
                     if excluded_names.contains(&name) {
-                        println!("cargo:warning=Register {} is excluded.", name);
+                        println!("cargo:warning=Register {name} is excluded.");
                         continue;
                     }
                 }
@@ -209,18 +206,18 @@ fn find_registers(
                 {
                     access
                 } else {
-                    println!("cargo:warning=Register {} does not have access value. Access is assumed to be 'read-write'.", name);
+                    println!("cargo:warning=Register {name} does not have access value. Access is assumed to be 'read-write'.");
                     "read-write".to_owned()
                 };
                 let (can_read, can_write) = match access.as_str() {
                     "read-write" | "read-writeOnce" => (true, true),
                     "read-only" => (true, false),
                     "write-only" => (false, true),
-                    _ => panic!("Invalid register access value: {}", access),
+                    _ => panic!("Invalid register access value: {access}"),
                 };
                 let size_str = get_node_text_with_name(&register, "size");
                 let size: u64 = size_str.parse().unwrap_or_else(|_error| {
-                    panic!("Failed to parse {} as register size.", size_str)
+                    panic!("Failed to parse {size_str} as register size.")
                 });
 
                 let full_address = address_base + address_offset_cluster + address_offset_register;
@@ -228,7 +225,7 @@ fn find_registers(
                     let address_holder = addresses
                         .get(&full_address)
                         .expect("Failed to find register name by key.");
-                    println!("cargo:warning=Register {}'s full address is already taken by register {}. This register is ignored.", name, address_holder);
+                    println!("cargo:warning=Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 } else {
                     let register = Register {
                         name_peripheral: name_peripheral.clone(),
@@ -250,7 +247,7 @@ fn find_registers(
     }
     println!("cargo:warning=Found {} peripherals:", peripherals.len());
     for peripheral in peripherals {
-        println!("cargo:warning=    {}", peripheral);
+        println!("cargo:warning=    {peripheral}");
     }
     registers
 }
