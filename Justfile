@@ -1,5 +1,6 @@
+[private]
 default:
-    just --list --unsorted
+    @just --list --unsorted
 
 build:
     cargo build --bin register-selftest-generator-runner
