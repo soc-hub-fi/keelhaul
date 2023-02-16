@@ -41,7 +41,7 @@ fn get_output_file() -> File {
 /// Get path to parser output.
 fn get_input_path() -> PathBuf {
     let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        format!("{}/parsed.json", path_str)
+        format!("{path_str}/parsed.json")
     } else {
         get_environment_variable("PATH_JSON")
     };
@@ -116,7 +116,7 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
                 registers.push(register);
             }
         }
-        other => panic!("Illegal JSON object type: {:?}", other),
+        other => panic!("Illegal JSON object type: {other:?}"),
     }
     registers
 }
@@ -143,8 +143,7 @@ fn create_modules(
             .unwrap()
             .join(",");
         let module_test_case_array = format!(
-            "pub static TEST_CASES: [TestCase;{}] = [{}];",
-            module_test_case_count, module_test_cases_combined
+            "pub static TEST_CASES: [TestCase;{module_test_case_count}] = [{module_test_cases_combined}];"
         );
         let module = format!(
             "pub mod {} {{ use super::*; {} {} }}",
@@ -168,7 +167,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             16 => "u16",
             32 => "u32",
             64 => "u64",
-            other => panic!("Invalid register size: {}", other),
+            other => panic!("Invalid register size: {other}"),
         };
         let function_name = format!(
             "test_{}_{:#x}",
@@ -193,8 +192,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         }
         let statements_combined = statements.join("");
         let line = format!(
-            "#[allow(non_snake_case)] pub fn {}() {{{}}}\n",
-            function_name, statements_combined
+            "#[allow(non_snake_case)] pub fn {function_name}() {{{statements_combined}}}\n"
         );
         let uid = format!("\"{}\"", register.uid());
 
@@ -249,13 +247,11 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
     let output_combined = modules.join("");
     let test_case_count = test_cases.len();
     let test_cases_combined = test_cases.join(",");
-    let test_case_array = format!(
-        "pub static TEST_CASES: [TestCase;{}] = [{}];",
-        test_case_count, test_cases_combined
-    );
+    let test_case_array =
+        format!("pub static TEST_CASES: [TestCase;{test_case_count}] = [{test_cases_combined}];");
     TestCases {
         test_cases: vec![output_combined, test_case_array],
-        test_case_count: test_case_count,
+        test_case_count,
     }
 }
 
