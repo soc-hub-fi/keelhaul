@@ -22,6 +22,8 @@ Build and run (**will cause segmentation fault 8-)**).
 
 `just run`
 
+File with test cases can usually be found inside `target/<debug | release>/build/register-selftest-<hash>/out/register_selftest.rs`.
+
 ## Dependencies
 
 - `cargo`
