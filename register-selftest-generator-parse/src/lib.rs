@@ -138,9 +138,9 @@ fn find_registers(
     maybe_included_peripherals: &Option<Vec<String>>,
     maybe_excluded_peripherals: &Option<Vec<String>>,
 ) -> Vec<Register> {
-    let mut peripherals: Vec<String> = Vec::new();
-    let mut registers: Vec<Register> = Vec::new();
-    let mut addresses: HashMap<u64, String> = HashMap::new();
+    let mut peripherals = Vec::new();
+    let mut registers = Vec::new();
+    let mut addresses = HashMap::new();
     for peripheral in parsed
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"))
