@@ -11,3 +11,5 @@ roxmltree = "0.18"
 itertools = "0.10"
 json = { workspace = true }
 thiserror = "1.0.38"
+regex = "1.7.1"
+lazy_static = "1.4.0"

@@ -1,6 +1,7 @@
 //! SVD-file parser for register test generator.
 
 use itertools::Itertools;
+use regex::Regex;
 use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
 use roxmltree::{Document, Node};
 use std::{
@@ -8,6 +9,7 @@ use std::{
     env,
     fs::{self, read_to_string, File},
     io::Write,
+    num::ParseIntError,
     panic,
     path::PathBuf,
 };
@@ -87,6 +89,12 @@ fn open_output_file() -> File {
 enum Error {
     #[error("expected field in node: {0}")]
     ExpectedTag(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("expected int: {0}")]
+    InvalidInt(String),
+    #[error("invalid size multiplier suffix: {0}")]
+    InvalidSizeMultiplierSuffix(char),
 }
 
 /// Find a child node with given tag name.
@@ -133,6 +141,91 @@ fn remove_illegal_characters(name: &str) -> String {
     name_new
 }
 
+trait ArchUsize<U> {
+    fn from_str_radix(digits: &str, radix: u32) -> Result<U, Error>;
+}
+
+impl ArchUsize<u32> for u32 {
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, Error> {
+        u32::from_str_radix(digits, radix).map_err(Error::from)
+    }
+}
+
+impl ArchUsize<u64> for u64 {
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, Error> {
+        u64::from_str_radix(digits, radix).map_err(Error::from)
+    }
+}
+
+fn binary_size_mult_from_char(c: char) -> Result<u64, Error> {
+    match c {
+        'k' | 'K' => Ok(1024),
+        'm' | 'M' => Ok(1024 * 1024),
+        'g' | 'G' => Ok(1024 * 1024 * 1024),
+        't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
+        _ => Err(Error::InvalidSizeMultiplierSuffix(c)),
+    }
+}
+
+fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
+    // Compile Regexes only once as recommended by the documentation of the Regex crate
+    use lazy_static::lazy_static;
+    lazy_static! {
+        // [0x|0X|\#]{1}          # hexadecimal prefix
+        /// Regular expression to capture hexadecimal numbers, as defined in CMSIS-SVD schema
+        static ref HEX_NONNEG_INT_RE: Regex = Regex::new(
+            r"(?x)              # insignificant whitespace
+            \+?                 # zero or one plus sign
+            (?:0x|0X|\#)        # hexadecimal prefix
+            ([[:xdigit:]]+)     # one or more hexadecimal digits (captured as #1)
+            [[:space:]]?        # zero or one of whitespace
+            ([kmgtKMGT])?       # zero or one of kilo, mega, giga, tera identifier (captured as #2)
+        ").unwrap();
+
+        /// Regular expression to capture decimal numbers, as defined in CMSIS-SVD schema
+        static ref DEC_NONNEG_INT_RE: Regex = Regex::new(
+            r"(?x)              # insignificant whitespace
+            \+?                 # zero or one plus sign
+            ([[:digit:]]+)      # one or more decimal digits (captured as #1)
+            [[:space:]]?        # zero or one of whitespace
+            ([kmgtKMGT])?       # zero or one of kilo, mega, giga, tera identifier (captured as #2)
+        ").unwrap();
+    }
+
+    let (number_part, size_mult_capture) = if HEX_NONNEG_INT_RE.is_match(text) {
+        // Safety: we checked above that at least one match exists in text
+        let captures = HEX_NONNEG_INT_RE.captures_iter(text).next().unwrap();
+
+        let digits = &captures[1];
+        let number = u64::from_str_radix(digits, 16)?;
+
+        let size_mult = captures.get(2);
+        (number, size_mult)
+    } else if DEC_NONNEG_INT_RE.is_match(text) {
+        // Safety: we checked above that at least one match exists in text
+        let captures = DEC_NONNEG_INT_RE.captures_iter(text).next().unwrap();
+
+        let digits = &captures[1];
+        let number = digits.parse::<u64>()?;
+
+        let size_mult = captures.get(2);
+        (number, size_mult)
+    } else {
+        return Err(Error::InvalidInt(text.to_owned()));
+    };
+
+    let size_mult: Option<u64> = size_mult_capture
+        // Safety: we know from the regex that there is only one possible size mult char
+        .map(|s| s.as_str().chars().next().unwrap())
+        .map(binary_size_mult_from_char)
+        .transpose()?;
+
+    Ok(match size_mult {
+        Some(mult) => number_part * mult,
+        None => number_part,
+    })
+}
+
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
@@ -146,9 +239,10 @@ fn find_registers(
     let peripheral_nodes = parsed
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"));
+
     for peripheral_node in peripheral_nodes {
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
-        let base_address = hex_to_int(&base_address_str);
+        let base_address = parse_nonneg_int_u64(base_address_str)?;
         let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?;
         peripherals.push(peripheral_name.to_owned());
 
