@@ -271,10 +271,6 @@ pub fn main() {
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src");
-    println!("cargo:rerun-if-changed=../register-selftest-generator-common");
-    println!("cargo:rerun-if-changed=../register-selftest-generator-parse");
-    println!("cargo:rerun-if-changed=../register-selftest-generator-runner");
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
