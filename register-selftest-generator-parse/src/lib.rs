@@ -90,15 +90,15 @@ enum Error {
 }
 
 /// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name(node: &Node, tag: &str) -> Result<String, Error> {
+fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, Error> {
     maybe_find_text_in_node_by_tag_name(node, tag).ok_or(Error::ExpectedTag(tag.to_owned()))
 }
 
 /// Try to find a child node with given name.
-fn maybe_find_text_in_node_by_tag_name(node: &Node, tag: &str) -> Option<String> {
+fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<&'a str> {
     node.children()
         .find(|n| n.has_tag_name(tag))
-        .map(|n| n.text().expect("Node does not have text.").to_owned())
+        .map(|n| n.text().expect("Node does not have text."))
 }
 
 /// Transform a hexadecimal value to integer.
@@ -150,7 +150,7 @@ fn find_registers(
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
         let base_address = hex_to_int(&base_address_str);
         let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?;
-        peripherals.push(peripheral_name.clone());
+        peripherals.push(peripheral_name.to_owned());
 
         if let Some(included_peripherals) = maybe_included_peripherals {
             let peripheral_name_lc = peripheral_name.to_lowercase();
@@ -174,31 +174,31 @@ fn find_registers(
         {
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
-            let address_offset_cluster = hex_to_int(&address_offset_cluster_str);
+            let address_offset_cluster = hex_to_int(address_offset_cluster_str);
             let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?;
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
-                let name_register = remove_illegal_characters(&name);
+                let name_register = remove_illegal_characters(name);
                 if let Some(excluded_names) = &excludes {
-                    if excluded_names.contains(&name) {
+                    if excluded_names.contains(&name.to_string()) {
                         println!("cargo:warning=Register {name} is excluded.");
                         continue;
                     }
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
-                let value_reset = hex_to_int(&value_reset_str);
+                let value_reset = hex_to_int(value_reset_str);
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
-                let address_offset_register = hex_to_int(&address_offset_register_str);
+                let address_offset_register = hex_to_int(address_offset_register_str);
                 let access = if let Some(access) =
                     maybe_find_text_in_node_by_tag_name(&register, "access")
                 {
                     access
                 } else {
                     println!("cargo:warning=Register {name} does not have access value. Access is assumed to be 'read-write'.");
-                    "read-write".to_owned()
+                    "read-write"
                 };
-                let (can_read, can_write) = match access.as_str() {
+                let (can_read, can_write) = match access {
                     "read-write" | "read-writeOnce" => (true, true),
                     "read-only" => (true, false),
                     "write-only" => (false, true),
@@ -212,8 +212,8 @@ fn find_registers(
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
-                        name_peripheral: peripheral_name.clone(),
-                        name_cluster: name_cluster.clone(),
+                        name_peripheral: peripheral_name.to_owned(),
+                        name_cluster: name_cluster.to_owned(),
                         name_register,
                         address_base: base_address,
                         address_offset_cluster,
@@ -223,7 +223,7 @@ fn find_registers(
                         can_write,
                         size,
                     };
-                    entry.insert(name.clone());
+                    entry.insert(name.to_owned());
                     registers.push(register);
                 } else {
                     let address_holder = addresses
