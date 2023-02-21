@@ -13,7 +13,3 @@ json = "*"
 [lib]
 name = "register_selftest"
 path = "src/lib.rs"
-
-[[bin]]
-name = "register_selftest"
-path = "src/main.rs"
