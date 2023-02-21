@@ -141,13 +141,13 @@ fn find_registers(
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
-    for peripheral in parsed
+    let peripheral_nodes = parsed
         .descendants()
-        .filter(|n| n.has_tag_name("peripheral"))
-    {
-        let address_base_str = get_node_text_with_name(&peripheral, "baseAddress");
+        .filter(|n| n.has_tag_name("peripheral"));
+    for peripheral_node in peripheral_nodes {
+        let address_base_str = get_node_text_with_name(&peripheral_node, "baseAddress");
         let address_base = hex_to_int(&address_base_str);
-        let name_peripheral = get_node_text_with_name(&peripheral, "name");
+        let name_peripheral = get_node_text_with_name(&peripheral_node, "name");
         peripherals.push(name_peripheral.clone());
 
         if let Some(included_peripherals) = maybe_included_peripherals {
@@ -166,7 +166,7 @@ fn find_registers(
             }
         }
 
-        for cluster in peripheral
+        for cluster in peripheral_node
             .descendants()
             .filter(|n| n.has_tag_name("cluster"))
         {
