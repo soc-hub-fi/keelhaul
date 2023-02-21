@@ -86,7 +86,7 @@ fn open_output_file() -> File {
 fn get_node_text_with_name(node: &Node, name: &str) -> String {
     node.children()
         .find(|n| n.has_tag_name(name))
-        .expect("Node does not have base address.")
+        .unwrap_or_else(|| panic!("Node does not have {name}."))
         .text()
         .expect("Node does not have text.")
         .to_owned()
