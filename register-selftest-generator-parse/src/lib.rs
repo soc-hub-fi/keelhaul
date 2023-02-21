@@ -171,6 +171,9 @@ fn parse_nonneg_int_u64_works() {
     assert_eq!(parse_nonneg_int_u64("437260288").unwrap(), 437260288);
 }
 
+/// Parses an integer from `text`
+///
+/// This implementation is format aware and uses regex to ensure correct behavior.
 fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
@@ -195,6 +198,8 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
             ([kmgtKMGT])?       # zero or one of kilo, mega, giga, tera identifier (captured as #2)
         ").unwrap();
     }
+
+    // Pick either hexadecimal or decimal format based on which fits
 
     let (number_part, size_mult_capture) = if HEX_NONNEG_INT_RE.is_match(text) {
         // Safety: we checked above that at least one match exists in text
