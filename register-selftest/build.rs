@@ -7,9 +7,12 @@ use std::{
     collections::HashMap,
     env,
     io::{self, Write},
+    num::ParseIntError,
     path::{Path, PathBuf},
     process::Command,
+    str::ParseBoolError,
 };
+use thiserror::Error;
 
 /// Collection of all test cases for this build.
 struct TestCases {
@@ -44,81 +47,69 @@ fn get_input_json() -> PathBuf {
     validate_path_existence(&input_path)
 }
 
+#[derive(Error, Debug)]
+enum RegisterParseError {
+    #[error("expected JSON object: {0}")]
+    ExpectedJsonObject(String),
+    #[error("expected JSON array: {0}")]
+    ExpectedJsonArray(String),
+    #[error("JSON object does not contain field for '{0}'")]
+    FieldNotFound(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("could not parse bool")]
+    ParseBool(#[from] ParseBoolError),
+}
+
+fn json_object_to_register(object: &json::object::Object) -> Result<Register, RegisterParseError> {
+    let get_field =
+        |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
+            obj.get(field)
+                .ok_or(RegisterParseError::FieldNotFound(field.to_owned()))
+                .map(|x| x.to_string())
+        };
+    let name_peripheral = get_field(object, "name_peripheral")?;
+    let name_cluster = get_field(object, "name_cluster")?;
+    let name_register = get_field(object, "name_register")?;
+    let address_base = get_field(object, "address_base")?.parse()?;
+    let address_offset_cluster = get_field(object, "address_offset_cluster")?.parse()?;
+    let address_offset_register = get_field(object, "address_offset_register")?.parse()?;
+    let value_reset = get_field(object, "value_reset")?.parse()?;
+    let can_read = get_field(object, "can_read")?.parse()?;
+    let can_write = get_field(object, "can_write")?.parse()?;
+    let size = get_field(object, "size")?.parse()?;
+    Ok(Register {
+        name_peripheral,
+        name_cluster,
+        name_register,
+        address_base,
+        address_offset_cluster,
+        address_offset_register,
+        value_reset,
+        can_read,
+        can_write,
+        size,
+    })
+}
+
 /// Extract registers from JSON object.
-fn json_value_into_registers(content: JsonValue) -> Vec<Register> {
-    let mut registers = Vec::new();
+fn json_value_into_registers(content: JsonValue) -> Result<Vec<Register>, RegisterParseError> {
     match content {
-        JsonValue::Array(array) => {
-            for value in array {
-                let register = match value {
-                    JsonValue::Object(object) => Register {
-                        name_peripheral: object
-                            .get("name_peripheral")
-                            .expect("JSON object does not contain 'name_peripheral'-field.")
-                            .to_string(),
-                        name_cluster: object
-                            .get("name_cluster")
-                            .expect("JSON object does not contain 'name_cluster'-field.")
-                            .to_string(),
-                        name_register: object
-                            .get("name_register")
-                            .expect("JSON object does not contain 'name_register'-field.")
-                            .to_string(),
-                        address_base: object
-                            .get("address_base")
-                            .expect("JSON object does not contain 'address_base'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'address_base'-field as integer."),
-                        address_offset_cluster: object
-                            .get("address_offset_cluster")
-                            .expect("JSON object does not contain 'address_offset_cluster'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'address_offset_cluster'-field as integer."),
-                        address_offset_register: object
-                            .get("address_offset_register")
-                            .expect("JSON object does not contain 'address_offset_register'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'address_offset_register'-field as integer."),
-                        value_reset: object
-                            .get("value_reset")
-                            .expect("JSON object does not contain 'value_reset'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'value_reset'-field as integer."),
-                        can_read: object
-                            .get("can_read")
-                            .expect("JSON object does not contain 'can_read'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'can_read'-field as integer."),
-                        can_write: object
-                            .get("can_write")
-                            .expect("JSON object does not contain 'can_write'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'can_write'-field as integer."),
-                        size: object
-                            .get("size")
-                            .expect("JSON object does not contain 'size'-field.")
-                            .to_string()
-                            .parse()
-                            .expect("Failed to parse 'size'-field as integer."),
-                    },
-                    _ => panic!("Illegal JSON object type."),
-                };
-                registers.push(register);
-            }
-        }
-        other => panic!("Illegal JSON object type: {other:?}"),
+        JsonValue::Array(array) => array
+            .iter()
+            .map(|value| match value {
+                JsonValue::Object(object) => json_object_to_register(object),
+                _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
+            })
+            .collect(),
+        _ => Err(RegisterParseError::ExpectedJsonArray(format!(
+            "{content:?}"
+        ))),
     }
-    registers
 }
 
 /// Get register objects.
-fn get_registers() -> Vec<Register> {
+fn get_registers() -> Result<Vec<Register>, RegisterParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
@@ -286,7 +277,7 @@ pub fn main() {
     println!("cargo:rerun-if-changed=../register-selftest-generator-runner");
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
-    let registers = get_registers();
+    let registers = get_registers().unwrap();
     let output = create_test_cases(&registers);
     write_output(&output.test_cases, &mut file_output);
     let path = get_path_to_output();

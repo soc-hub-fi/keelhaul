@@ -10,6 +10,7 @@ register-selftest-generator-common = { path = "../register-selftest-generator-co
 register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
 json = { workspace = true }
 fs-err = "2.9.0"
+thiserror = "1.0.38"
 
 [lib]
 name = "register_selftest"
