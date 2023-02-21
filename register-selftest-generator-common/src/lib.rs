@@ -9,7 +9,6 @@ use std::{collections::HashMap, fs::File, path::PathBuf};
 /// # Panics
 ///
 /// This function panics if the path does not exist.
-#[must_use]
 pub fn validate_path_existence(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
@@ -29,7 +28,6 @@ pub fn validate_path_existence(path_str: &str) -> PathBuf {
 ///
 /// This function panics if path can not be accessed.
 /// This can happen if the operating system denies access to the path.
-#[must_use]
 pub fn force_path_existence(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
@@ -68,7 +66,6 @@ pub struct Register {
 
 impl Register {
     /// Transform register structure to hashmap.
-    #[must_use]
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
             ("name_peripheral", self.name_peripheral.clone()),
@@ -91,13 +88,11 @@ impl Register {
     }
 
     /// Get register's absolute memory address.
-    #[must_use]
     pub const fn full_address(&self) -> u64 {
         self.address_base + self.address_offset_cluster + self.address_offset_register
     }
 
     /// Get register's unique identifier.
-    #[must_use]
     pub fn uid(&self) -> String {
         format!(
             "{}-{}-{}",
