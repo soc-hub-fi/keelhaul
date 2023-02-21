@@ -8,7 +8,7 @@ edition = "2021"
 [build-dependencies]
 register-selftest-generator-common = { path = "../register-selftest-generator-common" }
 register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
-json = "*"
+json = "0.12"
 
 [lib]
 name = "register_selftest"

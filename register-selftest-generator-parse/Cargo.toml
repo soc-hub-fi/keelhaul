@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 register-selftest-generator-common = { path = "../register-selftest-generator-common" }
-roxmltree = "*"
-itertools = "*"
-json = "*"
+roxmltree = "0.18"
+itertools = "0.10"
+json = "0.12"
 
 [lib]
 name = "register_selftest_generator_parse"
