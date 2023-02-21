@@ -4,7 +4,7 @@ use itertools::Itertools;
 use register_selftest_generator_common::{force_path_existence, validate_path_existence, Register};
 use roxmltree::{Document, Node};
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     env,
     fs::{self, read_to_string, File},
     io::Write,
@@ -217,12 +217,7 @@ fn find_registers(
                 });
 
                 let full_address = address_base + address_offset_cluster + address_offset_register;
-                if addresses.contains_key(&full_address) {
-                    let address_holder = addresses
-                        .get(&full_address)
-                        .expect("Failed to find register name by key.");
-                    println!("cargo:warning=Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
-                } else {
+                if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
                         name_peripheral: name_peripheral.clone(),
                         name_cluster: name_cluster.clone(),
@@ -235,8 +230,13 @@ fn find_registers(
                         can_write,
                         size,
                     };
-                    addresses.insert(full_address, name.clone());
+                    entry.insert(name.clone());
                     registers.push(register);
+                } else {
+                    let address_holder = addresses
+                        .get(&full_address)
+                        .expect("Failed to find register name by key.");
+                    println!("cargo:warning=Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 }
             }
         }
