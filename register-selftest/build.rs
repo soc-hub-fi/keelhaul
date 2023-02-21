@@ -13,7 +13,7 @@ use std::{
     process::Command,
 };
 
-/// Collection of test cases.
+/// Collection of all test cases for this build.
 struct TestCases {
     test_cases: Vec<String>,
     test_case_count: usize,
