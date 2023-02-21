@@ -5,3 +5,6 @@ members = [
     "register-selftest",
     "register-selftest-generator-runner"
 ]
+
+[workspace.dependencies]
+json = "0.12"

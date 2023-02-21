@@ -2,39 +2,13 @@
 
 // TODO: leave error handling to customer crate
 
-use std::{collections::HashMap, env, fs::File, path::PathBuf};
-
-/// Get environment variable as a string.
-///
-/// # Panics
-///
-/// This function panics if the environment variable does not exist.
-#[inline]
-#[must_use]
-pub fn get_environment_variable(name: &str) -> String {
-    env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {name}"))
-}
-
-/// Try to get environment variable as a string.
-#[inline]
-#[must_use]
-pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
-    match env::var(name) {
-        Ok(variable) => Some(variable),
-        Err(_error) => {
-            println!("Optional environment variable not used: {name}");
-            None
-        }
-    }
-}
+use std::{collections::HashMap, fs::File, path::PathBuf};
 
 /// Check that path to a file exists.
 ///
 /// # Panics
 ///
 /// This function panics if the path does not exist.
-#[inline]
-#[must_use]
 pub fn validate_path_existence(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
@@ -48,15 +22,13 @@ pub fn validate_path_existence(path_str: &str) -> PathBuf {
     }
 }
 
-/// Checks if path to a file exists, and creates it if it does not exist.
+/// Checks if path to a file exists, and create it if it does not exist.
 ///
 /// # Panics
 ///
 /// This function panics if path can not be accessed.
 /// This can happen if the operating system denies access to the path.
-#[inline]
-#[must_use]
-pub fn force_path_existence(path_str: &str) -> PathBuf {
+pub fn get_or_create(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
             Ok(exists) => {
@@ -94,8 +66,6 @@ pub struct Register {
 
 impl Register {
     /// Transform register structure to hashmap.
-    #[inline]
-    #[must_use]
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
             ("name_peripheral", self.name_peripheral.clone()),
@@ -118,15 +88,11 @@ impl Register {
     }
 
     /// Get register's absolute memory address.
-    #[inline]
-    #[must_use]
     pub const fn full_address(&self) -> u64 {
         self.address_base + self.address_offset_cluster + self.address_offset_register
     }
 
     /// Get register's unique identifier.
-    #[inline]
-    #[must_use]
     pub fn uid(&self) -> String {
         format!(
             "{}-{}-{}",

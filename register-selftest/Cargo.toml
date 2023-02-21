@@ -8,12 +8,10 @@ edition = "2021"
 [build-dependencies]
 register-selftest-generator-common = { path = "../register-selftest-generator-common" }
 register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
-json = "*"
+json = { workspace = true }
+fs-err = "2.9.0"
+thiserror = "1.0.38"
 
 [lib]
 name = "register_selftest"
 path = "src/lib.rs"
-
-[[bin]]
-name = "register_selftest"
-path = "src/main.rs"
