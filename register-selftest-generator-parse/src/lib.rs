@@ -167,6 +167,16 @@ fn binary_size_mult_from_char(c: char) -> Result<u64, Error> {
     }
 }
 
+#[test]
+fn parse_nonneg_int_u64_works() {
+    assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
+    assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
+    assert_eq!(parse_nonneg_int_u64("437260288").unwrap(), 437260288);
+}
+
 fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
