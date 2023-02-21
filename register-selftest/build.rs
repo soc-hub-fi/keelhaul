@@ -37,7 +37,7 @@ fn get_output_file() -> File {
 }
 
 /// Get path to parser output.
-fn get_input_path() -> PathBuf {
+fn get_input_json() -> PathBuf {
     // Safety: OUT_DIR always exists
     let out_dir = env::var("OUT_DIR").unwrap();
     let input_path = format!("{out_dir}/parsed.json");
@@ -45,7 +45,7 @@ fn get_input_path() -> PathBuf {
 }
 
 /// Extract registers from JSON object.
-fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
+fn json_value_into_registers(content: JsonValue) -> Vec<Register> {
     let mut registers = Vec::new();
     match content {
         JsonValue::Array(array) => {
@@ -119,10 +119,10 @@ fn get_parsed_registers(content: JsonValue) -> Vec<Register> {
 
 /// Get register objects.
 fn get_registers() -> Vec<Register> {
-    let path_input = get_input_path();
-    let content = read_to_string(path_input).expect("Failed to read parser results.");
-    let json = json::parse(&content).expect("Failed to parse parser results.");
-    get_parsed_registers(json)
+    let input_json = get_input_json();
+    let json_content = read_to_string(input_json).expect("Failed to read parser results.");
+    let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
+    json_value_into_registers(parsed_json)
 }
 
 /// Place test cases to modules.
