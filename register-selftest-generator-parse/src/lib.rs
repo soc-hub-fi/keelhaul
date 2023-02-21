@@ -1,13 +1,11 @@
 //! SVD-file parser for register test generator.
 
 use itertools::Itertools;
-use register_selftest_generator_common::{
-    force_path_existence, get_environment_variable, maybe_get_environment_variable,
-    validate_path_existence, Register,
-};
+use register_selftest_generator_common::{force_path_existence, validate_path_existence, Register};
 use roxmltree::{Document, Node};
 use std::{
     collections::HashMap,
+    env,
     fs::{self, read_to_string, File},
     io::Write,
     panic,
@@ -16,7 +14,7 @@ use std::{
 
 /// Try to extract path to excludes-file from environment variable.
 fn maybe_get_path_to_excludes() -> Option<PathBuf> {
-    if let Some(path_str) = maybe_get_environment_variable("PATH_EXCLUDES") {
+    if let Ok(path_str) = env::var("PATH_EXCLUDES") {
         let path = validate_path_existence(&path_str);
         Some(path)
     } else {
@@ -43,7 +41,7 @@ fn maybe_get_excludes() -> Option<Vec<String>> {
 
 /// Try to get names of included peripherals.
 fn maybe_get_included_peripherals() -> Option<Vec<String>> {
-    if let Some(included_str) = maybe_get_environment_variable("INCLUDE_PERIPHERALS") {
+    if let Ok(included_str) = env::var("INCLUDE_PERIPHERALS") {
         let peripherals = included_str.split(',').map(ToOwned::to_owned).collect_vec();
         // TODO: validate peripherals
         Some(peripherals)
@@ -54,7 +52,7 @@ fn maybe_get_included_peripherals() -> Option<Vec<String>> {
 
 /// Try to get names of excluded peripherals.
 fn maybe_get_excluded_peripherals() -> Option<Vec<String>> {
-    if let Some(excluded_str) = maybe_get_environment_variable("EXCLUDE_PERIPHERALS") {
+    if let Ok(excluded_str) = env::var("EXCLUDE_PERIPHERALS") {
         let peripherals = excluded_str.split(',').map(ToOwned::to_owned).collect_vec();
         // TODO: validate peripherals
         Some(peripherals)
@@ -65,7 +63,7 @@ fn maybe_get_excluded_peripherals() -> Option<Vec<String>> {
 
 /// Extract path to SVD-file from environment variable.
 fn get_path_to_svd() -> PathBuf {
-    let path_svd_str = get_environment_variable("PATH_SVD");
+    let path_svd_str = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
     validate_path_existence(&path_svd_str)
 }
 
@@ -77,11 +75,9 @@ fn get_svd_content() -> String {
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        format!("{path_str}/parsed.json")
-    } else {
-        get_environment_variable("PATH_JSON")
-    };
+    // Safety: OUT_DIR always exists
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let path_str = format!("{out_dir}/parsed.json");
     force_path_existence(&path_str)
 }
 

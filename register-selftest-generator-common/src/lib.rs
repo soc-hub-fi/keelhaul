@@ -2,31 +2,7 @@
 
 // TODO: leave error handling to customer crate
 
-use std::{collections::HashMap, env, fs::File, path::PathBuf};
-
-/// Get environment variable as a string.
-///
-/// # Panics
-///
-/// This function panics if the environment variable does not exist.
-#[inline]
-#[must_use]
-pub fn get_environment_variable(name: &str) -> String {
-    env::var(name).unwrap_or_else(|_| panic!("Missing environment variable: {name}"))
-}
-
-/// Try to get environment variable as a string.
-#[inline]
-#[must_use]
-pub fn maybe_get_environment_variable(name: &str) -> Option<String> {
-    match env::var(name) {
-        Ok(variable) => Some(variable),
-        Err(_error) => {
-            println!("Optional environment variable not used: {name}");
-            None
-        }
-    }
-}
+use std::{collections::HashMap, fs::File, path::PathBuf};
 
 /// Check that path to a file exists.
 ///

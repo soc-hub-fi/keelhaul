@@ -2,9 +2,7 @@
 
 use fs_err::{self as fs, read_to_string, File};
 use json::JsonValue;
-use register_selftest_generator_common::{
-    get_environment_variable, maybe_get_environment_variable, validate_path_existence, Register,
-};
+use register_selftest_generator_common::{validate_path_existence, Register};
 use std::{
     collections::HashMap,
     env,
@@ -40,12 +38,10 @@ fn get_output_file() -> File {
 
 /// Get path to parser output.
 fn get_input_path() -> PathBuf {
-    let path_str = if let Some(path_str) = maybe_get_environment_variable("OUT_DIR") {
-        format!("{path_str}/parsed.json")
-    } else {
-        get_environment_variable("PATH_JSON")
-    };
-    validate_path_existence(&path_str)
+    // Safety: OUT_DIR always exists
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let input_path = format!("{out_dir}/parsed.json");
+    validate_path_existence(&input_path)
 }
 
 /// Extract registers from JSON object.
