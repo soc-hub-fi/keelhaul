@@ -9,6 +9,7 @@ edition = "2021"
 register-selftest-generator-common = { path = "../register-selftest-generator-common" }
 register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
 json = { workspace = true }
+fs-err = "2.9.0"
 
 [lib]
 name = "register_selftest"

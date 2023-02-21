@@ -1,5 +1,6 @@
 //! Memory-mapped I/O peripheral register test case generator.
 
+use fs_err::{self as fs, read_to_string, File};
 use json::JsonValue;
 use register_selftest_generator_common::{
     get_environment_variable, maybe_get_environment_variable, validate_path_existence, Register,
@@ -7,7 +8,6 @@ use register_selftest_generator_common::{
 use std::{
     collections::HashMap,
     env,
-    fs::{self, read_to_string, File},
     io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
