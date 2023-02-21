@@ -109,12 +109,6 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
         .map(|n| n.text().expect("Node does not have text."))
 }
 
-/// Transform a hexadecimal value to integer.
-fn hex_to_int(hex: &str) -> u64 {
-    let hex_trimmed = hex.trim_start_matches("0x").trim_start_matches("0X");
-    u64::from_str_radix(hex_trimmed, 16).expect("Failed to transform string to integer.")
-}
-
 /// Remove illegal characters from register name.
 fn remove_illegal_characters(name: &str) -> String {
     let mut name_new = name.to_owned();
@@ -278,7 +272,7 @@ fn find_registers(
         {
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
-            let address_offset_cluster = hex_to_int(address_offset_cluster_str);
+            let address_offset_cluster = parse_nonneg_int_u64(address_offset_cluster_str)?;
             let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?;
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
@@ -290,10 +284,10 @@ fn find_registers(
                     }
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
-                let value_reset = hex_to_int(value_reset_str);
+                let value_reset = parse_nonneg_int_u64(value_reset_str)?;
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
-                let address_offset_register = hex_to_int(address_offset_register_str);
+                let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = if let Some(access) =
                     maybe_find_text_in_node_by_tag_name(&register, "access")
                 {
