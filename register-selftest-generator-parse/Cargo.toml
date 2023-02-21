@@ -10,7 +10,3 @@ register-selftest-generator-common = { path = "../register-selftest-generator-co
 roxmltree = "0.18"
 itertools = "0.10"
 json = { workspace = true }
-
-[lib]
-name = "register_selftest_generator_parse"
-path = "src/lib.rs"

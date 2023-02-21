@@ -145,8 +145,8 @@ fn find_registers(
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"));
     for peripheral_node in peripheral_nodes {
-        let address_base_str = get_node_text_with_name(&peripheral_node, "baseAddress");
-        let address_base = hex_to_int(&address_base_str);
+        let base_address_str = get_node_text_with_name(&peripheral_node, "baseAddress");
+        let base_address = hex_to_int(&base_address_str);
         let name_peripheral = get_node_text_with_name(&peripheral_node, "name");
         peripherals.push(name_peripheral.clone());
 
@@ -206,13 +206,13 @@ fn find_registers(
                     panic!("Failed to parse {size_str} as register size.")
                 });
 
-                let full_address = address_base + address_offset_cluster + address_offset_register;
+                let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
                         name_peripheral: name_peripheral.clone(),
                         name_cluster: name_cluster.clone(),
                         name_register,
-                        address_base,
+                        address_base: base_address,
                         address_offset_cluster,
                         address_offset_register,
                         value_reset,
