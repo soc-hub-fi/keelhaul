@@ -271,13 +271,14 @@ pub fn main() {
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-changed=build.rs");
+
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
-    let output = create_test_cases(&registers);
-    write_output(&output.test_cases, &mut file_output);
+    let test_cases = create_test_cases(&registers);
+    write_output(&test_cases.test_cases, &mut file_output);
     let path = get_path_to_output();
     rustfmt_file(&path)
         .unwrap_or_else(|error| panic!("Failed to format file {}. {}", path.display(), error));
-    println!("Wrote {} test cases.", output.test_case_count);
+    println!("Wrote {} test cases.", test_cases.test_case_count);
 }

@@ -1,7 +1,7 @@
 //! SVD-file parser for register test generator.
 
 use itertools::Itertools;
-use register_selftest_generator_common::{force_path_existence, validate_path_existence, Register};
+use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -13,7 +13,7 @@ use std::{
 };
 
 /// Try to extract path to excludes-file from environment variable.
-fn maybe_get_path_to_excludes() -> Option<PathBuf> {
+fn read_excludes_path_from_env() -> Option<PathBuf> {
     if let Ok(path_str) = env::var("PATH_EXCLUDES") {
         let path = validate_path_existence(&path_str);
         Some(path)
@@ -23,8 +23,8 @@ fn maybe_get_path_to_excludes() -> Option<PathBuf> {
 }
 
 /// Try to get names of excluded registers.
-fn maybe_get_excludes() -> Option<Vec<String>> {
-    let path_excludes = maybe_get_path_to_excludes();
+fn read_excludes_from_env() -> Option<Vec<String>> {
+    let path_excludes = read_excludes_path_from_env();
     match path_excludes {
         Some(path) => {
             let content = read_to_string(path).expect("Failed to read excludes content.");
@@ -39,51 +39,41 @@ fn maybe_get_excludes() -> Option<Vec<String>> {
     }
 }
 
-/// Try to get names of included peripherals.
-fn maybe_get_included_peripherals() -> Option<Vec<String>> {
-    if let Ok(included_str) = env::var("INCLUDE_PERIPHERALS") {
-        let peripherals = included_str.split(',').map(ToOwned::to_owned).collect_vec();
-        // TODO: validate peripherals
+/// Read an environment variable into a Vec<String>
+///
+/// # Parameters:
+///
+/// `var` - The name of the environment variable
+/// `sep` - The separator for Vec elements
+///
+/// Returns None if the environment variable is not present
+fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
+    if let Ok(included_str) = env::var(var) {
+        let peripherals = included_str.split(sep).map(ToOwned::to_owned).collect_vec();
+        // TODO: validate that these are valid peripherals
         Some(peripherals)
     } else {
         None
     }
 }
 
-/// Try to get names of excluded peripherals.
-fn maybe_get_excluded_peripherals() -> Option<Vec<String>> {
-    if let Ok(excluded_str) = env::var("EXCLUDE_PERIPHERALS") {
-        let peripherals = excluded_str.split(',').map(ToOwned::to_owned).collect_vec();
-        // TODO: validate peripherals
-        Some(peripherals)
-    } else {
-        None
+/// Read the input SVD to string
+fn read_input_svd_to_string() -> String {
+    let svd_path = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
+    let svd_path = PathBuf::from(svd_path);
+    if !svd_path.exists() {
+        panic!("SVD was not found at {}", svd_path.display());
     }
-}
-
-/// Extract path to SVD-file from environment variable.
-fn get_path_to_svd() -> PathBuf {
-    let path_svd_str = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
-    validate_path_existence(&path_svd_str)
-}
-
-/// Read SVD-file's content.
-fn get_svd_content() -> String {
-    let path_svd = get_path_to_svd();
-    read_to_string(path_svd).expect("Failed to read SVD content.")
+    read_to_string(svd_path).unwrap()
 }
 
 /// Extract path to output file from environment variable.
-fn get_path_to_output() -> PathBuf {
+/// Get handle to output file.
+fn open_output_file() -> File {
     // Safety: OUT_DIR always exists
     let out_dir = env::var("OUT_DIR").unwrap();
     let path_str = format!("{out_dir}/parsed.json");
-    force_path_existence(&path_str)
-}
-
-/// Get handle to output file.
-fn get_output_file() -> File {
-    let path = get_path_to_output();
+    let path = get_or_create(&path_str);
     fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -258,11 +248,11 @@ fn write_output(registers: &[Register], file: &mut File) {
 
 /// Parse SVD-file.
 pub fn parse() {
-    let included_peripherals = maybe_get_included_peripherals();
-    let excluded_peripherals = maybe_get_excluded_peripherals();
-    let mut file_output = get_output_file();
-    let excludes = maybe_get_excludes();
-    let content = get_svd_content();
+    let included_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
+    let excluded_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
+    let mut file_output = open_output_file();
+    let excludes = read_excludes_from_env();
+    let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
     let registers = find_registers(
         &parsed,

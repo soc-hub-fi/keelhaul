@@ -22,13 +22,13 @@ pub fn validate_path_existence(path_str: &str) -> PathBuf {
     }
 }
 
-/// Checks if path to a file exists, and creates it if it does not exist.
+/// Checks if path to a file exists, and create it if it does not exist.
 ///
 /// # Panics
 ///
 /// This function panics if path can not be accessed.
 /// This can happen if the operating system denies access to the path.
-pub fn force_path_existence(path_str: &str) -> PathBuf {
+pub fn get_or_create(path_str: &str) -> PathBuf {
     match PathBuf::from(path_str).canonicalize() {
         Ok(path) => match path.try_exists() {
             Ok(exists) => {
