@@ -1,5 +1,3 @@
-use register_selftest;
-
 fn main() {
     // TODO: enum TestType { Read, Reset, }
 
