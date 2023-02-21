@@ -257,7 +257,6 @@ fn write_output(registers: &[Register], file: &mut File) {
 }
 
 /// Parse SVD-file.
-#[inline]
 pub fn parse() {
     let included_peripherals = maybe_get_included_peripherals();
     let excluded_peripherals = maybe_get_excluded_peripherals();
