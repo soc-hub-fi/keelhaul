@@ -11,6 +11,7 @@ use std::{
     panic,
     path::PathBuf,
 };
+use thiserror::Error;
 
 /// Try to extract path to excludes-file from environment variable.
 fn read_excludes_path_from_env() -> Option<PathBuf> {
@@ -82,14 +83,18 @@ fn open_output_file() -> File {
         .expect("Failed to open output file.")
 }
 
+#[derive(Error, Debug)]
+enum Error {
+    #[error("expected field in node: {0}")]
+    ExpectedTag(String),
+}
+
 /// Find a child node with given tag name.
-fn get_node_text_with_name(node: &Node, name: &str) -> String {
-    node.children()
-        .find(|n| n.has_tag_name(name))
-        .unwrap_or_else(|| panic!("Node does not have {name}."))
-        .text()
-        .expect("Node does not have text.")
-        .to_owned()
+fn find_text_in_node(node: &Node, tag: &str) -> Result<String, Error> {
+    match node.children().find(|n| n.has_tag_name(tag)) {
+        Some(node) => Ok(node.text().expect("Node does not have text.").to_owned()),
+        None => Err(Error::ExpectedTag(tag.to_owned())),
+    }
 }
 
 /// Try to find a child node with given name.
@@ -137,7 +142,7 @@ fn find_registers(
     excludes: &Option<Vec<String>>,
     maybe_included_peripherals: &Option<Vec<String>>,
     maybe_excluded_peripherals: &Option<Vec<String>>,
-) -> Vec<Register> {
+) -> Result<Vec<Register>, Error> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
@@ -145,9 +150,9 @@ fn find_registers(
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"));
     for peripheral_node in peripheral_nodes {
-        let base_address_str = get_node_text_with_name(&peripheral_node, "baseAddress");
+        let base_address_str = find_text_in_node(&peripheral_node, "baseAddress")?;
         let base_address = hex_to_int(&base_address_str);
-        let name_peripheral = get_node_text_with_name(&peripheral_node, "name");
+        let name_peripheral = find_text_in_node(&peripheral_node, "name")?;
         peripherals.push(name_peripheral.clone());
 
         if let Some(included_peripherals) = maybe_included_peripherals {
@@ -170,11 +175,11 @@ fn find_registers(
             .descendants()
             .filter(|n| n.has_tag_name("cluster"))
         {
-            let address_offset_cluster_str = get_node_text_with_name(&cluster, "addressOffset");
+            let address_offset_cluster_str = find_text_in_node(&cluster, "addressOffset")?;
             let address_offset_cluster = hex_to_int(&address_offset_cluster_str);
-            let name_cluster = get_node_text_with_name(&cluster, "name");
+            let name_cluster = find_text_in_node(&cluster, "name")?;
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
-                let name = get_node_text_with_name(&register, "name");
+                let name = find_text_in_node(&register, "name")?;
                 let name_register = remove_illegal_characters(&name);
                 if let Some(excluded_names) = &excludes {
                     if excluded_names.contains(&name) {
@@ -182,10 +187,9 @@ fn find_registers(
                         continue;
                     }
                 }
-                let value_reset_str = get_node_text_with_name(&register, "resetValue");
+                let value_reset_str = find_text_in_node(&register, "resetValue")?;
                 let value_reset = hex_to_int(&value_reset_str);
-                let address_offset_register_str =
-                    get_node_text_with_name(&register, "addressOffset");
+                let address_offset_register_str = find_text_in_node(&register, "addressOffset")?;
                 let address_offset_register = hex_to_int(&address_offset_register_str);
                 let access = if let Some(access) =
                     maybe_get_node_text_with_name(&register, "access")
@@ -201,7 +205,7 @@ fn find_registers(
                     "write-only" => (false, true),
                     _ => panic!("Invalid register access value: {access}"),
                 };
-                let size_str = get_node_text_with_name(&register, "size");
+                let size_str = find_text_in_node(&register, "size")?;
                 let size: u64 = size_str.parse().unwrap_or_else(|_error| {
                     panic!("Failed to parse {size_str} as register size.")
                 });
@@ -235,7 +239,7 @@ fn find_registers(
     for peripheral in peripherals {
         println!("cargo:warning=    {peripheral}");
     }
-    registers
+    Ok(registers)
 }
 
 /// Write found registers to output file.
@@ -259,7 +263,8 @@ pub fn parse() {
         &excludes,
         &included_peripherals,
         &excluded_peripherals,
-    );
+    )
+    .unwrap();
     println!("cargo:warning=Found {} registers.", registers.len());
     write_output(&registers, &mut file_output);
 }
