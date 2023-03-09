@@ -62,12 +62,10 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
 
 /// Read the input SVD to string
 fn read_input_svd_to_string() -> String {
-    let svd_path = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
-    let svd_path = PathBuf::from(svd_path);
-    if !svd_path.exists() {
-        panic!("SVD was not found at {}", svd_path.display());
-    }
-    read_to_string(svd_path).unwrap()
+    let path_str = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
+    let path = PathBuf::from(path_str);
+    assert!(path.exists(), "SVD was not found at {}", path.display());
+    read_to_string(path).unwrap()
 }
 
 /// Extract path to output file from environment variable.
@@ -85,14 +83,22 @@ fn open_output_file() -> File {
         .expect("Failed to open output file.")
 }
 
+/// Explains why error happened.
 #[derive(Error, Debug)]
 enum Error {
+    /// Failed to find child node with given field.
     #[error("expected field in node: {0}")]
     ExpectedTag(String),
+
+    /// Failed to parse string to integer.
     #[error("could not parse int")]
     ParseInt(#[from] ParseIntError),
+
+    /// Failed to interpret string as hexadecimal or decimal integer.
     #[error("expected int: {0}")]
     InvalidInt(String),
+
+    /// Failed to interpret suffix as integer size multiplier.
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
 }
@@ -135,23 +141,31 @@ fn remove_illegal_characters(name: &str) -> String {
     name_new
 }
 
+/// Can convert a string slice in a given base to an integer.
 trait ArchUsize<U> {
+    /// Try to convert a string slice in a given base to an integer.
     fn from_str_radix(digits: &str, radix: u32) -> Result<U, Error>;
 }
 
-impl ArchUsize<u32> for u32 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, Error> {
-        u32::from_str_radix(digits, radix).map_err(Error::from)
+impl ArchUsize<Self> for u32 {
+    #[inline]
+    fn from_str_radix(digits: &str, radix: Self) -> Result<Self, Error> {
+        Self::from_str_radix(digits, radix).map_err(Error::from)
     }
 }
 
-impl ArchUsize<u64> for u64 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, Error> {
-        u64::from_str_radix(digits, radix).map_err(Error::from)
+impl ArchUsize<Self> for u64 {
+    #[inline]
+    fn from_str_radix(digits: &str, radix: u32) -> Result<Self, Error> {
+        Self::from_str_radix(digits, radix).map_err(Error::from)
     }
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, Error> {
+/// Solve binary size from prefix.
+///
+/// Prefix is assumed to be IEC prefix.
+#[inline]
+const fn binary_size_mult_from_char(c: char) -> Result<u64, Error> {
     match c {
         'k' | 'K' => Ok(1024),
         'm' | 'M' => Ok(1024 * 1024),
@@ -200,7 +214,6 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     }
 
     // Pick either hexadecimal or decimal format based on which fits
-
     let (number_part, size_mult_capture) = if HEX_NONNEG_INT_RE.is_match(text) {
         // Safety: we checked above that at least one match exists in text
         let captures = HEX_NONNEG_INT_RE.captures_iter(text).next().unwrap();
@@ -283,7 +296,7 @@ fn find_registers(
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let name_register = remove_illegal_characters(name);
                 if let Some(excluded_names) = &excludes {
-                    if excluded_names.contains(&name.to_string()) {
+                    if excluded_names.contains(&name.to_owned()) {
                         println!("cargo:warning=Register {name} is excluded.");
                         continue;
                     }
@@ -314,7 +327,7 @@ fn find_registers(
 
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
-                    let register = Register {
+                    let register_structure = Register {
                         name_peripheral: peripheral_name.to_owned(),
                         name_cluster: name_cluster.to_owned(),
                         name_register,
@@ -327,7 +340,7 @@ fn find_registers(
                         size,
                     };
                     entry.insert(name.to_owned());
-                    registers.push(register);
+                    registers.push(register_structure);
                 } else {
                     let address_holder = addresses
                         .get(&full_address)
@@ -353,6 +366,14 @@ fn write_output(registers: &[Register], file: &mut File) {
 }
 
 /// Parse SVD-file.
+///
+/// # Panics
+///
+/// - Missing environment variable `PATH_SVD`.
+/// - Parsing SVD-file fails.
+/// - Finding registers from parsed SVD-file fails.
+/// - Writing output file fails.
+#[inline]
 pub fn parse() {
     let included_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let excluded_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');

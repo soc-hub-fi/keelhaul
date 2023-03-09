@@ -16,15 +16,18 @@ use thiserror::Error;
 
 /// Collection of all test cases for this build.
 struct TestCases {
+    /// Collection of test cases.
     test_cases: Vec<String>,
+
+    /// Amount of test cases.
     test_case_count: usize,
 }
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
     // Safety: OUT_DIR always exists at build time
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let out_dir = PathBuf::from(out_dir);
+    let out_dir_str = env::var("OUT_DIR").unwrap();
+    let out_dir = PathBuf::from(out_dir_str);
     out_dir.join("register_selftest.rs")
 }
 
@@ -47,20 +50,31 @@ fn get_input_json() -> PathBuf {
     validate_path_existence(&input_path)
 }
 
+/// Explains why error happened.
 #[derive(Error, Debug)]
 enum RegisterParseError {
+    /// Value inside JSON was expected to be JSON object but it was not.
     #[error("expected JSON object: {0}")]
     ExpectedJsonObject(String),
+
+    /// Value inside JSON was expected to be JSON array but it was not.
     #[error("expected JSON array: {0}")]
     ExpectedJsonArray(String),
+
+    /// Failed to find field in JSON object.
     #[error("JSON object does not contain field for '{0}'")]
     FieldNotFound(String),
+
+    /// Failed to parse integer.
     #[error("could not parse int")]
     ParseInt(#[from] ParseIntError),
+
+    /// Failed to parse boolean.
     #[error("could not parse bool")]
     ParseBool(#[from] ParseBoolError),
 }
 
+/// Try to transform JSON object to register object.
 fn json_object_to_register(object: &json::object::Object) -> Result<Register, RegisterParseError> {
     let get_field =
         |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
@@ -251,8 +265,8 @@ fn write_output(lines: &Vec<String>, file: &mut File) {
 }
 
 /// Execute shell command.
-fn run_cmd(cmd: &str, params: &[impl AsRef<str>]) -> io::Result<()> {
-    let mut cmd = &mut Command::new(cmd);
+fn run_cmd(cmd_str: &str, params: &[impl AsRef<str>]) -> io::Result<()> {
+    let mut cmd = &mut Command::new(cmd_str);
     for param in params {
         cmd = cmd.arg(param.as_ref());
     }
