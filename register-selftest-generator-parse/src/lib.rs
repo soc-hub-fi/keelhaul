@@ -42,6 +42,40 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
     }
 }
 
+/// What items of type `T` are allowed or not
+struct ItemFilter<T: PartialEq> {
+    // If set, only the specified items are allowed. If not set, all items are
+    // allowed except the ones listed in blocklist.
+    white_list: Option<Vec<T>>,
+    // These items are always blocked even if present in `white_list`
+    block_list: Vec<T>,
+}
+
+impl<T: PartialEq> ItemFilter<T> {
+    fn new(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+        Self {
+            white_list,
+            block_list,
+        }
+    }
+
+    fn is_allowed(&self, value: &T) -> bool {
+        // Items in block list are always blocked
+        if self.block_list.contains(value) {
+            return false;
+        }
+
+        match &self.white_list {
+            Some(white_list) => white_list.contains(value),
+            None => true,
+        }
+    }
+
+    fn is_blocked(&self, value: &T) -> bool {
+        !self.is_allowed(value)
+    }
+}
+
 /// Read an environment variable into a Vec<String>
 ///
 /// # Parameters:
@@ -49,7 +83,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
 /// `var` - The name of the environment variable
 /// `sep` - The separator for Vec elements
 ///
-/// Returns None if the environment variable is not present
+/// Returns Some(`v`) if the variable is present, None otherwise
 fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
     if let Ok(included_str) = env::var(var) {
         let peripherals = included_str.split(sep).map(ToOwned::to_owned).collect_vec();
@@ -240,9 +274,8 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
-    excludes: &Option<Vec<String>>,
-    maybe_included_peripherals: &Option<Vec<String>>,
-    maybe_excluded_peripherals: &Option<Vec<String>>,
+    reg_filter: &ItemFilter<String>,
+    periph_filter: &ItemFilter<String>,
 ) -> Result<Vec<Register>, Error> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
@@ -257,20 +290,9 @@ fn find_registers(
         let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?;
         peripherals.push(peripheral_name.to_owned());
 
-        if let Some(included_peripherals) = maybe_included_peripherals {
-            let peripheral_name_lc = peripheral_name.to_lowercase();
-            if !included_peripherals.contains(&peripheral_name_lc) {
-                println!("cargo:warning=Peripheral {peripheral_name} was not included.");
-                continue;
-            }
-        }
-
-        if let Some(excluded_peripherals) = maybe_excluded_peripherals {
-            let peripheral_name_lc = peripheral_name.to_lowercase();
-            if excluded_peripherals.contains(&peripheral_name_lc) {
-                println!("cargo:warning=Peripheral {peripheral_name} was excluded.");
-                continue;
-            }
+        if periph_filter.is_blocked(&peripheral_name.to_lowercase()) {
+            println!("cargo:warning=Peripheral {peripheral_name} was ignored by INCLUDE_PERIPHERALS / EXCLUDE_PERIPHERALS");
+            continue;
         }
 
         for cluster in peripheral_node
@@ -284,11 +306,9 @@ fn find_registers(
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let name_register = remove_illegal_characters(name);
-                if let Some(excluded_names) = &excludes {
-                    if excluded_names.contains(&name.to_string()) {
-                        println!("cargo:warning=Register {name} is excluded.");
-                        continue;
-                    }
+                if reg_filter.is_blocked(&name.to_string()) {
+                    println!("cargo:warning=Register {name} is excluded.");
+                    continue;
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
                 let value_reset = parse_nonneg_int_u64(value_reset_str)?;
@@ -356,19 +376,15 @@ fn write_output(registers: &[Register], file: &mut File) {
 
 /// Parse SVD-file.
 pub fn parse() {
-    let included_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
-    let excluded_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let mut file_output = open_output_file();
-    let excludes = read_excludes_from_env();
+    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
+    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
+    let periph_filter = ItemFilter::new(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
+    let reg_filter = ItemFilter::new(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(
-        &parsed,
-        &excludes,
-        &included_peripherals,
-        &excluded_peripherals,
-    )
-    .unwrap();
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter).unwrap();
     println!("cargo:warning=Found {} registers.", registers.len());
+
+    let mut file_output = open_output_file();
     write_output(&registers, &mut file_output);
 }
