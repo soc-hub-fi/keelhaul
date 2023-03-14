@@ -401,14 +401,14 @@ fn find_registers(
                     let address_holder = addresses
                         .get(&full_address)
                         .expect("Failed to find register name by key.");
-                    println!("cargo:warning=Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
+                    warn!("Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 }
             }
         }
     }
-    println!("cargo:warning=Found {} peripherals:", peripherals.len());
+    info!("Found {} peripherals:", peripherals.len());
     for peripheral in peripherals {
-        println!("cargo:warning=    {peripheral}");
+        info!("    {peripheral}");
     }
     Ok(registers)
 }
@@ -430,7 +430,7 @@ pub fn parse() {
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, &reg_filter, &periph_filter).unwrap();
-    println!("cargo:warning=Found {} registers.", registers.len());
+    info!("Found {} registers.", registers.len());
 
     let mut file_output = open_output_file();
     write_output(&registers, &mut file_output);
