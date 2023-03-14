@@ -132,6 +132,8 @@ enum Error {
     InvalidInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
+    #[error("invalid access type: {0}")]
+    InvalidAccessType(String),
 }
 
 /// Find a child node with given tag name.
@@ -272,6 +274,58 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     })
 }
 
+/// Software access rights e.g., read-only or read-write, as defined by
+/// CMSIS-SVD `accessType`.
+enum Access {
+    /// read-only
+    ReadOnly,
+    /// write-only
+    WriteOnly,
+    /// read-write
+    ReadWrite,
+    /// writeOnce
+    WriteOnce,
+    /// read-writeOnce
+    ReadWriteOnce,
+}
+
+impl Access {
+    fn from_svd_access_type(s: &str) -> Result<Self, Error> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            _ => Err(Error::InvalidAccessType(s.to_owned())),
+        }
+    }
+
+    fn is_read(&self) -> bool {
+        match self {
+            Access::ReadOnly | Access::ReadWrite => true,
+            Access::WriteOnly => false,
+            Access::WriteOnce => {
+                warn!("a field uses write-once, assuming not readable");
+                false
+            }
+            Access::ReadWriteOnce => {
+                warn!("a field uses read-write-once, assuming readable");
+                true
+            }
+        }
+    }
+
+    fn is_write(&self) -> bool {
+        match self {
+            Access::ReadOnly => false,
+            Access::WriteOnly | Access::ReadWrite | Access::WriteOnce | Access::ReadWriteOnce => {
+                true
+            }
+        }
+    }
+}
+
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
@@ -288,7 +342,7 @@ fn find_registers(
     for peripheral_node in peripheral_nodes {
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
         let base_address = parse_nonneg_int_u64(base_address_str)?;
-        let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?;
+        let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?.to_owned();
         peripherals.push(peripheral_name.to_owned());
 
         if periph_filter.is_blocked(&peripheral_name.to_lowercase()) {
@@ -303,7 +357,7 @@ fn find_registers(
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
             let address_offset_cluster = parse_nonneg_int_u64(address_offset_cluster_str)?;
-            let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?;
+            let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let name_register = remove_illegal_characters(name);
@@ -316,16 +370,10 @@ fn find_registers(
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
-                let access = maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
+                let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
                     warn!("Register {name} does not have access value. Access is assumed to be 'read-write'.");
                     "read-write"
-                });
-                let (can_read, can_write) = match access {
-                    "read-write" | "read-writeOnce" => (true, true),
-                    "read-only" => (true, false),
-                    "write-only" => (false, true),
-                    _ => panic!("Invalid register access value: {access}"),
-                };
+                }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse().unwrap_or_else(|_error| {
                     panic!("Failed to parse {size_str} as register size.")
@@ -334,15 +382,15 @@ fn find_registers(
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
-                        name_peripheral: peripheral_name.to_owned(),
-                        name_cluster: name_cluster.to_owned(),
+                        name_peripheral: peripheral_name.clone(),
+                        name_cluster: name_cluster.clone(),
                         name_register,
                         address_base: base_address,
                         address_offset_cluster,
                         address_offset_register,
                         value_reset,
-                        can_read,
-                        can_write,
+                        can_read: access.is_read(),
+                        can_write: access.is_write(),
                         size,
                     };
                     entry.insert(name.to_owned());
