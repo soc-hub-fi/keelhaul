@@ -70,12 +70,14 @@ fn read_input_svd_to_string() -> String {
     read_to_string(svd_path).unwrap()
 }
 
+pub const PARSED_FILENAME: &str = "parsed.json";
+
 /// Extract path to output file from environment variable.
 /// Get handle to output file.
 fn open_output_file() -> File {
     // Safety: OUT_DIR always exists
     let out_dir = env::var("OUT_DIR").unwrap();
-    let path_str = format!("{out_dir}/parsed.json");
+    let path_str = format!("{out_dir}/{PARSED_FILENAME}");
     let path = get_or_create(&path_str);
     fs::OpenOptions::new()
         .create(true)
