@@ -1,6 +1,7 @@
 //! SVD-file parser for register test generator.
 
 use itertools::Itertools;
+use log::{info, warn};
 use regex::Regex;
 use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
 use roxmltree::{Document, Node};
@@ -42,6 +43,40 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
     }
 }
 
+/// What items of type `T` are allowed or not
+struct ItemFilter<T: PartialEq> {
+    // If set, only the specified items are allowed. If not set, all items are
+    // allowed except the ones listed in blocklist.
+    white_list: Option<Vec<T>>,
+    // These items are always blocked even if present in `white_list`
+    block_list: Vec<T>,
+}
+
+impl<T: PartialEq> ItemFilter<T> {
+    fn new(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+        Self {
+            white_list,
+            block_list,
+        }
+    }
+
+    fn is_allowed(&self, value: &T) -> bool {
+        // Items in block list are always blocked
+        if self.block_list.contains(value) {
+            return false;
+        }
+
+        match &self.white_list {
+            Some(white_list) => white_list.contains(value),
+            None => true,
+        }
+    }
+
+    fn is_blocked(&self, value: &T) -> bool {
+        !self.is_allowed(value)
+    }
+}
+
 /// Read an environment variable into a Vec<String>
 ///
 /// # Parameters:
@@ -49,7 +84,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
 /// `var` - The name of the environment variable
 /// `sep` - The separator for Vec elements
 ///
-/// Returns None if the environment variable is not present
+/// Returns Some(`v`) if the variable is present, None otherwise
 fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
     if let Ok(included_str) = env::var(var) {
         let peripherals = included_str.split(sep).map(ToOwned::to_owned).collect_vec();
@@ -70,12 +105,14 @@ fn read_input_svd_to_string() -> String {
     read_to_string(svd_path).unwrap()
 }
 
+pub const PARSED_FILENAME: &str = "parsed.json";
+
 /// Extract path to output file from environment variable.
 /// Get handle to output file.
 fn open_output_file() -> File {
     // Safety: OUT_DIR always exists
     let out_dir = env::var("OUT_DIR").unwrap();
-    let path_str = format!("{out_dir}/parsed.json");
+    let path_str = format!("{out_dir}/{PARSED_FILENAME}");
     let path = get_or_create(&path_str);
     fs::OpenOptions::new()
         .create(true)
@@ -95,6 +132,8 @@ enum Error {
     InvalidInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
+    #[error("invalid access type: {0}")]
+    InvalidAccessType(String),
 }
 
 /// Find a child node with given tag name.
@@ -110,6 +149,8 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
 }
 
 /// Remove illegal characters from register name.
+///
+/// These characters will be put into test case names, and thus need to be removed.
 fn remove_illegal_characters(name: &str) -> String {
     let mut name_new = name.to_owned();
     let illegals = ['(', ')', '[', ']', '%'];
@@ -117,7 +158,7 @@ fn remove_illegal_characters(name: &str) -> String {
     for illegal in illegals {
         if name_new.contains(illegal) {
             found_illegals.push(illegal);
-            name_new = name_new.replace(illegal, "");
+            name_new = name_new.replace(illegal, "_");
         }
     }
     if !found_illegals.is_empty() {
@@ -125,8 +166,8 @@ fn remove_illegal_characters(name: &str) -> String {
             .iter()
             .map(|c| format!("\"{}\"", c.to_owned()))
             .join(", ");
-        println!(
-            "cargo:warning=Register {}'s name contains {} illegal characters: {}. These characters are removed.",
+        warn!(
+            "Register {}'s name contains {} illegal characters: {}. These characters are replaced with underscores ('_').",
             name,
             found_illegals.len(),
             symbols
@@ -235,12 +276,63 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     })
 }
 
+/// Software access rights e.g., read-only or read-write, as defined by
+/// CMSIS-SVD `accessType`.
+enum Access {
+    /// read-only
+    ReadOnly,
+    /// write-only
+    WriteOnly,
+    /// read-write
+    ReadWrite,
+    /// writeOnce
+    WriteOnce,
+    /// read-writeOnce
+    ReadWriteOnce,
+}
+
+impl Access {
+    fn from_svd_access_type(s: &str) -> Result<Self, Error> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            _ => Err(Error::InvalidAccessType(s.to_owned())),
+        }
+    }
+
+    fn is_read(&self) -> bool {
+        match self {
+            Access::ReadOnly | Access::ReadWrite => true,
+            Access::WriteOnly => false,
+            Access::WriteOnce => {
+                warn!("a field uses write-once, assuming not readable");
+                false
+            }
+            Access::ReadWriteOnce => {
+                warn!("a field uses read-write-once, assuming readable");
+                true
+            }
+        }
+    }
+
+    fn is_write(&self) -> bool {
+        match self {
+            Access::ReadOnly => false,
+            Access::WriteOnly | Access::ReadWrite | Access::WriteOnce | Access::ReadWriteOnce => {
+                true
+            }
+        }
+    }
+}
+
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
-    excludes: &Option<Vec<String>>,
-    maybe_included_peripherals: &Option<Vec<String>>,
-    maybe_excluded_peripherals: &Option<Vec<String>>,
+    reg_filter: &ItemFilter<String>,
+    periph_filter: &ItemFilter<String>,
 ) -> Result<Vec<Register>, Error> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
@@ -252,23 +344,12 @@ fn find_registers(
     for peripheral_node in peripheral_nodes {
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
         let base_address = parse_nonneg_int_u64(base_address_str)?;
-        let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?;
+        let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?.to_owned();
         peripherals.push(peripheral_name.to_owned());
 
-        if let Some(included_peripherals) = maybe_included_peripherals {
-            let peripheral_name_lc = peripheral_name.to_lowercase();
-            if !included_peripherals.contains(&peripheral_name_lc) {
-                println!("cargo:warning=Peripheral {peripheral_name} was not included.");
-                continue;
-            }
-        }
-
-        if let Some(excluded_peripherals) = maybe_excluded_peripherals {
-            let peripheral_name_lc = peripheral_name.to_lowercase();
-            if excluded_peripherals.contains(&peripheral_name_lc) {
-                println!("cargo:warning=Peripheral {peripheral_name} was excluded.");
-                continue;
-            }
+        if periph_filter.is_blocked(&peripheral_name.to_lowercase()) {
+            info!("Peripheral {peripheral_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
+            continue;
         }
 
         for cluster in peripheral_node
@@ -278,52 +359,38 @@ fn find_registers(
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
             let address_offset_cluster = parse_nonneg_int_u64(address_offset_cluster_str)?;
-            let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?;
+            let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let name_register = remove_illegal_characters(name);
-                if let Some(excluded_names) = &excludes {
-                    if excluded_names.contains(&name.to_string()) {
-                        println!("cargo:warning=Register {name} is excluded.");
-                        continue;
-                    }
+                if reg_filter.is_blocked(&name.to_string()) {
+                    info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
+                    continue;
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
                 let value_reset = parse_nonneg_int_u64(value_reset_str)?;
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
-                let access = if let Some(access) =
-                    maybe_find_text_in_node_by_tag_name(&register, "access")
-                {
-                    access
-                } else {
-                    println!("cargo:warning=Register {name} does not have access value. Access is assumed to be 'read-write'.");
+                let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
+                    warn!("Register {name} does not have access type. Access type is assumed to be 'read-write'.");
                     "read-write"
-                };
-                let (can_read, can_write) = match access {
-                    "read-write" | "read-writeOnce" => (true, true),
-                    "read-only" => (true, false),
-                    "write-only" => (false, true),
-                    _ => panic!("Invalid register access value: {access}"),
-                };
+                }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
-                let size: u64 = size_str.parse().unwrap_or_else(|_error| {
-                    panic!("Failed to parse {size_str} as register size.")
-                });
+                let size: u64 = size_str.parse()?;
 
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
-                        name_peripheral: peripheral_name.to_owned(),
-                        name_cluster: name_cluster.to_owned(),
+                        name_peripheral: peripheral_name.clone(),
+                        name_cluster: name_cluster.clone(),
                         name_register,
                         address_base: base_address,
                         address_offset_cluster,
                         address_offset_register,
                         value_reset,
-                        can_read,
-                        can_write,
+                        can_read: access.is_read(),
+                        can_write: access.is_write(),
                         size,
                     };
                     entry.insert(name.to_owned());
@@ -332,14 +399,14 @@ fn find_registers(
                     let address_holder = addresses
                         .get(&full_address)
                         .expect("Failed to find register name by key.");
-                    println!("cargo:warning=Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
+                    warn!("Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 }
             }
         }
     }
-    println!("cargo:warning=Found {} peripherals:", peripherals.len());
+    info!("Found {} peripherals:", peripherals.len());
     for peripheral in peripherals {
-        println!("cargo:warning=    {peripheral}");
+        info!("    {peripheral}");
     }
     Ok(registers)
 }
@@ -354,19 +421,15 @@ fn write_output(registers: &[Register], file: &mut File) {
 
 /// Parse SVD-file.
 pub fn parse() {
-    let included_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
-    let excluded_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let mut file_output = open_output_file();
-    let excludes = read_excludes_from_env();
+    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
+    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
+    let periph_filter = ItemFilter::new(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
+    let reg_filter = ItemFilter::new(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(
-        &parsed,
-        &excludes,
-        &included_peripherals,
-        &excluded_peripherals,
-    )
-    .unwrap();
-    println!("cargo:warning=Found {} registers.", registers.len());
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter).unwrap();
+    info!("Found {} registers.", registers.len());
+
+    let mut file_output = open_output_file();
     write_output(&registers, &mut file_output);
 }

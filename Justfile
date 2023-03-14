@@ -5,6 +5,9 @@ default:
 build:
     cargo build --bin register-selftest-generator-runner
 
+check:
+    cargo check --bin register-selftest-generator-runner
+
 run:
     cargo run --bin register-selftest-generator-runner
 
