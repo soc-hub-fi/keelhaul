@@ -1,6 +1,7 @@
 //! SVD-file parser for register test generator.
 
 use itertools::Itertools;
+use log::{info, warn};
 use regex::Regex;
 use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
 use roxmltree::{Document, Node};
@@ -291,7 +292,7 @@ fn find_registers(
         peripherals.push(peripheral_name.to_owned());
 
         if periph_filter.is_blocked(&peripheral_name.to_lowercase()) {
-            println!("cargo:warning=Peripheral {peripheral_name} was ignored by INCLUDE_PERIPHERALS / EXCLUDE_PERIPHERALS");
+            info!("Peripheral {peripheral_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
             continue;
         }
 
@@ -307,7 +308,7 @@ fn find_registers(
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let name_register = remove_illegal_characters(name);
                 if reg_filter.is_blocked(&name.to_string()) {
-                    println!("cargo:warning=Register {name} is excluded.");
+                    info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
@@ -315,14 +316,10 @@ fn find_registers(
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
-                let access = if let Some(access) =
-                    maybe_find_text_in_node_by_tag_name(&register, "access")
-                {
-                    access
-                } else {
-                    println!("cargo:warning=Register {name} does not have access value. Access is assumed to be 'read-write'.");
+                let access = maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
+                    warn!("Register {name} does not have access value. Access is assumed to be 'read-write'.");
                     "read-write"
-                };
+                });
                 let (can_read, can_write) = match access {
                     "read-write" | "read-writeOnce" => (true, true),
                     "read-only" => (true, false),
