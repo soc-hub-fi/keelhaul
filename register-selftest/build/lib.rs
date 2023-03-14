@@ -1,8 +1,10 @@
 //! Memory-mapped I/O peripheral register test case generator.
 
+mod logger;
+
 use fs_err::{self as fs, read_to_string, File};
 use json::JsonValue;
-use log::warn;
+use log::{error, warn, LevelFilter};
 use register_selftest_generator_common::{validate_path_existence, Register};
 use std::{
     collections::HashMap,
@@ -301,6 +303,9 @@ pub fn main() {
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Install a logger to print useful messages into `cargo:warning={}`
+    logger::init(LevelFilter::Info);
 
     register_selftest_generator_parse::parse();
     let mut file_output = get_output_file();
