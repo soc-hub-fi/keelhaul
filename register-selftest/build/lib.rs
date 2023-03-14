@@ -186,7 +186,13 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             16 => "u16",
             32 => "u32",
             64 => "u64",
-            other => panic!("Invalid register size: {other}"),
+            other => {
+                warn!(
+                    "Invalid register size: {other}, skipping {}",
+                    register.name_register
+                );
+                continue;
+            }
         };
         let function_name = format!(
             "test_{}_{:#x}",

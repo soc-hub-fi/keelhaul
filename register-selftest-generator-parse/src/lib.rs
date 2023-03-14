@@ -127,8 +127,8 @@ fn remove_illegal_characters(name: &str) -> String {
             .iter()
             .map(|c| format!("\"{}\"", c.to_owned()))
             .join(", ");
-        println!(
-            "cargo:warning=Register {}'s name contains {} illegal characters: {}. These characters are removed.",
+        log::error!(
+            "Register {}'s name contains {} illegal characters: {}. These characters are removed.",
             name,
             found_illegals.len(),
             symbols
