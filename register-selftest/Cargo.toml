@@ -12,6 +12,7 @@ register-selftest-generator-parse = { path = "../register-selftest-generator-par
 json = { workspace = true }
 fs-err = "2.9.0"
 thiserror = "1.0.38"
+log = "0.4.17"
 
 [lib]
 name = "register_selftest"

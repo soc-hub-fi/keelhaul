@@ -2,6 +2,7 @@
 
 use fs_err::{self as fs, read_to_string, File};
 use json::JsonValue;
+use log::warn;
 use register_selftest_generator_common::{validate_path_existence, Register};
 use std::{
     collections::HashMap,
