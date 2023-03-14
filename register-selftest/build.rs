@@ -119,27 +119,53 @@ fn get_registers() -> Result<Vec<Register>, RegisterParseError> {
     json_value_into_registers(parsed_json)
 }
 
-/// Place test cases to modules.
+/// # Arguments
+///
+/// `name_uc`   - Uppercase name for the array
+/// `elem_type` - Type for the array elements
+/// `len`       - Length for the array
+/// `value`     - Value for the array ("... = {value};")
+fn gen_static_array_str(name_uc: &str, elem_type: &str, len: usize, value: &str) -> String {
+    format!("pub static {name_uc}: [{elem_type}; {len}] = {value};")
+}
+
+/// # Arguments
+///
+/// `name_lc`   - Lowercase name for the module
+fn gen_mod_str(name_lc: &str, contents: &str) -> String {
+    format!(
+        r#"
+pub mod {name_lc} {{
+    use super::*;
+
+    {}
+}}
+"#,
+        contents
+    )
+}
+
+/// Place test cases in modules.
 fn create_modules(
     test_cases_per_peripheral: &HashMap<String, Vec<String>>,
     test_case_structs_per_peripheral: &HashMap<String, Vec<String>>,
 ) -> Vec<String> {
     let mut modules = Vec::new();
     for (name_peripheral, test_cases) in test_cases_per_peripheral {
-        let test_cases_combined = test_cases.join("");
-        let module_test_case_count = test_cases.len();
+        let test_cases_catenated = test_cases.join("");
         let module_test_cases_combined = test_case_structs_per_peripheral
             .get(name_peripheral)
             .unwrap()
             .join(",");
-        let module_test_case_array = format!(
-            "pub static TEST_CASES: [TestCase;{module_test_case_count}] = [{module_test_cases_combined}];"
+        let module_test_case_array = gen_static_array_str(
+            "TEST_CASES",
+            "TestCase",
+            test_cases.len(),
+            &format!("[{}]", module_test_cases_combined),
         );
-        let module = format!(
-            "pub mod {} {{ use super::*; {} {} }}",
-            name_peripheral.to_lowercase(),
-            test_cases_combined,
-            module_test_case_array,
+        let module = gen_mod_str(
+            &name_peripheral.to_lowercase(),
+            &format!("{} {}", module_test_case_array, test_cases_catenated),
         );
         modules.push(module);
     }
