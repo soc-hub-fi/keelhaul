@@ -377,9 +377,7 @@ fn find_registers(
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
-                let size: u64 = size_str.parse().unwrap_or_else(|_error| {
-                    panic!("Failed to parse {size_str} as register size.")
-                });
+                let size: u64 = size_str.parse()?;
 
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
