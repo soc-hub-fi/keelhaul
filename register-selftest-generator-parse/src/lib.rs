@@ -149,6 +149,8 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
 }
 
 /// Remove illegal characters from register name.
+///
+/// These characters will be put into test case names, and thus need to be removed.
 fn remove_illegal_characters(name: &str) -> String {
     let mut name_new = name.to_owned();
     let illegals = ['(', ')', '[', ']', '%'];
@@ -156,7 +158,7 @@ fn remove_illegal_characters(name: &str) -> String {
     for illegal in illegals {
         if name_new.contains(illegal) {
             found_illegals.push(illegal);
-            name_new = name_new.replace(illegal, "");
+            name_new = name_new.replace(illegal, "_");
         }
     }
     if !found_illegals.is_empty() {
@@ -164,8 +166,8 @@ fn remove_illegal_characters(name: &str) -> String {
             .iter()
             .map(|c| format!("\"{}\"", c.to_owned()))
             .join(", ");
-        log::error!(
-            "Register {}'s name contains {} illegal characters: {}. These characters are removed.",
+        warn!(
+            "Register {}'s name contains {} illegal characters: {}. These characters are replaced with underscores ('_').",
             name,
             found_illegals.len(),
             symbols
