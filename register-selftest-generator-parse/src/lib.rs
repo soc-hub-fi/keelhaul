@@ -373,7 +373,7 @@ fn find_registers(
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("Register {name} does not have access type. Access type is assumed to be 'read-write'.");
+                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", name);
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
