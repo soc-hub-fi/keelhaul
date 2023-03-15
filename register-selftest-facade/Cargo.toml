@@ -1,5 +1,5 @@
 [package]
-name = "register-selftest"
+name = "register-selftest-facade"
 version = "0.1.0"
 edition = "2021"
 build = "build/lib.rs"
