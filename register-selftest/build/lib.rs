@@ -3,19 +3,15 @@
 mod logger;
 
 use fs_err::{self as fs, read_to_string, File};
-use json::JsonValue;
-use log::{error, warn, LevelFilter};
-use register_selftest_generator_common::{validate_path_existence, Register};
+use log::{warn, LevelFilter};
+use register_selftest_generator_common::{validate_path_existence, JsonParseError, Registers};
 use std::{
     collections::HashMap,
     env,
     io::{self, Write},
-    num::ParseIntError,
     path::{Path, PathBuf},
     process::Command,
-    str::ParseBoolError,
 };
-use thiserror::Error;
 
 /// Collection of all test cases for this build.
 struct TestCases {
@@ -53,73 +49,12 @@ fn get_input_json() -> PathBuf {
     validate_path_existence(&input_path)
 }
 
-#[derive(Error, Debug)]
-enum RegisterParseError {
-    #[error("expected JSON object: {0}")]
-    ExpectedJsonObject(String),
-    #[error("expected JSON array: {0}")]
-    ExpectedJsonArray(String),
-    #[error("JSON object does not contain field for '{0}'")]
-    FieldNotFound(String),
-    #[error("could not parse int")]
-    ParseInt(#[from] ParseIntError),
-    #[error("could not parse bool")]
-    ParseBool(#[from] ParseBoolError),
-}
-
-fn json_object_to_register(object: &json::object::Object) -> Result<Register, RegisterParseError> {
-    let get_field =
-        |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
-            obj.get(field)
-                .ok_or(RegisterParseError::FieldNotFound(field.to_owned()))
-                .map(|x| x.to_string())
-        };
-    let name_peripheral = get_field(object, "name_peripheral")?;
-    let name_cluster = get_field(object, "name_cluster")?;
-    let name_register = get_field(object, "name_register")?;
-    let address_base = get_field(object, "address_base")?.parse()?;
-    let address_offset_cluster = get_field(object, "address_offset_cluster")?.parse()?;
-    let address_offset_register = get_field(object, "address_offset_register")?.parse()?;
-    let value_reset = get_field(object, "value_reset")?.parse()?;
-    let can_read = get_field(object, "can_read")?.parse()?;
-    let can_write = get_field(object, "can_write")?.parse()?;
-    let size = get_field(object, "size")?.parse()?;
-    Ok(Register {
-        name_peripheral,
-        name_cluster,
-        name_register,
-        address_base,
-        address_offset_cluster,
-        address_offset_register,
-        value_reset,
-        can_read,
-        can_write,
-        size,
-    })
-}
-
-/// Extract registers from JSON object.
-fn json_value_into_registers(content: JsonValue) -> Result<Vec<Register>, RegisterParseError> {
-    match content {
-        JsonValue::Array(array) => array
-            .iter()
-            .map(|value| match value {
-                JsonValue::Object(object) => json_object_to_register(object),
-                _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
-            })
-            .collect(),
-        _ => Err(RegisterParseError::ExpectedJsonArray(format!(
-            "{content:?}"
-        ))),
-    }
-}
-
 /// Get register objects.
-fn get_registers() -> Result<Vec<Register>, RegisterParseError> {
+fn get_registers() -> Result<Registers, JsonParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
-    json_value_into_registers(parsed_json)
+    Registers::try_from(parsed_json)
 }
 
 /// # Arguments
@@ -176,11 +111,11 @@ fn create_modules(
 }
 
 /// Generate test cases for each register.
-fn create_test_cases(registers: &Vec<Register>) -> TestCases {
+fn create_test_cases(registers: &Registers) -> TestCases {
     let mut test_cases = Vec::new();
     let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
-    for register in registers {
+    for register in registers.iter() {
         let variable_type = match register.size {
             8 => "u8",
             16 => "u16",
@@ -189,29 +124,25 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             other => {
                 warn!(
                     "Invalid register size: {other}, skipping {}",
-                    register.name_register
+                    register.reg_name
                 );
                 continue;
             }
         };
-        let function_name = format!(
-            "test_{}_{:#x}",
-            register.name_register,
-            register.full_address()
-        );
+        let function_name = format!("test_{}_{:#x}", register.reg_name, register.full_address());
         let mut statements = vec![format!(
             "#[allow(unused)] let address: *mut {} = {:#x} as *mut {};",
             variable_type,
             register.full_address(),
             variable_type,
         )];
-        if register.can_read {
+        if register.is_read {
             statements.push("let _ = unsafe { read_volatile(address) };".to_owned());
         }
-        if register.can_write {
+        if register.is_write {
             statements.push(format!(
                 "#[allow(unused)] let reset_value: {} = {};",
-                variable_type, register.value_reset
+                variable_type, register.reset_val
             ));
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
@@ -223,7 +154,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
 
         let function = format!(
             "{}::{}",
-            register.name_peripheral.to_lowercase(),
+            register.peripheral_name.to_lowercase(),
             function_name
         );
         let test_case = format!(
@@ -234,33 +165,33 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         );
         test_cases.push(test_case.clone());
 
-        if test_cases_per_peripheral.contains_key(&register.name_peripheral) {
+        if test_cases_per_peripheral.contains_key(&register.peripheral_name) {
             test_cases_per_peripheral
-                .get_mut(&register.name_peripheral)
+                .get_mut(&register.peripheral_name)
                 .unwrap_or_else(|| {
                     panic!(
                         "Failed to find peripheral {}'s test case container.",
-                        &register.name_peripheral
+                        &register.peripheral_name
                     )
                 })
                 .push(line);
         } else {
-            test_cases_per_peripheral.insert(register.name_peripheral.clone(), vec![line]);
+            test_cases_per_peripheral.insert(register.peripheral_name.clone(), vec![line]);
         }
 
-        if test_case_structs_per_peripheral.contains_key(&register.name_peripheral) {
+        if test_case_structs_per_peripheral.contains_key(&register.peripheral_name) {
             test_case_structs_per_peripheral
-                .get_mut(&register.name_peripheral)
+                .get_mut(&register.peripheral_name)
                 .unwrap_or_else(|| {
                     panic!(
                         "Failed to find peripheral {}'s test case container.",
-                        &register.name_peripheral
+                        &register.peripheral_name
                     )
                 })
                 .push(test_case.clone());
         } else {
             test_case_structs_per_peripheral
-                .insert(register.name_peripheral.clone(), vec![test_case]);
+                .insert(register.peripheral_name.clone(), vec![test_case]);
         }
     }
 

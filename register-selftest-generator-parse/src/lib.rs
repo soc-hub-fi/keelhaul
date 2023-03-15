@@ -3,18 +3,18 @@
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
-use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
+use register_selftest_generator_common::{
+    get_or_create, validate_path_existence, Access, ParseError, Register, Registers,
+};
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap},
     env,
     fs::{self, read_to_string, File},
     io::Write,
-    num::ParseIntError,
     panic,
     path::PathBuf,
 };
-use thiserror::Error;
 
 /// Try to extract path to excludes-file from environment variable.
 fn read_excludes_path_from_env() -> Option<PathBuf> {
@@ -122,23 +122,9 @@ fn open_output_file() -> File {
         .expect("Failed to open output file.")
 }
 
-#[derive(Error, Debug)]
-enum Error {
-    #[error("expected field in node: {0}")]
-    ExpectedTag(String),
-    #[error("could not parse int")]
-    ParseInt(#[from] ParseIntError),
-    #[error("expected int: {0}")]
-    InvalidInt(String),
-    #[error("invalid size multiplier suffix: {0}")]
-    InvalidSizeMultiplierSuffix(char),
-    #[error("invalid access type: {0}")]
-    InvalidAccessType(String),
-}
-
 /// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, Error> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(Error::ExpectedTag(tag.to_owned()))
+fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, ParseError> {
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(ParseError::ExpectedTag(tag.to_owned()))
 }
 
 /// Try to find a child node with given name.
@@ -177,28 +163,28 @@ fn remove_illegal_characters(name: &str) -> String {
 }
 
 trait ArchUsize<U> {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<U, Error>;
+    fn from_str_radix(digits: &str, radix: u32) -> Result<U, ParseError>;
 }
 
 impl ArchUsize<u32> for u32 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, Error> {
-        u32::from_str_radix(digits, radix).map_err(Error::from)
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, ParseError> {
+        u32::from_str_radix(digits, radix).map_err(ParseError::from)
     }
 }
 
 impl ArchUsize<u64> for u64 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, Error> {
-        u64::from_str_radix(digits, radix).map_err(Error::from)
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, ParseError> {
+        u64::from_str_radix(digits, radix).map_err(ParseError::from)
     }
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, Error> {
+fn binary_size_mult_from_char(c: char) -> Result<u64, ParseError> {
     match c {
         'k' | 'K' => Ok(1024),
         'm' | 'M' => Ok(1024 * 1024),
         'g' | 'G' => Ok(1024 * 1024 * 1024),
         't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
-        _ => Err(Error::InvalidSizeMultiplierSuffix(c)),
+        _ => Err(ParseError::InvalidSizeMultiplierSuffix(c)),
     }
 }
 
@@ -215,7 +201,7 @@ fn parse_nonneg_int_u64_works() {
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
+fn parse_nonneg_int_u64(text: &str) -> Result<u64, ParseError> {
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
     lazy_static! {
@@ -261,7 +247,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
         let size_mult = captures.get(2);
         (number, size_mult)
     } else {
-        return Err(Error::InvalidInt(text.to_owned()));
+        return Err(ParseError::InvalidInt(text.to_owned()));
     };
 
     let size_mult: Option<u64> = size_mult_capture
@@ -276,64 +262,12 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, Error> {
     })
 }
 
-/// Software access rights e.g., read-only or read-write, as defined by
-/// CMSIS-SVD `accessType`.
-enum Access {
-    /// read-only
-    ReadOnly,
-    /// write-only
-    WriteOnly,
-    /// read-write
-    ReadWrite,
-    /// writeOnce
-    WriteOnce,
-    /// read-writeOnce
-    ReadWriteOnce,
-}
-
-impl Access {
-    fn from_svd_access_type(s: &str) -> Result<Self, Error> {
-        match s {
-            "read-only" => Ok(Access::ReadOnly),
-            "write-only" => Ok(Access::WriteOnly),
-            "read-write" => Ok(Access::ReadWrite),
-            "writeOnce" => Ok(Access::WriteOnce),
-            "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            _ => Err(Error::InvalidAccessType(s.to_owned())),
-        }
-    }
-
-    fn is_read(&self) -> bool {
-        match self {
-            Access::ReadOnly | Access::ReadWrite => true,
-            Access::WriteOnly => false,
-            Access::WriteOnce => {
-                warn!("a field uses write-once, assuming not readable");
-                false
-            }
-            Access::ReadWriteOnce => {
-                warn!("a field uses read-write-once, assuming readable");
-                true
-            }
-        }
-    }
-
-    fn is_write(&self) -> bool {
-        match self {
-            Access::ReadOnly => false,
-            Access::WriteOnly | Access::ReadWrite | Access::WriteOnce | Access::ReadWriteOnce => {
-                true
-            }
-        }
-    }
-}
-
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
-) -> Result<Vec<Register>, Error> {
+) -> Result<Registers, ParseError> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
@@ -343,7 +277,7 @@ fn find_registers(
 
     for peripheral_node in peripheral_nodes {
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
-        let base_address = parse_nonneg_int_u64(base_address_str)?;
+        let base_addr = parse_nonneg_int_u64(base_address_str)?;
         let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?.to_owned();
         peripherals.push(peripheral_name.to_owned());
 
@@ -358,39 +292,39 @@ fn find_registers(
         {
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
-            let address_offset_cluster = parse_nonneg_int_u64(address_offset_cluster_str)?;
+            let cluster_addr_offset = parse_nonneg_int_u64(address_offset_cluster_str)?;
             let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
-                let name_register = remove_illegal_characters(name);
+                let reg_name = remove_illegal_characters(name);
                 if reg_filter.is_blocked(&name.to_string()) {
                     info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
-                let value_reset = parse_nonneg_int_u64(value_reset_str)?;
+                let reset_val = parse_nonneg_int_u64(value_reset_str)?;
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
-                let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
+                let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("Register {name} does not have access type. Access type is assumed to be 'read-write'.");
+                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", name);
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse()?;
 
-                let full_address = base_address + address_offset_cluster + address_offset_register;
+                let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
-                        name_peripheral: peripheral_name.clone(),
-                        name_cluster: name_cluster.clone(),
-                        name_register,
-                        address_base: base_address,
-                        address_offset_cluster,
-                        address_offset_register,
-                        value_reset,
-                        can_read: access.is_read(),
-                        can_write: access.is_write(),
+                        peripheral_name: peripheral_name.clone(),
+                        cluster_name: name_cluster.clone(),
+                        reg_name,
+                        base_addr,
+                        cluster_addr_offset,
+                        reg_addr_offset,
+                        reset_val,
+                        is_read: access.is_read(),
+                        is_write: access.is_write(),
                         size,
                     };
                     entry.insert(name.to_owned());
@@ -408,7 +342,7 @@ fn find_registers(
     for peripheral in peripherals {
         info!("    {peripheral}");
     }
-    Ok(registers)
+    Ok(registers.into())
 }
 
 /// Write found registers to output file.

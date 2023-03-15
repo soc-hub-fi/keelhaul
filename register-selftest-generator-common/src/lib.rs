@@ -2,8 +2,12 @@
 
 // TODO: leave error handling to customer crate
 
-use std::{collections::HashMap, fs::File, path::PathBuf};
+mod model;
 
+pub use model::*;
+
+use std::{fs::File, num::ParseIntError, path::PathBuf, str::ParseBoolError};
+use thiserror::Error;
 /// Check that path to a file exists.
 ///
 /// # Panics
@@ -50,53 +54,30 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
     }
 }
 
-/// Represents a single memory-mapped I/O register.
-pub struct Register {
-    pub name_peripheral: String,
-    pub name_cluster: String,
-    pub name_register: String,
-    pub address_base: u64,
-    pub address_offset_cluster: u64,
-    pub address_offset_register: u64,
-    pub value_reset: u64,
-    pub can_read: bool,
-    pub can_write: bool,
-    pub size: u64,
+#[derive(Error, Debug)]
+pub enum JsonParseError {
+    #[error("expected JSON object: {0}")]
+    ExpectedObject(String),
+    #[error("expected JSON array: {0}")]
+    ExpectedArray(String),
+    #[error("JSON object does not contain field for '{0}'")]
+    FieldNotFound(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("could not parse bool")]
+    ParseBool(#[from] ParseBoolError),
 }
 
-impl Register {
-    /// Transform register structure to hashmap.
-    pub fn to_hashmap(&self) -> HashMap<&str, String> {
-        HashMap::from([
-            ("name_peripheral", self.name_peripheral.clone()),
-            ("name_cluster", self.name_cluster.clone()),
-            ("name_register", self.name_register.clone()),
-            ("address_base", self.address_base.to_string()),
-            (
-                "address_offset_cluster",
-                self.address_offset_cluster.to_string(),
-            ),
-            (
-                "address_offset_register",
-                self.address_offset_register.to_string(),
-            ),
-            ("value_reset", self.value_reset.to_string()),
-            ("can_read", self.can_read.to_string()),
-            ("can_write", self.can_write.to_string()),
-            ("size", self.size.to_string()),
-        ])
-    }
-
-    /// Get register's absolute memory address.
-    pub const fn full_address(&self) -> u64 {
-        self.address_base + self.address_offset_cluster + self.address_offset_register
-    }
-
-    /// Get register's unique identifier.
-    pub fn uid(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.name_peripheral, self.name_cluster, self.name_register
-        )
-    }
+#[derive(Error, Debug)]
+pub enum ParseError {
+    #[error("expected field in node: {0}")]
+    ExpectedTag(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("expected int: {0}")]
+    InvalidInt(String),
+    #[error("invalid size multiplier suffix: {0}")]
+    InvalidSizeMultiplierSuffix(char),
+    #[error("invalid access type: {0}")]
+    InvalidAccessType(String),
 }
