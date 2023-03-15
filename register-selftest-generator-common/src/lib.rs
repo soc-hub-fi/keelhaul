@@ -151,10 +151,18 @@ impl Register {
 /// A list of registers parsed from SVD or IP-XACT (newtype).
 pub struct Registers(Vec<Register>);
 
-impl Registers {
-    /// Extract registers from JSON object.
-    pub fn json_value_into_registers(content: JsonValue) -> Result<Registers, RegisterParseError> {
-        match content {
+impl From<Vec<Register>> for Registers {
+    fn from(value: Vec<Register>) -> Self {
+        Self(value)
+    }
+}
+
+impl TryFrom<JsonValue> for Registers {
+    type Error = RegisterParseError;
+
+    /// Extract registers from JSON object
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match value {
             JsonValue::Array(array) => Ok(Registers::from(
                 array
                     .iter()
@@ -164,16 +172,8 @@ impl Registers {
                     })
                     .collect::<Result<Vec<Register>, RegisterParseError>>()?,
             )),
-            _ => Err(RegisterParseError::ExpectedJsonArray(format!(
-                "{content:?}"
-            ))),
+            _ => Err(RegisterParseError::ExpectedJsonArray(format!("{value:?}"))),
         }
-    }
-}
-
-impl From<Vec<Register>> for Registers {
-    fn from(value: Vec<Register>) -> Self {
-        Self(value)
     }
 }
 
