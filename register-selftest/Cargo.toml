@@ -7,8 +7,7 @@ build = "build/lib.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-register-selftest-generator-common = { path = "../register-selftest-generator-common" }
-register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
+register-test-generator = { path = "../register-test-generator" }
 json = { workspace = true }
 fs-err = "2.9.0"
 thiserror = "1.0.38"

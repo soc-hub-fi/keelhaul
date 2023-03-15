@@ -3,13 +3,13 @@ default:
     @just --list --unsorted
 
 build:
-    cargo build --bin register-selftest-generator-runner
+    cargo build --example=run_every_test
 
 check:
-    cargo check --bin register-selftest-generator-runner
+    cargo check --example=run_every_test
 
 run:
-    cargo run --bin register-selftest-generator-runner
+    cargo run --example=run_every_test
 
 doc:
     cargo doc --no-deps
