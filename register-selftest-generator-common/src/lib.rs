@@ -3,6 +3,7 @@
 // TODO: leave error handling to customer crate
 
 use json::JsonValue;
+use log::warn;
 use std::{
     collections::HashMap, fs::File, num::ParseIntError, ops, path::PathBuf, str::ParseBoolError,
 };
@@ -53,18 +54,84 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
     }
 }
 
+/// Software access rights e.g., read-only or read-write, as defined by
+/// CMSIS-SVD `accessType`.
+pub enum Access {
+    /// read-only
+    ReadOnly,
+    /// write-only
+    WriteOnly,
+    /// read-write
+    ReadWrite,
+    /// writeOnce
+    WriteOnce,
+    /// read-writeOnce
+    ReadWriteOnce,
+}
+
+impl Access {
+    pub fn from_svd_access_type(s: &str) -> Result<Self, ParseError> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            _ => Err(ParseError::InvalidAccessType(s.to_owned())),
+        }
+    }
+
+    pub fn is_read(&self) -> bool {
+        match self {
+            Access::ReadOnly | Access::ReadWrite => true,
+            Access::WriteOnly => false,
+            Access::WriteOnce => {
+                warn!("a field uses write-once, assuming not readable");
+                false
+            }
+            Access::ReadWriteOnce => {
+                warn!("a field uses read-write-once, assuming readable");
+                true
+            }
+        }
+    }
+
+    pub fn is_write(&self) -> bool {
+        match self {
+            Access::ReadOnly => false,
+            Access::WriteOnly | Access::ReadWrite | Access::WriteOnce | Access::ReadWriteOnce => {
+                true
+            }
+        }
+    }
+}
+
 #[derive(Error, Debug)]
-pub enum RegisterParseError {
+pub enum JsonParseError {
     #[error("expected JSON object: {0}")]
-    ExpectedJsonObject(String),
+    ExpectedObject(String),
     #[error("expected JSON array: {0}")]
-    ExpectedJsonArray(String),
+    ExpectedArray(String),
     #[error("JSON object does not contain field for '{0}'")]
     FieldNotFound(String),
     #[error("could not parse int")]
     ParseInt(#[from] ParseIntError),
     #[error("could not parse bool")]
     ParseBool(#[from] ParseBoolError),
+}
+
+#[derive(Error, Debug)]
+pub enum ParseError {
+    #[error("expected field in node: {0}")]
+    ExpectedTag(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("expected int: {0}")]
+    InvalidInt(String),
+    #[error("invalid size multiplier suffix: {0}")]
+    InvalidSizeMultiplierSuffix(char),
+    #[error("invalid access type: {0}")]
+    InvalidAccessType(String),
 }
 
 /// Represents a single memory-mapped I/O register.
@@ -116,13 +183,13 @@ impl Register {
 }
 
 impl TryFrom<&json::object::Object> for Register {
-    type Error = RegisterParseError;
+    type Error = JsonParseError;
 
     fn try_from(value: &json::object::Object) -> Result<Self, Self::Error> {
         let get_field =
-            |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
+            |obj: &json::object::Object, field: &str| -> Result<String, JsonParseError> {
                 obj.get(field)
-                    .ok_or(RegisterParseError::FieldNotFound(field.to_owned()))
+                    .ok_or(JsonParseError::FieldNotFound(field.to_owned()))
                     .map(|x| x.to_string())
             };
         let name_peripheral = get_field(value, "name_peripheral")?;
@@ -160,7 +227,7 @@ impl From<Vec<Register>> for Registers {
 }
 
 impl TryFrom<JsonValue> for Registers {
-    type Error = RegisterParseError;
+    type Error = JsonParseError;
 
     /// Extract registers from JSON object
     fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
@@ -170,11 +237,11 @@ impl TryFrom<JsonValue> for Registers {
                     .iter()
                     .map(|value| match value {
                         JsonValue::Object(object) => Register::try_from(object),
-                        _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
+                        _ => Err(JsonParseError::ExpectedObject(format!("{value:?}"))),
                     })
-                    .collect::<Result<Vec<Register>, RegisterParseError>>()?,
+                    .collect::<Result<Vec<Register>, JsonParseError>>()?,
             )),
-            _ => Err(RegisterParseError::ExpectedJsonArray(format!("{value:?}"))),
+            _ => Err(JsonParseError::ExpectedArray(format!("{value:?}"))),
         }
     }
 }

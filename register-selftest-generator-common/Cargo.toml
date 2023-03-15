@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 json = { workspace = true }
 thiserror = "1.0.38"
+log = "0.4.17"

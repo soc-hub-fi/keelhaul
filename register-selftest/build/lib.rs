@@ -4,7 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, read_to_string, File};
 use log::{warn, LevelFilter};
-use register_selftest_generator_common::{validate_path_existence, RegisterParseError, Registers};
+use register_selftest_generator_common::{validate_path_existence, JsonParseError, Registers};
 use std::{
     collections::HashMap,
     env,
@@ -50,7 +50,7 @@ fn get_input_json() -> PathBuf {
 }
 
 /// Get register objects.
-fn get_registers() -> Result<Registers, RegisterParseError> {
+fn get_registers() -> Result<Registers, JsonParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
