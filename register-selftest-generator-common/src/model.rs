@@ -95,6 +95,15 @@ impl Register {
         self.base_addr + self.cluster_addr_offset + self.reg_addr_offset
     }
 
+    pub fn full_path(&self, sep: &str) -> String {
+        [
+            self.peripheral_name.clone(),
+            self.cluster_name.clone(),
+            self.reg_name.clone(),
+        ]
+        .join(sep)
+    }
+
     /// Get register's unique identifier.
     pub fn uid(&self) -> String {
         format!(
