@@ -3,7 +3,6 @@ members = [
     "register-selftest-generator-common",
     "register-selftest-generator-parse",
     "register-selftest-facade",
-    "register-selftest-generator-runner",
 ]
 
 [workspace.dependencies]
