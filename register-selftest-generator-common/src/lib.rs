@@ -113,26 +113,28 @@ impl Register {
             self.peripheral_name, self.cluster_name, self.reg_name
         )
     }
+}
 
-    pub fn json_object_to_register(
-        object: &json::object::Object,
-    ) -> Result<Register, RegisterParseError> {
+impl TryFrom<&json::object::Object> for Register {
+    type Error = RegisterParseError;
+
+    fn try_from(value: &json::object::Object) -> Result<Self, Self::Error> {
         let get_field =
             |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
                 obj.get(field)
                     .ok_or(RegisterParseError::FieldNotFound(field.to_owned()))
                     .map(|x| x.to_string())
             };
-        let name_peripheral = get_field(object, "name_peripheral")?;
-        let name_cluster = get_field(object, "name_cluster")?;
-        let name_register = get_field(object, "name_register")?;
-        let address_base = get_field(object, "address_base")?.parse()?;
-        let address_offset_cluster = get_field(object, "address_offset_cluster")?.parse()?;
-        let address_offset_register = get_field(object, "address_offset_register")?.parse()?;
-        let value_reset = get_field(object, "value_reset")?.parse()?;
-        let can_read = get_field(object, "can_read")?.parse()?;
-        let can_write = get_field(object, "can_write")?.parse()?;
-        let size = get_field(object, "size")?.parse()?;
+        let name_peripheral = get_field(value, "name_peripheral")?;
+        let name_cluster = get_field(value, "name_cluster")?;
+        let name_register = get_field(value, "name_register")?;
+        let address_base = get_field(value, "address_base")?.parse()?;
+        let address_offset_cluster = get_field(value, "address_offset_cluster")?.parse()?;
+        let address_offset_register = get_field(value, "address_offset_register")?.parse()?;
+        let value_reset = get_field(value, "value_reset")?.parse()?;
+        let can_read = get_field(value, "can_read")?.parse()?;
+        let can_write = get_field(value, "can_write")?.parse()?;
+        let size = get_field(value, "size")?.parse()?;
         Ok(Register {
             peripheral_name: name_peripheral,
             cluster_name: name_cluster,
@@ -167,7 +169,7 @@ impl TryFrom<JsonValue> for Registers {
                 array
                     .iter()
                     .map(|value| match value {
-                        JsonValue::Object(object) => Register::json_object_to_register(object),
+                        JsonValue::Object(object) => Register::try_from(object),
                         _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
                     })
                     .collect::<Result<Vec<Register>, RegisterParseError>>()?,
