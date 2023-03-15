@@ -382,15 +382,15 @@ fn find_registers(
                 let full_address = base_address + address_offset_cluster + address_offset_register;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
-                        name_peripheral: peripheral_name.clone(),
-                        name_cluster: name_cluster.clone(),
-                        name_register,
-                        address_base: base_address,
-                        address_offset_cluster,
-                        address_offset_register,
-                        value_reset,
-                        can_read: access.is_read(),
-                        can_write: access.is_write(),
+                        peripheral_name: peripheral_name.clone(),
+                        cluster_name: name_cluster.clone(),
+                        reg_name: name_register,
+                        base_addr: base_address,
+                        cluster_addr_offset: address_offset_cluster,
+                        reg_addr_offset: address_offset_register,
+                        reset_val: value_reset,
+                        is_read: access.is_read(),
+                        is_write: access.is_write(),
                         size,
                     };
                     entry.insert(name.to_owned());

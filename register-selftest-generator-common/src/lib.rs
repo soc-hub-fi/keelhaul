@@ -52,15 +52,15 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
 
 /// Represents a single memory-mapped I/O register.
 pub struct Register {
-    pub name_peripheral: String,
-    pub name_cluster: String,
-    pub name_register: String,
-    pub address_base: u64,
-    pub address_offset_cluster: u64,
-    pub address_offset_register: u64,
-    pub value_reset: u64,
-    pub can_read: bool,
-    pub can_write: bool,
+    pub peripheral_name: String,
+    pub cluster_name: String,
+    pub reg_name: String,
+    pub base_addr: u64,
+    pub cluster_addr_offset: u64,
+    pub reg_addr_offset: u64,
+    pub reset_val: u64,
+    pub is_read: bool,
+    pub is_write: bool,
     pub size: u64,
 }
 
@@ -68,35 +68,32 @@ impl Register {
     /// Transform register structure to hashmap.
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
-            ("name_peripheral", self.name_peripheral.clone()),
-            ("name_cluster", self.name_cluster.clone()),
-            ("name_register", self.name_register.clone()),
-            ("address_base", self.address_base.to_string()),
+            ("name_peripheral", self.peripheral_name.clone()),
+            ("name_cluster", self.cluster_name.clone()),
+            ("name_register", self.reg_name.clone()),
+            ("address_base", self.base_addr.to_string()),
             (
                 "address_offset_cluster",
-                self.address_offset_cluster.to_string(),
+                self.cluster_addr_offset.to_string(),
             ),
-            (
-                "address_offset_register",
-                self.address_offset_register.to_string(),
-            ),
-            ("value_reset", self.value_reset.to_string()),
-            ("can_read", self.can_read.to_string()),
-            ("can_write", self.can_write.to_string()),
+            ("address_offset_register", self.reg_addr_offset.to_string()),
+            ("value_reset", self.reset_val.to_string()),
+            ("can_read", self.is_read.to_string()),
+            ("can_write", self.is_write.to_string()),
             ("size", self.size.to_string()),
         ])
     }
 
     /// Get register's absolute memory address.
     pub const fn full_address(&self) -> u64 {
-        self.address_base + self.address_offset_cluster + self.address_offset_register
+        self.base_addr + self.cluster_addr_offset + self.reg_addr_offset
     }
 
     /// Get register's unique identifier.
     pub fn uid(&self) -> String {
         format!(
             "{}-{}-{}",
-            self.name_peripheral, self.name_cluster, self.name_register
+            self.peripheral_name, self.cluster_name, self.reg_name
         )
     }
 }

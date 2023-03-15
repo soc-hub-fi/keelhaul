@@ -85,15 +85,15 @@ fn json_object_to_register(object: &json::object::Object) -> Result<Register, Re
     let can_write = get_field(object, "can_write")?.parse()?;
     let size = get_field(object, "size")?.parse()?;
     Ok(Register {
-        name_peripheral,
-        name_cluster,
-        name_register,
-        address_base,
-        address_offset_cluster,
-        address_offset_register,
-        value_reset,
-        can_read,
-        can_write,
+        peripheral_name: name_peripheral,
+        cluster_name: name_cluster,
+        reg_name: name_register,
+        base_addr: address_base,
+        cluster_addr_offset: address_offset_cluster,
+        reg_addr_offset: address_offset_register,
+        reset_val: value_reset,
+        is_read: can_read,
+        is_write: can_write,
         size,
     })
 }
@@ -189,29 +189,25 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
             other => {
                 warn!(
                     "Invalid register size: {other}, skipping {}",
-                    register.name_register
+                    register.reg_name
                 );
                 continue;
             }
         };
-        let function_name = format!(
-            "test_{}_{:#x}",
-            register.name_register,
-            register.full_address()
-        );
+        let function_name = format!("test_{}_{:#x}", register.reg_name, register.full_address());
         let mut statements = vec![format!(
             "#[allow(unused)] let address: *mut {} = {:#x} as *mut {};",
             variable_type,
             register.full_address(),
             variable_type,
         )];
-        if register.can_read {
+        if register.is_read {
             statements.push("let _ = unsafe { read_volatile(address) };".to_owned());
         }
-        if register.can_write {
+        if register.is_write {
             statements.push(format!(
                 "#[allow(unused)] let reset_value: {} = {};",
-                variable_type, register.value_reset
+                variable_type, register.reset_val
             ));
             //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
         }
@@ -223,7 +219,7 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
 
         let function = format!(
             "{}::{}",
-            register.name_peripheral.to_lowercase(),
+            register.peripheral_name.to_lowercase(),
             function_name
         );
         let test_case = format!(
@@ -234,33 +230,33 @@ fn create_test_cases(registers: &Vec<Register>) -> TestCases {
         );
         test_cases.push(test_case.clone());
 
-        if test_cases_per_peripheral.contains_key(&register.name_peripheral) {
+        if test_cases_per_peripheral.contains_key(&register.peripheral_name) {
             test_cases_per_peripheral
-                .get_mut(&register.name_peripheral)
+                .get_mut(&register.peripheral_name)
                 .unwrap_or_else(|| {
                     panic!(
                         "Failed to find peripheral {}'s test case container.",
-                        &register.name_peripheral
+                        &register.peripheral_name
                     )
                 })
                 .push(line);
         } else {
-            test_cases_per_peripheral.insert(register.name_peripheral.clone(), vec![line]);
+            test_cases_per_peripheral.insert(register.peripheral_name.clone(), vec![line]);
         }
 
-        if test_case_structs_per_peripheral.contains_key(&register.name_peripheral) {
+        if test_case_structs_per_peripheral.contains_key(&register.peripheral_name) {
             test_case_structs_per_peripheral
-                .get_mut(&register.name_peripheral)
+                .get_mut(&register.peripheral_name)
                 .unwrap_or_else(|| {
                     panic!(
                         "Failed to find peripheral {}'s test case container.",
-                        &register.name_peripheral
+                        &register.peripheral_name
                     )
                 })
                 .push(test_case.clone());
         } else {
             test_case_structs_per_peripheral
-                .insert(register.name_peripheral.clone(), vec![test_case]);
+                .insert(register.peripheral_name.clone(), vec![test_case]);
         }
     }
 
