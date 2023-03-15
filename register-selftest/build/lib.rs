@@ -5,7 +5,7 @@ mod logger;
 use fs_err::{self as fs, read_to_string, File};
 use json::JsonValue;
 use log::{error, warn, LevelFilter};
-use register_selftest_generator_common::{validate_path_existence, Register};
+use register_selftest_generator_common::{validate_path_existence, Register, Registers};
 use std::{
     collections::HashMap,
     env,
@@ -99,15 +99,17 @@ fn json_object_to_register(object: &json::object::Object) -> Result<Register, Re
 }
 
 /// Extract registers from JSON object.
-fn json_value_into_registers(content: JsonValue) -> Result<Vec<Register>, RegisterParseError> {
+fn json_value_into_registers(content: JsonValue) -> Result<Registers, RegisterParseError> {
     match content {
-        JsonValue::Array(array) => array
-            .iter()
-            .map(|value| match value {
-                JsonValue::Object(object) => json_object_to_register(object),
-                _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
-            })
-            .collect(),
+        JsonValue::Array(array) => Ok(Registers::from(
+            array
+                .iter()
+                .map(|value| match value {
+                    JsonValue::Object(object) => json_object_to_register(object),
+                    _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
+                })
+                .collect::<Result<Vec<Register>, RegisterParseError>>()?,
+        )),
         _ => Err(RegisterParseError::ExpectedJsonArray(format!(
             "{content:?}"
         ))),
@@ -115,7 +117,7 @@ fn json_value_into_registers(content: JsonValue) -> Result<Vec<Register>, Regist
 }
 
 /// Get register objects.
-fn get_registers() -> Result<Vec<Register>, RegisterParseError> {
+fn get_registers() -> Result<Registers, RegisterParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
@@ -176,11 +178,11 @@ fn create_modules(
 }
 
 /// Generate test cases for each register.
-fn create_test_cases(registers: &Vec<Register>) -> TestCases {
+fn create_test_cases(registers: &Registers) -> TestCases {
     let mut test_cases = Vec::new();
     let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
     let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
-    for register in registers {
+    for register in registers.iter() {
         let variable_type = match register.size {
             8 => "u8",
             16 => "u16",
