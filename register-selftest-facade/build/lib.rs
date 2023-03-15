@@ -4,7 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, read_to_string, File};
 use log::{warn, LevelFilter};
-use register_selftest_generator_common::{validate_path_existence, JsonParseError, Registers};
+use register_test_generator::{validate_path_existence, JsonParseError, Registers};
 use std::{
     collections::HashMap,
     env,

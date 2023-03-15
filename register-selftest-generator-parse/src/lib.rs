@@ -3,7 +3,7 @@
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
-use register_selftest_generator_common::{
+use register_test_generator::{
     get_or_create, validate_path_existence, Access, ParseError, Register, Registers,
 };
 use roxmltree::{Document, Node};

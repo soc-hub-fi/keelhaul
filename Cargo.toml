@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "register-selftest-generator-common",
+    "register-test-generator",
     "register-selftest-generator-parse",
     "register-selftest-facade",
 ]

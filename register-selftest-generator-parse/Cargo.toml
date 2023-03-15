@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-register-selftest-generator-common = { path = "../register-selftest-generator-common" }
+register-test-generator = { path = "../register-test-generator" }
 roxmltree = "0.18"
 itertools = "0.10"
 json = { workspace = true }
