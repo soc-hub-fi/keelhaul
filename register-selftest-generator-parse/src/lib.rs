@@ -3,7 +3,9 @@
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
-use register_selftest_generator_common::{get_or_create, validate_path_existence, Register};
+use register_selftest_generator_common::{
+    get_or_create, validate_path_existence, Register, Registers,
+};
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -333,7 +335,7 @@ fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
-) -> Result<Vec<Register>, Error> {
+) -> Result<Registers, Error> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
@@ -408,7 +410,7 @@ fn find_registers(
     for peripheral in peripherals {
         info!("    {peripheral}");
     }
-    Ok(registers)
+    Ok(registers.into())
 }
 
 /// Write found registers to output file.
