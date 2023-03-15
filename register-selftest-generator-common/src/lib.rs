@@ -2,8 +2,11 @@
 
 // TODO: leave error handling to customer crate
 
-use std::{collections::HashMap, fs::File, ops, path::PathBuf};
-
+use json::JsonValue;
+use std::{
+    collections::HashMap, fs::File, num::ParseIntError, ops, path::PathBuf, str::ParseBoolError,
+};
+use thiserror::Error;
 /// Check that path to a file exists.
 ///
 /// # Panics
@@ -48,6 +51,20 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
             }
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum RegisterParseError {
+    #[error("expected JSON object: {0}")]
+    ExpectedJsonObject(String),
+    #[error("expected JSON array: {0}")]
+    ExpectedJsonArray(String),
+    #[error("JSON object does not contain field for '{0}'")]
+    FieldNotFound(String),
+    #[error("could not parse int")]
+    ParseInt(#[from] ParseIntError),
+    #[error("could not parse bool")]
+    ParseBool(#[from] ParseBoolError),
 }
 
 /// Represents a single memory-mapped I/O register.
@@ -96,10 +113,63 @@ impl Register {
             self.peripheral_name, self.cluster_name, self.reg_name
         )
     }
+
+    pub fn json_object_to_register(
+        object: &json::object::Object,
+    ) -> Result<Register, RegisterParseError> {
+        let get_field =
+            |obj: &json::object::Object, field: &str| -> Result<String, RegisterParseError> {
+                obj.get(field)
+                    .ok_or(RegisterParseError::FieldNotFound(field.to_owned()))
+                    .map(|x| x.to_string())
+            };
+        let name_peripheral = get_field(object, "name_peripheral")?;
+        let name_cluster = get_field(object, "name_cluster")?;
+        let name_register = get_field(object, "name_register")?;
+        let address_base = get_field(object, "address_base")?.parse()?;
+        let address_offset_cluster = get_field(object, "address_offset_cluster")?.parse()?;
+        let address_offset_register = get_field(object, "address_offset_register")?.parse()?;
+        let value_reset = get_field(object, "value_reset")?.parse()?;
+        let can_read = get_field(object, "can_read")?.parse()?;
+        let can_write = get_field(object, "can_write")?.parse()?;
+        let size = get_field(object, "size")?.parse()?;
+        Ok(Register {
+            peripheral_name: name_peripheral,
+            cluster_name: name_cluster,
+            reg_name: name_register,
+            base_addr: address_base,
+            cluster_addr_offset: address_offset_cluster,
+            reg_addr_offset: address_offset_register,
+            reset_val: value_reset,
+            is_read: can_read,
+            is_write: can_write,
+            size,
+        })
+    }
 }
 
 /// A list of registers parsed from SVD or IP-XACT (newtype).
 pub struct Registers(Vec<Register>);
+
+impl Registers {
+    /// Extract registers from JSON object.
+    pub fn json_value_into_registers(content: JsonValue) -> Result<Registers, RegisterParseError> {
+        match content {
+            JsonValue::Array(array) => Ok(Registers::from(
+                array
+                    .iter()
+                    .map(|value| match value {
+                        JsonValue::Object(object) => Register::json_object_to_register(object),
+                        _ => Err(RegisterParseError::ExpectedJsonObject(format!("{value:?}"))),
+                    })
+                    .collect::<Result<Vec<Register>, RegisterParseError>>()?,
+            )),
+            _ => Err(RegisterParseError::ExpectedJsonArray(format!(
+                "{content:?}"
+            ))),
+        }
+    }
+}
 
 impl From<Vec<Register>> for Registers {
     fn from(value: Vec<Register>) -> Self {
