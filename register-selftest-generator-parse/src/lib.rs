@@ -293,10 +293,11 @@ fn find_registers(
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
             let cluster_addr_offset = parse_nonneg_int_u64(address_offset_cluster_str)?;
-            let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
+            let cluster_name = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
                 let reg_name = remove_illegal_characters(name);
+                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, name);
                 if reg_filter.is_blocked(&name.to_string()) {
                     info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
@@ -307,7 +308,7 @@ fn find_registers(
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", name);
+                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
@@ -317,7 +318,7 @@ fn find_registers(
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
                         peripheral_name: peripheral_name.clone(),
-                        cluster_name: name_cluster.clone(),
+                        cluster_name: cluster_name.clone(),
                         reg_name,
                         base_addr,
                         cluster_addr_offset,

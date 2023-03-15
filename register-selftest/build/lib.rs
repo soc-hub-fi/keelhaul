@@ -124,7 +124,7 @@ fn create_test_cases(registers: &Registers) -> TestCases {
             other => {
                 warn!(
                     "Invalid register size: {other}, skipping {}",
-                    register.reg_name
+                    register.full_path("-")
                 );
                 continue;
             }
