@@ -9,9 +9,9 @@ build = "build/lib.rs"
 [build-dependencies]
 register-test-generator = { path = "../register-test-generator" }
 json = { workspace = true }
+thiserror = { workspace = true }
 fs-err = "2.9.0"
-thiserror = "1.0.38"
-log = "0.4.17"
+log = { workspace = true }
 
 [lib]
 name = "register_selftest"

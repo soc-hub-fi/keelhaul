@@ -3,3 +3,5 @@ members = ["register-test-generator", "register-selftest"]
 
 [workspace.dependencies]
 json = "0.12"
+log = "0.4.17"
+thiserror = "1.0.38"
