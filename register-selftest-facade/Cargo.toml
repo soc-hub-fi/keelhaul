@@ -8,7 +8,6 @@ build = "build/lib.rs"
 
 [build-dependencies]
 register-test-generator = { path = "../register-test-generator" }
-register-selftest-generator-parse = { path = "../register-selftest-generator-parse" }
 json = { workspace = true }
 fs-err = "2.9.0"
 thiserror = "1.0.38"

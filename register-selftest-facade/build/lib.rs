@@ -42,10 +42,7 @@ fn get_output_file() -> File {
 fn get_input_json() -> PathBuf {
     // Safety: OUT_DIR always exists
     let out_dir = env::var("OUT_DIR").unwrap();
-    let input_path = format!(
-        "{out_dir}/{}",
-        register_selftest_generator_parse::PARSED_FILENAME
-    );
+    let input_path = format!("{out_dir}/{}", register_test_generator::PARSED_FILENAME);
     validate_path_existence(&input_path)
 }
 
@@ -244,7 +241,7 @@ pub fn main() {
     // Install a logger to print useful messages into `cargo:warning={}`
     logger::init(LevelFilter::Info);
 
-    register_selftest_generator_parse::parse();
+    register_test_generator::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
     let test_cases = create_test_cases(&registers);
