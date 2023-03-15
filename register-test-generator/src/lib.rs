@@ -3,8 +3,10 @@
 // TODO: leave error handling to customer crate
 
 mod model;
+mod parse_svd;
 
 pub use model::*;
+pub use parse_svd::*;
 
 use std::{fs::File, num::ParseIntError, path::PathBuf, str::ParseBoolError};
 use thiserror::Error;

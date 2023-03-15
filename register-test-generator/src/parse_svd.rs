@@ -1,11 +1,9 @@
 //! SVD-file parser for register test generator.
 
+use crate::{get_or_create, validate_path_existence, Access, ParseError, Register, Registers};
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
-use register_selftest_generator_common::{
-    get_or_create, validate_path_existence, Access, ParseError, Register, Registers,
-};
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap},
