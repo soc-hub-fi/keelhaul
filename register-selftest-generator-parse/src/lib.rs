@@ -277,7 +277,7 @@ fn find_registers(
 
     for peripheral_node in peripheral_nodes {
         let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
-        let base_address = parse_nonneg_int_u64(base_address_str)?;
+        let base_addr = parse_nonneg_int_u64(base_address_str)?;
         let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?.to_owned();
         peripherals.push(peripheral_name.to_owned());
 
@@ -292,20 +292,20 @@ fn find_registers(
         {
             let address_offset_cluster_str =
                 find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
-            let address_offset_cluster = parse_nonneg_int_u64(address_offset_cluster_str)?;
+            let cluster_addr_offset = parse_nonneg_int_u64(address_offset_cluster_str)?;
             let name_cluster = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
                 let name = find_text_in_node_by_tag_name(&register, "name")?;
-                let name_register = remove_illegal_characters(name);
+                let reg_name = remove_illegal_characters(name);
                 if reg_filter.is_blocked(&name.to_string()) {
                     info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
                 }
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
-                let value_reset = parse_nonneg_int_u64(value_reset_str)?;
+                let reset_val = parse_nonneg_int_u64(value_reset_str)?;
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
-                let address_offset_register = parse_nonneg_int_u64(address_offset_register_str)?;
+                let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
                     warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", name);
                     "read-write"
@@ -313,16 +313,16 @@ fn find_registers(
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse()?;
 
-                let full_address = base_address + address_offset_cluster + address_offset_register;
+                let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     let register = Register {
                         peripheral_name: peripheral_name.clone(),
                         cluster_name: name_cluster.clone(),
-                        reg_name: name_register,
-                        base_addr: base_address,
-                        cluster_addr_offset: address_offset_cluster,
-                        reg_addr_offset: address_offset_register,
-                        reset_val: value_reset,
+                        reg_name,
+                        base_addr,
+                        cluster_addr_offset,
+                        reg_addr_offset,
+                        reset_val,
                         is_read: access.is_read(),
                         is_write: access.is_write(),
                         size,
