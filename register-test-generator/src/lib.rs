@@ -2,9 +2,11 @@
 
 // TODO: leave error handling to customer crate
 
+mod generate;
 mod model;
 mod parse_svd;
 
+pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
