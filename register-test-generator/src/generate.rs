@@ -65,8 +65,6 @@ impl TestCases {
                     continue;
                 }
             };
-            let function_name =
-                format!("test_{}_{:#x}", register.reg_name, register.full_address()?);
             let mut statements = vec![format!(
                 "#[allow(unused)] let address: *mut {} = {:#x} as *mut {};",
                 variable_type,
@@ -83,6 +81,8 @@ impl TestCases {
                 ));
                 //statements.push("unsafe { write_volatile(address, reset_value) };".to_owned());
             }
+            let function_name =
+                format!("test_{}_{:#x}", register.reg_name, register.full_address()?);
             let statements_combined = statements.join("");
             let line = format!(
                 "#[allow(non_snake_case)] pub fn {function_name}() {{{statements_combined}}}\n"
