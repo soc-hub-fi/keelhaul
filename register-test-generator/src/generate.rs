@@ -52,17 +52,22 @@ pub struct TestCases {
 struct RegTestGenerator<'r>(&'r Register);
 
 impl<'r> RegTestGenerator<'r> {
+    /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
     }
-    // We prefix it with underscore to avoid a warning about unused, since we
-    // may or may not want to re-use the binding depending on which tests get
-    // generated for this particular register
+
+    /// Name for the binding to the value that was read from the register
+    ///
+    /// We prefix it with underscore to avoid a warning about unused, since we
+    /// may or may not want to re-use the binding depending on which tests get
+    /// generated for this particular register
     fn read_value_binding() -> TokenStream {
         quote!(_read_value)
     }
 
-    fn from_register(reg: &'r Register) -> Self {
+    /// Create a [RegTestGenerator] from a register definition
+    pub fn from_register(reg: &'r Register) -> Self {
         Self(reg)
     }
 
