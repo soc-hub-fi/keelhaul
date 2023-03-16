@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-
-use log::warn;
-
+//! Generate test cases from model::* types
 use crate::{GenerateError, Registers};
+use log::warn;
+use std::collections::HashMap;
 
 /// # Arguments
 ///
-/// `name_uc`   - Uppercase name for the array
+/// `name_uc`   - Name for the array. Use uppercase because Rust statics should be uppercase.
 /// `elem_type` - Type for the array elements
 /// `len`       - Length for the array
 /// `value`     - Value for the array ("... = {value};")
