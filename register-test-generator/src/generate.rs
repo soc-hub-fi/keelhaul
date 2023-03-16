@@ -1,5 +1,6 @@
 //! Generate test cases from model::* types
 use crate::{GenerateError, Register, Registers};
+use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
@@ -179,7 +180,6 @@ impl<'r> RegTestGenerator<'r> {
 impl TestCases {
     /// Generate test cases for each register.
     pub fn from_registers(registers: &Registers) -> Result<TestCases, GenerateError> {
-        let mut test_defs = Vec::new();
         let mut test_fns_by_periph: HashMap<String, Vec<String>> = HashMap::new();
         let mut test_defs_by_periph: HashMap<String, Vec<String>> = HashMap::new();
         for register in registers.iter() {
@@ -190,8 +190,6 @@ impl TestCases {
 
             let test_def = test_gen.gen_test_def()?;
             let test_def_str = format!("{}", test_def);
-
-            test_defs.push(test_def_str.clone());
 
             test_fns_by_periph
                 .entry(register.peripheral_name.clone())
@@ -205,15 +203,22 @@ impl TestCases {
         }
 
         let mod_strings = create_modules(&test_fns_by_periph, &test_defs_by_periph);
+        let mod_strings_combined = mod_strings.join("");
 
-        let output_combined = mod_strings.join("");
+        // Collect all test definitions into one big list
+        let test_defs = test_defs_by_periph
+            .values()
+            .flatten()
+            .cloned()
+            .collect_vec();
         let test_case_count = test_defs.len();
-        let test_defs_combined = test_defs.join(",");
-        let test_case_array = format!(
-            "pub static TEST_CASES: [TestCase;{test_case_count}] = [{test_defs_combined}];"
-        );
+        let test_defs_combined: TokenStream = test_defs.join(",").parse().unwrap();
+        let test_case_array = quote! {
+            pub static TEST_CASES: [TestCase; #test_case_count] = [ #test_defs_combined ];
+        };
+
         Ok(TestCases {
-            test_cases: vec![output_combined, test_case_array],
+            test_cases: vec![mod_strings_combined, format!("{}", test_case_array)],
             test_case_count,
         })
     }
