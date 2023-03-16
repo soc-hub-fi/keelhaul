@@ -1,33 +1,9 @@
 //! Generate test cases from model::* types
 use crate::{GenerateError, Registers};
 use log::warn;
+use proc_macro2::TokenStream;
+use quote::quote;
 use std::collections::HashMap;
-
-/// # Arguments
-///
-/// `name_uc`   - Name for the array. Use uppercase because Rust statics should be uppercase.
-/// `elem_type` - Type for the array elements
-/// `len`       - Length for the array
-/// `value`     - Value for the array ("... = {value};")
-fn gen_static_array_str(name_uc: &str, elem_type: &str, len: usize, value: &str) -> String {
-    format!("pub static {name_uc}: [{elem_type}; {len}] = {value};")
-}
-
-/// # Arguments
-///
-/// `name_lc`   - Lowercase name for the module
-fn gen_mod_str(name_lc: &str, contents: &str) -> String {
-    format!(
-        r#"
-pub mod {name_lc} {{
-    use super::*;
-
-    {}
-}}
-"#,
-        contents
-    )
-}
 
 /// Place test cases in modules.
 fn create_modules(
@@ -36,22 +12,29 @@ fn create_modules(
 ) -> Vec<String> {
     let mut modules = Vec::new();
     for (name_peripheral, test_cases) in test_cases_per_peripheral {
-        let test_cases_catenated = test_cases.join("");
-        let module_test_cases_combined = test_case_structs_per_peripheral
+        let test_cases_catenated: TokenStream = test_cases.join("").parse().unwrap();
+        let module_test_cases_combined: TokenStream = test_case_structs_per_peripheral
             .get(name_peripheral)
             .unwrap()
-            .join(",");
-        let module_test_case_array = gen_static_array_str(
-            "TEST_CASES",
-            "TestCase",
-            test_cases.len(),
-            &format!("[{}]", module_test_cases_combined),
-        );
-        let module = gen_mod_str(
-            &name_peripheral.to_lowercase(),
-            &format!("{} {}", module_test_case_array, test_cases_catenated),
-        );
-        modules.push(module);
+            .join(",")
+            .parse()
+            .unwrap();
+        let len = test_cases.len();
+        let value: TokenStream = quote!( [#module_test_cases_combined] );
+        let module_test_case_array = quote! {
+            pub static TEST_CASES: [TestCase; #len] = #value;
+        };
+        let mod_name: TokenStream = name_peripheral.to_lowercase().parse().unwrap();
+        let module = quote! {
+            pub mod #mod_name {
+                use super::*;
+
+                #module_test_case_array
+
+                #test_cases_catenated
+            }
+        };
+        modules.push(format!("{}", module));
     }
     modules
 }
