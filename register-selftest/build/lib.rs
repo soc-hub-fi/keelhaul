@@ -4,9 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, read_to_string, File};
 use log::LevelFilter;
-use register_test_generator::{
-    create_test_cases, validate_path_existence, JsonParseError, Registers,
-};
+use register_test_generator::{validate_path_existence, JsonParseError, Registers, TestCases};
 use std::{
     env,
     io::{self, Write},
@@ -85,7 +83,7 @@ pub fn main() {
     register_test_generator::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
-    let test_cases = create_test_cases(&registers);
+    let test_cases = TestCases::from_registers(&registers);
     write_output(&test_cases.test_cases, &mut file_output);
     let path = get_path_to_output();
     rustfmt_file(&path)
