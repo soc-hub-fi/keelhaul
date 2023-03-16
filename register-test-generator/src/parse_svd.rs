@@ -35,7 +35,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
             let registers = content
                 .split('\n')
                 .into_iter()
-                .map(remove_illegal_characters)
+                .map(ToOwned::to_owned)
                 .collect_vec();
             Some(registers)
         }
