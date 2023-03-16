@@ -83,7 +83,7 @@ pub fn main() {
     register_test_generator::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
-    let test_cases = TestCases::from_registers(&registers);
+    let test_cases = TestCases::from_registers(&registers).unwrap();
     write_output(&test_cases.test_cases, &mut file_output);
     let path = get_path_to_output();
     rustfmt_file(&path)

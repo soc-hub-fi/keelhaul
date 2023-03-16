@@ -2,7 +2,7 @@ use json::JsonValue;
 use log::warn;
 use std::{collections::HashMap, ops};
 
-use crate::{JsonParseError, ParseError};
+use crate::{AddrRepr, GenerateError, JsonParseError, ParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -91,8 +91,21 @@ impl Register {
     }
 
     /// Get register's absolute memory address.
-    pub const fn full_address(&self) -> u64 {
-        self.base_addr + self.cluster_addr_offset + self.reg_addr_offset
+    pub fn full_address(&self) -> Result<u64, GenerateError> {
+        let base = self.base_addr;
+        let cluster = self.cluster_addr_offset;
+        let offset = self.reg_addr_offset;
+        let err = GenerateError::AddrOverflow(
+            self.full_path("-"),
+            AddrRepr::Comps {
+                base,
+                cluster,
+                offset,
+            },
+        );
+        base.checked_add(cluster)
+            .and_then(|x| x.checked_add(offset))
+            .ok_or(err)
     }
 
     pub fn full_path(&self, sep: &str) -> String {
