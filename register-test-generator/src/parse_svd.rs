@@ -1,6 +1,8 @@
 //! SVD-file parser for register test generator.
 
-use crate::{get_or_create, validate_path_existence, Access, ParseError, Register, Registers};
+use crate::{
+    get_or_create, validate_path_existence, Access, ParseError, PtrWidth, Register, Registers,
+};
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
@@ -311,6 +313,7 @@ fn find_registers(
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse()?;
+                let size = PtrWidth::from_bit_count(size)?;
 
                 let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {

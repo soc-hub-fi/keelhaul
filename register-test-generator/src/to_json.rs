@@ -18,7 +18,7 @@ impl Register {
             ("value_reset", self.reset_val.to_string()),
             ("can_read", self.is_read.to_string()),
             ("can_write", self.is_write.to_string()),
-            ("size", self.size.to_string()),
+            ("size", self.size.to_rust_type_str().to_string()),
         ])
     }
 }

@@ -73,6 +73,8 @@ pub enum JsonParseError {
     ParseInt(#[from] ParseIntError),
     #[error("could not parse bool")]
     ParseBool(#[from] ParseBoolError),
+    #[error("{0} is not a known Rust type string")]
+    ParseTypeStr(String),
 }
 
 #[derive(Error, Debug)]
@@ -87,6 +89,8 @@ pub enum ParseError {
     InvalidSizeMultiplierSuffix(char),
     #[error("invalid access type: {0}")]
     InvalidAccessType(String),
+    #[error("failed to convert {0} bits into a valid pointer width")]
+    BitCountToPtrWidth(u64),
 }
 
 #[derive(Debug)]

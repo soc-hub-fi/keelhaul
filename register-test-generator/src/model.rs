@@ -3,7 +3,7 @@
 use log::warn;
 use std::ops;
 
-use crate::{AddrRepr, GenerateError};
+use crate::{AddrRepr, GenerateError, ParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -48,6 +48,35 @@ impl Access {
     }
 }
 
+pub enum PtrWidth {
+    U8,
+    U16,
+    U32,
+    U64,
+}
+
+impl PtrWidth {
+    /// E.g., u8, u16, u32, u64
+    pub fn to_rust_type_str(&self) -> &str {
+        match self {
+            PtrWidth::U8 => "u8",
+            PtrWidth::U16 => "u16",
+            PtrWidth::U32 => "u32",
+            PtrWidth::U64 => "u64",
+        }
+    }
+
+    pub fn from_bit_count(bc: u64) -> Result<Self, ParseError> {
+        match bc {
+            8 => Ok(PtrWidth::U8),
+            16 => Ok(PtrWidth::U16),
+            32 => Ok(PtrWidth::U32),
+            64 => Ok(PtrWidth::U64),
+            bc => Err(ParseError::BitCountToPtrWidth(bc)),
+        }
+    }
+}
+
 /// Represents a single memory-mapped I/O register.
 pub struct Register {
     pub peripheral_name: String,
@@ -59,7 +88,7 @@ pub struct Register {
     pub reset_val: u64,
     pub is_read: bool,
     pub is_write: bool,
-    pub size: u64,
+    pub size: PtrWidth,
 }
 
 impl Register {

@@ -1,6 +1,6 @@
 use json::JsonValue;
 
-use crate::{JsonParseError, Register, Registers};
+use crate::{JsonParseError, PtrWidth, Register, Registers};
 
 impl TryFrom<&json::object::Object> for Register {
     type Error = JsonParseError;
@@ -21,7 +21,7 @@ impl TryFrom<&json::object::Object> for Register {
         let value_reset = get_field(value, "value_reset")?.parse()?;
         let can_read = get_field(value, "can_read")?.parse()?;
         let can_write = get_field(value, "can_write")?.parse()?;
-        let size = get_field(value, "size")?.parse()?;
+        let size = PtrWidth::try_from_rust_type_str(&get_field(value, "size")?)?;
         Ok(Register {
             peripheral_name: name_peripheral,
             cluster_name: name_cluster,
@@ -53,6 +53,18 @@ impl TryFrom<JsonValue> for Registers {
                     .collect::<Result<Vec<Register>, JsonParseError>>()?,
             )),
             _ => Err(JsonParseError::ExpectedArray(format!("{value:?}"))),
+        }
+    }
+}
+
+impl PtrWidth {
+    pub fn try_from_rust_type_str(s: &str) -> Result<PtrWidth, JsonParseError> {
+        match s {
+            "u8" => Ok(PtrWidth::U8),
+            "u16" => Ok(PtrWidth::U16),
+            "u32" => Ok(PtrWidth::U32),
+            "u64" => Ok(PtrWidth::U64),
+            _ => Err(JsonParseError::ParseTypeStr(s.to_owned())),
         }
     }
 }

@@ -1,6 +1,5 @@
 //! Generate test cases from model::* types
 use crate::{GenerateError, Registers};
-use log::warn;
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
@@ -52,19 +51,7 @@ impl TestCases {
         let mut test_cases_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
         let mut test_case_structs_per_peripheral: HashMap<String, Vec<String>> = HashMap::new();
         for register in registers.iter() {
-            let variable_type = match register.size {
-                8 => "u8",
-                16 => "u16",
-                32 => "u32",
-                64 => "u64",
-                other => {
-                    warn!(
-                        "Invalid register size: {other}, skipping {}",
-                        register.full_path("-")
-                    );
-                    continue;
-                }
-            };
+            let variable_type = register.size.to_rust_type_str();
             let mut statements = vec![format!(
                 "#[allow(unused)] let address: *mut {} = {:#x} as *mut {};",
                 variable_type,
