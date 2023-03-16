@@ -91,6 +91,16 @@ pub enum ParseError {
     InvalidAccessType(String),
     #[error("failed to convert {0} bits into a valid pointer width")]
     BitCountToPtrWidth(u64),
+    #[error("not implemented")]
+    NotImplemented(#[from] NotImplementedError),
+}
+
+#[derive(Error, Debug)]
+pub enum NotImplementedError {
+    #[error(
+        "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"
+    )]
+    SvdArray(String),
 }
 
 #[derive(Debug)]

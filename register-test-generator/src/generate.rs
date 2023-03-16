@@ -1,9 +1,38 @@
 //! Generate test cases from model::* types
 use crate::{GenerateError, Register, Registers};
 use itertools::Itertools;
+use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
+
+/// Remove illegal characters from register name.
+///
+/// These characters will be put into test case names, and thus need to be removed.
+fn _remove_illegal_characters(name: &str) -> String {
+    let mut name_new = name.to_owned();
+    let illegals = ['(', ')', '[', ']', '%'];
+    let mut found_illegals = Vec::new();
+    for illegal in illegals {
+        if name_new.contains(illegal) {
+            found_illegals.push(illegal);
+            name_new = name_new.replace(illegal, "_");
+        }
+    }
+    if !found_illegals.is_empty() {
+        let symbols = found_illegals
+            .iter()
+            .map(|c| format!("\"{}\"", c.to_owned()))
+            .join(", ");
+        warn!(
+            "Register {}'s name contains {} illegal characters: {}. These characters are replaced with underscores ('_').",
+            name,
+            found_illegals.len(),
+            symbols
+        );
+    }
+    name_new
+}
 
 /// Place test cases in modules.
 fn create_modules(
