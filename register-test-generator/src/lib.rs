@@ -2,9 +2,11 @@
 
 // TODO: leave error handling to customer crate
 
+mod generate;
 mod model;
 mod parse_svd;
 
+pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
@@ -82,4 +84,16 @@ pub enum ParseError {
     InvalidSizeMultiplierSuffix(char),
     #[error("invalid access type: {0}")]
     InvalidAccessType(String),
+}
+
+#[derive(Debug)]
+pub enum AddrRepr<T> {
+    Comps { base: T, cluster: T, offset: T },
+    Full(T),
+}
+
+#[derive(Error, Debug)]
+pub enum GenerateError {
+    #[error("generated address for {0} does not fit in a 64-bit pointer: {1:?}")]
+    AddrOverflow(String, AddrRepr<u64>),
 }
