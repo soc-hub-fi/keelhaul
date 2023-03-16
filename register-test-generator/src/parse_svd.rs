@@ -366,3 +366,17 @@ pub fn parse() {
     let mut file_output = open_output_file();
     write_output(&registers, &mut file_output);
 }
+
+impl Access {
+    /// Implements parsing access type as specified by CMSIS-SVD schema
+    pub fn from_svd_access_type(s: &str) -> Result<Self, ParseError> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            _ => Err(ParseError::InvalidAccessType(s.to_owned())),
+        }
+    }
+}

@@ -1,9 +1,9 @@
 //! Encodes information about memory mapped registers. This information can be
 //! used to generate test cases.
 use log::warn;
-use std::{collections::HashMap, ops};
+use std::ops;
 
-use crate::{AddrRepr, GenerateError, ParseError};
+use crate::{AddrRepr, GenerateError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -21,17 +21,7 @@ pub enum Access {
 }
 
 impl Access {
-    pub fn from_svd_access_type(s: &str) -> Result<Self, ParseError> {
-        match s {
-            "read-only" => Ok(Access::ReadOnly),
-            "write-only" => Ok(Access::WriteOnly),
-            "read-write" => Ok(Access::ReadWrite),
-            "writeOnce" => Ok(Access::WriteOnce),
-            "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            _ => Err(ParseError::InvalidAccessType(s.to_owned())),
-        }
-    }
-
+    /// Whether this register is software readable or not
     pub fn is_read(&self) -> bool {
         match self {
             Access::ReadOnly | Access::ReadWrite => true,
@@ -47,6 +37,7 @@ impl Access {
         }
     }
 
+    /// Whether this register is software writable or not
     pub fn is_write(&self) -> bool {
         match self {
             Access::ReadOnly => false,
@@ -72,25 +63,6 @@ pub struct Register {
 }
 
 impl Register {
-    /// Transform register structure to hashmap.
-    pub fn to_hashmap(&self) -> HashMap<&str, String> {
-        HashMap::from([
-            ("name_peripheral", self.peripheral_name.clone()),
-            ("name_cluster", self.cluster_name.clone()),
-            ("name_register", self.reg_name.clone()),
-            ("address_base", self.base_addr.to_string()),
-            (
-                "address_offset_cluster",
-                self.cluster_addr_offset.to_string(),
-            ),
-            ("address_offset_register", self.reg_addr_offset.to_string()),
-            ("value_reset", self.reset_val.to_string()),
-            ("can_read", self.is_read.to_string()),
-            ("can_write", self.is_write.to_string()),
-            ("size", self.size.to_string()),
-        ])
-    }
-
     /// Get register's absolute memory address.
     pub fn full_address(&self) -> Result<u64, GenerateError> {
         let base = self.base_addr;

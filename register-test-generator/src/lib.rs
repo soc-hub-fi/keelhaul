@@ -6,6 +6,7 @@ mod generate;
 mod model;
 mod parse_json;
 mod parse_svd;
+mod to_json;
 
 pub use generate::*;
 pub use model::*;
