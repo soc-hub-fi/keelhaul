@@ -189,39 +189,15 @@ impl TestCases {
             let test_case = test_gen.gen_test_def()?;
             test_cases.push(format!("{}", test_case));
 
-            if test_cases_by_peripheral.contains_key(&register.peripheral_name) {
-                test_cases_by_peripheral
-                    .get_mut(&register.peripheral_name)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Failed to find peripheral {}'s test case container.",
-                            &register.peripheral_name
-                        )
-                    })
-                    .push(format!("{}", test_fn));
-            } else {
-                test_cases_by_peripheral.insert(
-                    register.peripheral_name.clone(),
-                    vec![format!("{}", test_fn)],
-                );
-            }
+            test_cases_by_peripheral
+                .entry(register.peripheral_name.clone())
+                .or_insert(vec![])
+                .push(format!("{}", test_fn));
 
-            if test_case_structs_by_peripheral.contains_key(&register.peripheral_name) {
-                test_case_structs_by_peripheral
-                    .get_mut(&register.peripheral_name)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Failed to find peripheral {}'s test case container.",
-                            &register.peripheral_name
-                        )
-                    })
-                    .push(format!("{}", test_case));
-            } else {
-                test_case_structs_by_peripheral.insert(
-                    register.peripheral_name.clone(),
-                    vec![format!("{}", test_case)],
-                );
-            }
+            test_case_structs_by_peripheral
+                .entry(register.peripheral_name.clone())
+                .or_insert(vec![])
+                .push(format!("{}", test_case));
         }
 
         let modules = create_modules(&test_cases_by_peripheral, &test_case_structs_by_peripheral);
