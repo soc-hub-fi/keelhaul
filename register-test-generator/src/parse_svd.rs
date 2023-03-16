@@ -308,7 +308,7 @@ fn find_registers(
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
+                    warn!("register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
@@ -334,8 +334,8 @@ fn find_registers(
                 } else {
                     let address_holder = addresses
                         .get(&full_address)
-                        .expect("Failed to find register name by key.");
-                    warn!("Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
+                        .expect("failed to find register name by key");
+                    warn!("register {reg_name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 }
             }
         }
