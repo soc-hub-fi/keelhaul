@@ -6,31 +6,31 @@ use std::collections::HashMap;
 
 /// Place test cases in modules.
 fn create_modules(
-    test_cases_by_peripheral: &HashMap<String, Vec<String>>,
-    test_case_structs_by_peripheral: &HashMap<String, Vec<String>>,
+    test_fns_by_periph: &HashMap<String, Vec<String>>,
+    test_defs_by_periph: &HashMap<String, Vec<String>>,
 ) -> Vec<String> {
     let mut modules = Vec::new();
-    for (periph_name, test_cases) in test_cases_by_peripheral {
-        let module_test_cases_combined: TokenStream = test_case_structs_by_peripheral
+    for (periph_name, test_fns) in test_fns_by_periph {
+        let test_defs_combined: TokenStream = test_defs_by_periph
             .get(periph_name)
             .unwrap()
             .join(",")
             .parse()
             .unwrap();
-        let len = test_cases.len();
-        let value: TokenStream = quote!( [#module_test_cases_combined] );
-        let module_test_case_array = quote! {
+        let len = test_fns.len();
+        let value: TokenStream = quote!( [#test_defs_combined] );
+        let test_def_arr = quote! {
             pub static TEST_CASES: [TestCase; #len] = #value;
         };
         let mod_name: TokenStream = periph_name.to_lowercase().parse().unwrap();
-        let test_cases_catenated: TokenStream = test_cases.join("").parse().unwrap();
+        let test_fns_catenated: TokenStream = test_fns.join("").parse().unwrap();
         let module = quote! {
             pub mod #mod_name {
                 use super::*;
 
-                #module_test_case_array
+                #test_def_arr
 
-                #test_cases_catenated
+                #test_fns_catenated
             }
         };
         modules.push(format!("{}", module));
@@ -179,34 +179,38 @@ impl<'r> RegTestGenerator<'r> {
 impl TestCases {
     /// Generate test cases for each register.
     pub fn from_registers(registers: &Registers) -> Result<TestCases, GenerateError> {
-        let mut test_cases = Vec::new();
-        let mut test_cases_by_peripheral: HashMap<String, Vec<String>> = HashMap::new();
-        let mut test_case_structs_by_peripheral: HashMap<String, Vec<String>> = HashMap::new();
+        let mut test_defs = Vec::new();
+        let mut test_fns_by_periph: HashMap<String, Vec<String>> = HashMap::new();
+        let mut test_defs_by_periph: HashMap<String, Vec<String>> = HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register);
 
             let test_fn = test_gen.gen_test_fn()?;
-            let test_case = test_gen.gen_test_def()?;
-            test_cases.push(format!("{}", test_case));
+            let test_fn_str = format!("{}", test_fn);
 
-            test_cases_by_peripheral
+            let test_def = test_gen.gen_test_def()?;
+            let test_def_str = format!("{}", test_def);
+
+            test_defs.push(test_def_str.clone());
+
+            test_fns_by_periph
                 .entry(register.peripheral_name.clone())
                 .or_insert(vec![])
-                .push(format!("{}", test_fn));
+                .push(test_fn_str);
 
-            test_case_structs_by_peripheral
+            test_defs_by_periph
                 .entry(register.peripheral_name.clone())
                 .or_insert(vec![])
-                .push(format!("{}", test_case));
+                .push(test_def_str);
         }
 
-        let modules = create_modules(&test_cases_by_peripheral, &test_case_structs_by_peripheral);
+        let mod_strings = create_modules(&test_fns_by_periph, &test_defs_by_periph);
 
-        let output_combined = modules.join("");
-        let test_case_count = test_cases.len();
-        let test_cases_combined = test_cases.join(",");
+        let output_combined = mod_strings.join("");
+        let test_case_count = test_defs.len();
+        let test_defs_combined = test_defs.join(",");
         let test_case_array = format!(
-            "pub static TEST_CASES: [TestCase;{test_case_count}] = [{test_cases_combined}];"
+            "pub static TEST_CASES: [TestCase;{test_case_count}] = [{test_defs_combined}];"
         );
         Ok(TestCases {
             test_cases: vec![output_combined, test_case_array],
