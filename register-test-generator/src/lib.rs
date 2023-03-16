@@ -4,10 +4,13 @@
 
 mod generate;
 mod model;
+mod parse_json;
 mod parse_svd;
+mod to_json;
 
 pub use generate::*;
 pub use model::*;
+pub use parse_json::*;
 pub use parse_svd::*;
 
 use std::{fs::File, num::ParseIntError, path::PathBuf, str::ParseBoolError};
@@ -70,6 +73,8 @@ pub enum JsonParseError {
     ParseInt(#[from] ParseIntError),
     #[error("could not parse bool")]
     ParseBool(#[from] ParseBoolError),
+    #[error("{0} is not a known Rust type string")]
+    ParseTypeStr(String),
 }
 
 #[derive(Error, Debug)]
@@ -84,6 +89,18 @@ pub enum ParseError {
     InvalidSizeMultiplierSuffix(char),
     #[error("invalid access type: {0}")]
     InvalidAccessType(String),
+    #[error("failed to convert {0} bits into a valid pointer width")]
+    BitCountToPtrWidth(u64),
+    #[error("not implemented")]
+    NotImplemented(#[from] NotImplementedError),
+}
+
+#[derive(Error, Debug)]
+pub enum NotImplementedError {
+    #[error(
+        "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"
+    )]
+    SvdArray(String),
 }
 
 #[derive(Debug)]

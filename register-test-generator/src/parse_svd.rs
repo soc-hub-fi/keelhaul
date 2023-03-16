@@ -1,6 +1,9 @@
 //! SVD-file parser for register test generator.
 
-use crate::{get_or_create, validate_path_existence, Access, ParseError, Register, Registers};
+use crate::{
+    get_or_create, validate_path_existence, Access, NotImplementedError, ParseError, PtrWidth,
+    Register, Registers,
+};
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
@@ -33,7 +36,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
             let registers = content
                 .split('\n')
                 .into_iter()
-                .map(remove_illegal_characters)
+                .map(ToOwned::to_owned)
                 .collect_vec();
             Some(registers)
         }
@@ -130,34 +133,6 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
     node.children()
         .find(|n| n.has_tag_name(tag))
         .map(|n| n.text().expect("Node does not have text."))
-}
-
-/// Remove illegal characters from register name.
-///
-/// These characters will be put into test case names, and thus need to be removed.
-fn remove_illegal_characters(name: &str) -> String {
-    let mut name_new = name.to_owned();
-    let illegals = ['(', ')', '[', ']', '%'];
-    let mut found_illegals = Vec::new();
-    for illegal in illegals {
-        if name_new.contains(illegal) {
-            found_illegals.push(illegal);
-            name_new = name_new.replace(illegal, "_");
-        }
-    }
-    if !found_illegals.is_empty() {
-        let symbols = found_illegals
-            .iter()
-            .map(|c| format!("\"{}\"", c.to_owned()))
-            .join(", ");
-        warn!(
-            "Register {}'s name contains {} illegal characters: {}. These characters are replaced with underscores ('_').",
-            name,
-            found_illegals.len(),
-            symbols
-        );
-    }
-    name_new
 }
 
 trait ArchUsize<U> {
@@ -260,6 +235,13 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, ParseError> {
     })
 }
 
+// The presence of this pattern in the register name likely indicates that this
+// is an array register
+//
+// TODO: should use a more robust way of detecting arrays, i.e., checking the
+// fields for the reg in question
+const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
+
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
@@ -293,27 +275,37 @@ fn find_registers(
             let cluster_addr_offset = parse_nonneg_int_u64(address_offset_cluster_str)?;
             let cluster_name = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
             for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
-                let name = find_text_in_node_by_tag_name(&register, "name")?;
-                let reg_name = remove_illegal_characters(name);
-                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, name);
-                if reg_filter.is_blocked(&name.to_string()) {
-                    info!("Register {name} is was not included due to values set in PATH_EXCLUDES");
+                let reg_name = find_text_in_node_by_tag_name(&register, "name")?.to_string();
+
+                //let reg_name = remove_illegal_characters(reg_name);
+                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, reg_name);
+
+                if reg_filter.is_blocked(&reg_name.to_string()) {
+                    info!("register {reg_name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
                 }
+
+                if reg_name.contains(SVD_ARRAY_REPETITION_PATTERN) {
+                    warn!("{}, skipping", NotImplementedError::SvdArray(reg_path));
+                    continue;
+                }
+
                 let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
                 let reset_val = parse_nonneg_int_u64(value_reset_str)?;
                 let address_offset_register_str =
                     find_text_in_node_by_tag_name(&register, "addressOffset")?;
                 let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
                 let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("Register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
+                    warn!("register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
                     "read-write"
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse()?;
+                let size = PtrWidth::from_bit_count(size)?;
 
                 let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
+                    entry.insert(reg_name.clone());
                     let register = Register {
                         peripheral_name: peripheral_name.clone(),
                         cluster_name: cluster_name.clone(),
@@ -326,13 +318,12 @@ fn find_registers(
                         is_write: access.is_write(),
                         size,
                     };
-                    entry.insert(name.to_owned());
                     registers.push(register);
                 } else {
                     let address_holder = addresses
                         .get(&full_address)
-                        .expect("Failed to find register name by key.");
-                    warn!("Register {name}'s full address is already taken by register {address_holder}. This register is ignored.");
+                        .expect("failed to find register name by key");
+                    warn!("register {reg_name}'s full address is already taken by register {address_holder}. This register is ignored.");
                 }
             }
         }
@@ -365,4 +356,18 @@ pub fn parse() {
 
     let mut file_output = open_output_file();
     write_output(&registers, &mut file_output);
+}
+
+impl Access {
+    /// Implements parsing access type as specified by CMSIS-SVD schema
+    pub fn from_svd_access_type(s: &str) -> Result<Self, ParseError> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            _ => Err(ParseError::InvalidAccessType(s.to_owned())),
+        }
+    }
 }
