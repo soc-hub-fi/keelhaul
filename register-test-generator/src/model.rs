@@ -85,6 +85,7 @@ pub struct Register {
     pub base_addr: u64,
     pub cluster_addr_offset: u64,
     pub reg_addr_offset: u64,
+    // TODO: this should be optional but isn't?
     pub reset_val: u64,
     pub is_read: bool,
     pub is_write: bool,
@@ -121,10 +122,7 @@ impl Register {
 
     /// Get register's unique identifier.
     pub fn uid(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.peripheral_name, self.cluster_name, self.reg_name
-        )
+        self.full_path("-")
     }
 }
 
