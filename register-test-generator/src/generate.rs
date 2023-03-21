@@ -1,5 +1,5 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, Register, Registers};
+use crate::{model::*, GenerateError, Registers};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
@@ -80,7 +80,7 @@ pub struct TestCases {
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r>(&'r Register);
+struct RegTestGenerator<'r>(&'r Box<dyn IsRegister>);
 
 impl<'r> RegTestGenerator<'r> {
     /// Name for the binding to the pointer to the memory mapped register
@@ -98,7 +98,7 @@ impl<'r> RegTestGenerator<'r> {
     }
 
     /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register) -> Self {
+    pub fn from_register(reg: &'r Box<dyn IsRegister>) -> Self {
         Self(reg)
     }
 
@@ -116,7 +116,7 @@ impl<'r> RegTestGenerator<'r> {
     /// reset value
     fn _gen_reset_val_test(&self) -> TokenStream {
         let read_value_binding = Self::read_value_binding();
-        let reset_val = self.0.reset_val;
+        let reset_val = self.0.reset_value();
         quote! {
             assert_eq!(#read_value_binding, #reset_val);
         }
@@ -125,7 +125,7 @@ impl<'r> RegTestGenerator<'r> {
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         Ok(format_ident!(
             "test_{}_{:#x}",
-            self.0.reg_name,
+            self.0.register().name,
             self.0.full_address()?
         ))
     }
@@ -144,13 +144,13 @@ impl<'r> RegTestGenerator<'r> {
     pub fn gen_test_fn(&self) -> Result<TokenStream, GenerateError> {
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", self.0.size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", self.0.size().to_rust_type_str());
         let addr_hex: TokenStream = format!("{:#x}", self.0.full_address()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test = if self.0.is_read {
+        let read_test = if self.0.is_read() {
             self.gen_read_test()
         } else {
             quote!()
@@ -197,7 +197,7 @@ impl<'r> RegTestGenerator<'r> {
     /// ```
     pub fn gen_test_def(&self) -> Result<TokenStream, GenerateError> {
         let fn_name = self.gen_test_fn_ident()?;
-        let periph_name_lc: TokenStream = self.0.peripheral_name.to_lowercase().parse().unwrap();
+        let periph_name_lc: TokenStream = self.0.peripheral().name.to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
         let addr_hex: TokenStream = format!("{:#x}", self.0.full_address()?).parse().unwrap();
         let uid = self.0.uid();
@@ -227,7 +227,7 @@ impl TestCases {
             let test_def_str = format!("{}", test_def);
 
             test_fns_and_defs_by_periph
-                .entry(register.peripheral_name.clone())
+                .entry(register.peripheral().name.clone())
                 .or_insert(vec![])
                 .push((test_fn_str, test_def_str));
         }

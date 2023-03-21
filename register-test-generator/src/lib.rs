@@ -105,7 +105,11 @@ pub enum NotImplementedError {
 
 #[derive(Debug)]
 pub enum AddrRepr<T> {
-    Comps { base: T, cluster: T, offset: T },
+    Comps {
+        base: T,
+        cluster: Option<T>,
+        offset: T,
+    },
     Full(T),
 }
 

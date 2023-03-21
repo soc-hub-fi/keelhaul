@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    get_or_create, validate_path_existence, Access, NotImplementedError, ParseError, PtrWidth,
-    Register, Registers,
+    get_or_create, model::*, validate_path_existence, Access, NotImplementedError, ParseError,
+    PtrWidth, Registers,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -242,6 +242,156 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, ParseError> {
 // fields for the reg in question
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
+fn get_register_properties(path: String, node: Node) -> Result<RegisterProperties, ParseError> {
+    let size = match find_text_in_node_by_tag_name(&node, "size") {
+        Ok(size_str) => {
+            let size: u64 = size_str.parse()?;
+            Some(PtrWidth::from_bit_count(size)?)
+        }
+        Err(_) => None,
+    };
+    let access = Access::from_svd_access_type(
+        maybe_find_text_in_node_by_tag_name(&node, "access").unwrap_or_else(|| {
+            warn!(
+                "register {path} does not have access type. Access type is assumed to be 'read-write'."
+            );
+            "read-write"
+        }),
+    )?;
+    let reset_value =
+        if let Some(value_str) = maybe_find_text_in_node_by_tag_name(&node, "resetValue") {
+            Some(parse_nonneg_int_u64(value_str)?)
+        } else {
+            None
+        };
+    let reset_mask =
+        if let Some(value_str) = maybe_find_text_in_node_by_tag_name(&node, "resetMask") {
+            Some(parse_nonneg_int_u64(value_str)?)
+        } else {
+            None
+        };
+    Ok(RegisterProperties {
+        size,
+        access,
+        reset_value,
+        reset_mask,
+    })
+}
+
+fn process_register(
+    node: Node,
+    reg_filter: &ItemFilter<String>,
+    path_parent: Vec<String>,
+) -> Result<Option<ProcessedRegister>, ParseError> {
+    let name = find_text_in_node_by_tag_name(&node, "name")?.to_string();
+    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
+    let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
+
+    let mut path = path_parent.clone();
+    path.push(name.clone());
+    let path = path.join("-");
+
+    if reg_filter.is_blocked(&name) {
+        info!("register {name} is was not included due to values set in PATH_EXCLUDES");
+        return Ok(None);
+    }
+
+    if name.contains(SVD_ARRAY_REPETITION_PATTERN) {
+        warn!("{}, skipping", NotImplementedError::SvdArray(path));
+        return Ok(None);
+    }
+
+    let properties = get_register_properties(path, node)?;
+
+    let register = ProcessedRegister {
+        name,
+        addr_offset,
+        properties,
+    };
+    Ok(Some(register))
+}
+
+fn process_cluster(
+    node: Node,
+    reg_filter: &ItemFilter<String>,
+    path_parent: Vec<String>,
+) -> Result<Option<ProcessedCluster>, ParseError> {
+    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
+    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
+    let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
+
+    let mut registers = Vec::new();
+    for register_node in node.descendants().filter(|n| n.has_tag_name("register")) {
+        if let Some(register) = process_register(register_node, reg_filter, path_parent.clone())? {
+            registers.push(register);
+        }
+    }
+
+    let cluster = ProcessedCluster {
+        name,
+        addr_offset,
+        registers,
+    };
+    Ok(Some(cluster))
+}
+
+fn process_peripheral(
+    node: Node,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+) -> Result<Option<ProcessedPeripheral>, ParseError> {
+    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
+    let base_addr_str = find_text_in_node_by_tag_name(&node, "baseAddress")?;
+    let base_addr = parse_nonneg_int_u64(base_addr_str)?;
+
+    if periph_filter.is_blocked(&name.to_lowercase()) {
+        info!("Peripheral {name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
+        return Ok(None);
+    }
+
+    let mut clusters = Vec::new();
+    let mut registers = Vec::new();
+    let path = vec![name.clone()];
+
+    let registers_nodes = node
+        .children()
+        .filter(|n| n.has_tag_name("registers"))
+        .collect_vec();
+    assert!(
+        registers_nodes.len() == 1,
+        "Peripheral-node must have one registers-node."
+    );
+    let registers_node = registers_nodes.into_iter().take(1).next().unwrap();
+
+    // Process clusters.
+    for cluster_node in registers_node
+        .children()
+        .filter(|n| n.has_tag_name("cluster"))
+    {
+        if let Some(cluster) = process_cluster(cluster_node, reg_filter, path.clone())? {
+            clusters.push(cluster);
+        }
+    }
+
+    // Process bare registers.
+    for register_node in registers_node
+        .children()
+        .filter(|n| n.has_tag_name("register"))
+    {
+        if let Some(register) = process_register(register_node, reg_filter, path.clone())? {
+            registers.push(register);
+        }
+    }
+
+    let peripheral = ProcessedPeripheral {
+        name,
+        base_addr,
+        registers,
+        clusters,
+    };
+    Ok(Some(peripheral))
+}
+
 /// Find registers from SVD XML-document.
 fn find_registers(
     parsed: &Document,
@@ -249,95 +399,57 @@ fn find_registers(
     periph_filter: &ItemFilter<String>,
 ) -> Result<Registers, ParseError> {
     let mut peripherals = Vec::new();
-    let mut registers = Vec::new();
-    let mut addresses = HashMap::new();
-    let peripheral_nodes = parsed
+    let nodes = parsed
         .descendants()
         .filter(|n| n.has_tag_name("peripheral"));
-
-    for peripheral_node in peripheral_nodes {
-        let base_address_str = find_text_in_node_by_tag_name(&peripheral_node, "baseAddress")?;
-        let base_addr = parse_nonneg_int_u64(base_address_str)?;
-        let peripheral_name = find_text_in_node_by_tag_name(&peripheral_node, "name")?.to_owned();
-        peripherals.push(peripheral_name.to_owned());
-
-        if periph_filter.is_blocked(&peripheral_name.to_lowercase()) {
-            info!("Peripheral {peripheral_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
-            continue;
-        }
-
-        for cluster in peripheral_node
-            .descendants()
-            .filter(|n| n.has_tag_name("cluster"))
-        {
-            let address_offset_cluster_str =
-                find_text_in_node_by_tag_name(&cluster, "addressOffset")?;
-            let cluster_addr_offset = parse_nonneg_int_u64(address_offset_cluster_str)?;
-            let cluster_name = find_text_in_node_by_tag_name(&cluster, "name")?.to_owned();
-            for register in cluster.descendants().filter(|n| n.has_tag_name("register")) {
-                let reg_name = find_text_in_node_by_tag_name(&register, "name")?.to_string();
-
-                //let reg_name = remove_illegal_characters(reg_name);
-                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, reg_name);
-
-                if reg_filter.is_blocked(&reg_name.to_string()) {
-                    info!("register {reg_name} is was not included due to values set in PATH_EXCLUDES");
-                    continue;
-                }
-
-                if reg_name.contains(SVD_ARRAY_REPETITION_PATTERN) {
-                    warn!("{}, skipping", NotImplementedError::SvdArray(reg_path));
-                    continue;
-                }
-
-                let value_reset_str = find_text_in_node_by_tag_name(&register, "resetValue")?;
-                let reset_val = parse_nonneg_int_u64(value_reset_str)?;
-                let address_offset_register_str =
-                    find_text_in_node_by_tag_name(&register, "addressOffset")?;
-                let reg_addr_offset = parse_nonneg_int_u64(address_offset_register_str)?;
-                let access = Access::from_svd_access_type(maybe_find_text_in_node_by_tag_name(&register, "access").unwrap_or_else(|| {
-                    warn!("register {} does not have access type. Access type is assumed to be 'read-write'.", reg_path);
-                    "read-write"
-                }))?;
-                let size_str = find_text_in_node_by_tag_name(&register, "size")?;
-                let size: u64 = size_str.parse()?;
-                let size = PtrWidth::from_bit_count(size)?;
-
-                let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
-                if let Entry::Vacant(entry) = addresses.entry(full_address) {
-                    entry.insert(reg_name.clone());
-                    let register = Register {
-                        peripheral_name: peripheral_name.clone(),
-                        cluster_name: cluster_name.clone(),
-                        reg_name,
-                        base_addr,
-                        cluster_addr_offset,
-                        reg_addr_offset,
-                        reset_val,
-                        is_read: access.is_read(),
-                        is_write: access.is_write(),
-                        size,
-                    };
-                    registers.push(register);
-                } else {
-                    let address_holder = addresses
-                        .get(&full_address)
-                        .expect("failed to find register name by key");
-                    warn!("register {reg_name}'s full address is already taken by register {address_holder}. This register is ignored.");
-                }
-            }
+    for node in nodes {
+        if let Some(peripheral) = process_peripheral(node, periph_filter, reg_filter)? {
+            peripherals.push(peripheral);
         }
     }
     info!("Found {} peripherals:", peripherals.len());
+
+    let mut registers: Vec<Box<dyn IsRegister>> = Vec::new();
     for peripheral in peripherals {
-        info!("    {peripheral}");
+        info!("    {} 0x{:x}", peripheral.name, peripheral.base_addr);
+        for register in &peripheral.registers {
+            registers.push(Box::new(BareRegister {
+                peripheral: peripheral.clone(),
+                register: register.clone(),
+            }));
+        }
+        for cluster in &peripheral.clusters {
+            for register in &cluster.registers {
+                registers.push(Box::new(RegisterUnderCluster {
+                    peripheral: peripheral.clone(),
+                    cluster: cluster.clone(),
+                    register: register.clone(),
+                }));
+            }
+        }
     }
+    let mut addresses = HashMap::new();
+    for register in &registers {
+        // FIXME: unwrap
+        let full_address = register.full_address().unwrap();
+        let full_path = register.full_path("-");
+
+        if let Entry::Vacant(entry) = addresses.entry(full_address) {
+            entry.insert(full_path.clone());
+        } else {
+            let address_holder = addresses
+                .get(&full_address)
+                .expect("failed to find register name by key");
+            warn!("register {full_path}'s full address is already taken by register {address_holder}. This register is ignored.");
+        }
+    }
+
     Ok(registers.into())
 }
 
 /// Write found registers to output file.
-fn write_output(registers: &[Register], file: &mut File) {
-    let registers_as_hashmaps = registers.iter().map(Register::to_hashmap).collect_vec();
+fn write_output(registers: &[Box<dyn IsRegister>], file: &mut File) {
+    let registers_as_hashmaps = registers.iter().map(|r| r.to_hashmap()).collect_vec();
     let output = json::stringify(registers_as_hashmaps);
     file.write_all(output.as_bytes())
         .expect("Failed to write to output file.");
