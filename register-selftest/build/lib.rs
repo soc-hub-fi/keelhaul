@@ -4,7 +4,9 @@ mod logger;
 
 use fs_err::{self as fs, read_to_string, File};
 use log::LevelFilter;
-use register_test_generator::{validate_path_existence, JsonParseError, Registers, TestCases};
+use register_test_generator::{
+    validate_path_existence, JsonParseError, Registers, TestCases, TestConfig,
+};
 use std::{
     env,
     io::{self, Write},
@@ -40,7 +42,7 @@ fn get_input_json() -> PathBuf {
 }
 
 /// Get register objects.
-fn get_registers() -> Result<Registers, JsonParseError> {
+fn get_registers() -> Result<Registers<u32>, JsonParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
@@ -83,7 +85,7 @@ pub fn main() {
     register_test_generator::parse();
     let mut file_output = get_output_file();
     let registers = get_registers().unwrap();
-    let test_cases = TestCases::from_registers(&registers).unwrap();
+    let test_cases = TestCases::from_registers(&registers, &TestConfig::default()).unwrap();
     write_output(&test_cases.test_cases, &mut file_output);
     let path = get_path_to_output();
     rustfmt_file(&path)

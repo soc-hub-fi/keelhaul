@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    get_or_create, validate_path_existence, Access, NotImplementedError, ParseError, PtrWidth,
-    Register, Registers,
+    get_or_create, validate_path_existence, Access, AddrRepr, NotImplementedError, ParseError,
+    PtrWidth, RegPath, Register, Registers,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -247,7 +247,7 @@ fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
-) -> Result<Registers, ParseError> {
+) -> Result<Registers<u32>, ParseError> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
@@ -278,8 +278,15 @@ fn find_registers(
                 let reg_name = find_text_in_node_by_tag_name(&register, "name")?.to_string();
 
                 //let reg_name = remove_illegal_characters(reg_name);
-                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, reg_name);
+                let path = RegPath::from_components(
+                    peripheral_name.clone(),
+                    Some(cluster_name.clone()),
+                    reg_name.clone(),
+                );
+                let reg_path = path.join("-");
 
+                // FIXME: we match against only the register's name, not the path. This is not a
+                // great way to exclude registers. We should match against the entire path.
                 if reg_filter.is_blocked(&reg_name.to_string()) {
                     info!("register {reg_name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
@@ -304,18 +311,25 @@ fn find_registers(
                 let size = PtrWidth::from_bit_count(size)?;
 
                 let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
+                let addr = AddrRepr::<u64>::Comps {
+                    base: base_addr,
+                    // ???: cluster assumed to always exist
+                    cluster: Some(cluster_addr_offset),
+                    offset: reg_addr_offset,
+                };
+                let addr = AddrRepr::<u32>::try_from(addr.clone())
+                    .map_err(|_| ParseError::AddrOverflow(path.join("-"), addr.clone()))?;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     entry.insert(reg_name.clone());
                     let register = Register {
-                        peripheral_name: peripheral_name.clone(),
-                        cluster_name: cluster_name.clone(),
-                        reg_name,
-                        base_addr,
-                        cluster_addr_offset,
-                        reg_addr_offset,
-                        reset_val,
-                        is_read: access.is_read(),
-                        is_write: access.is_write(),
+                        // ???: reset value assumed to always exist
+                        reset_val: Some(reset_val),
+                        // ???: I noticed that cluster is assumed to always exist even though it's
+                        // optional in the data model. Wrap in Some for now and expect breakage
+                        // somewhere prior to this line.
+                        path,
+                        addr,
+                        access,
                         size,
                     };
                     registers.push(register);
@@ -336,7 +350,7 @@ fn find_registers(
 }
 
 /// Write found registers to output file.
-fn write_output(registers: &[Register], file: &mut File) {
+fn write_output(registers: &[Register<u32>], file: &mut File) {
     let registers_as_hashmaps = registers.iter().map(Register::to_hashmap).collect_vec();
     let output = json::stringify(registers_as_hashmaps);
     file.write_all(output.as_bytes())

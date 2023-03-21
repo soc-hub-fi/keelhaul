@@ -4,7 +4,10 @@ use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+};
 
 /// Remove illegal characters from register name.
 ///
@@ -76,13 +79,46 @@ pub struct TestCases {
     pub test_case_count: usize,
 }
 
-/// Generates test cases based on a [Register] definition
+#[derive(Hash, PartialEq, Eq)]
+enum RegTestKind {
+    Read,
+    Reset,
+}
+
+enum FailureImplementation {
+    ReturnValue,
+    Panic,
+}
+
+pub struct TestConfig {
+    /// What types of tests to generate
+    ///
+    /// [RegTestKind::Read]: read register value (may cause e.g., bus failure or hang)
+    /// [RegTestKind::Reset]: read register value and verify it matches with reset value
+    reg_test_kinds: HashSet<RegTestKind>,
+    /// What to do on failure:
+    ///
+    /// [FailureImplementation::ReturnValue]: just return the possibly incorrect value
+    /// [FailureImplementation::Panic]: panic on failure (e.g., through assert)
+    on_fail: FailureImplementation,
+}
+
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self {
+            reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
+            on_fail: FailureImplementation::ReturnValue,
+        }
+    }
+}
+
+/// Generates test cases based on a [Register] definition and [TestConfig]
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r>(&'r Register);
+struct RegTestGenerator<'r, 'c>(&'r Register<u32>, &'c TestConfig);
 
-impl<'r> RegTestGenerator<'r> {
+impl<'r, 'c> RegTestGenerator<'r, 'c> {
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
@@ -98,8 +134,8 @@ impl<'r> RegTestGenerator<'r> {
     }
 
     /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register) -> Self {
-        Self(reg)
+    pub fn from_register(reg: &'r Register<u32>, config: &'c TestConfig) -> Self {
+        Self(reg, config)
     }
 
     /// Generates a test that reads an appropriate amount of bytes from the
@@ -114,57 +150,70 @@ impl<'r> RegTestGenerator<'r> {
 
     /// Generates a test that verifies that the read value matches with reported
     /// reset value
-    fn _gen_reset_val_test(&self) -> TokenStream {
+    fn gen_reset_val_test(&self, config: &TestConfig) -> TokenStream {
+        // Reset value test requires read test to be present. Can't check for
+        // reset value unless it's been read before.
+        debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
+
         let read_value_binding = Self::read_value_binding();
         let reset_val = self.0.reset_val;
-        quote! {
-            assert_eq!(#read_value_binding, #reset_val);
+        match config.on_fail {
+            // If reset value is incorrect, panic
+            FailureImplementation::Panic => quote! {
+                assert_eq!(#read_value_binding, #reset_val);
+            },
+            // If reset value is incorrect, return it
+            FailureImplementation::ReturnValue => quote! {
+                if #read_value_binding != #reset_val {
+                    return #read_value_binding;
+                }
+            },
         }
     }
 
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
-        Ok(format_ident!(
-            "test_{}_{:#x}",
-            self.0.reg_name,
-            self.0.full_address()?
-        ))
+        let reg = self.0;
+        let full_addr: Result<u32, _> = reg.full_addr();
+        Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
     }
 
     /// Generates a test function
     ///
     /// Example output:
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// pub fn test_something_0xdeadbeef() {
+    ///     #[allow(unused)]
     ///     let reg_ptr =*mut u32 = 0xdeadbeef as *mut u32;
     ///
     ///     let _read_value = unsafe { read_volatile(reg_ptr) };
     /// }
     /// ```
     pub fn gen_test_fn(&self) -> Result<TokenStream, GenerateError> {
+        let (reg, config) = (self.0, self.1);
+
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", self.0.size.to_rust_type_str());
-        let addr_hex: TokenStream = format!("{:#x}", self.0.full_address()?).parse().unwrap();
+        let reg_size_ty = format_ident!("{}", reg.size.to_rust_type_str());
+        let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test = if self.0.is_read {
-            self.gen_read_test()
-        } else {
-            quote!()
-        };
+        let read_test =
+            if reg.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Read) {
+                self.gen_read_test()
+            } else {
+                quote!()
+            };
 
-        // HACK: do not generate reset value test for now; deadline pressure :P
-        /*
         // Only generate reset value test if register is readable
-        let reset_val_test = if self.0.is_read {
-            self.gen_reset_val_test()
-        } else {
-            quote!()
-        };
-        */
+        let reset_val_test =
+            if self.0.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Reset) {
+                self.gen_reset_val_test(config)
+            } else {
+                quote!()
+            };
 
         let ret = quote! {
             #[allow(non_snake_case)]
@@ -173,7 +222,7 @@ impl<'r> RegTestGenerator<'r> {
                 let #ptr_binding: *mut #reg_size_ty = #addr_hex as *mut #reg_size_ty;
 
                 #read_test
-                //#reset_val_test
+                #reset_val_test
             }
         };
         Ok(ret)
@@ -183,12 +232,7 @@ impl<'r> RegTestGenerator<'r> {
     ///
     /// Example output:
     ///
-    /// ```rust
-    /// pub fn test_something_0xdeadbeef() {
-    ///     let reg_ptr =*mut u32 = 0xdeadbeef as *mut u32;
-    ///
-    ///     let _read_value = unsafe { read_volatile(reg_ptr) };
-    /// }
+    /// ```rust,no_run
     /// TestCase {
     ///     function: foo::test_something_0xdeafbeef,
     ///     addr: 0xdeafbeef,
@@ -197,9 +241,9 @@ impl<'r> RegTestGenerator<'r> {
     /// ```
     pub fn gen_test_def(&self) -> Result<TokenStream, GenerateError> {
         let fn_name = self.gen_test_fn_ident()?;
-        let periph_name_lc: TokenStream = self.0.peripheral_name.to_lowercase().parse().unwrap();
+        let periph_name_lc: TokenStream = self.0.path.periph.to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
-        let addr_hex: TokenStream = format!("{:#x}", self.0.full_address()?).parse().unwrap();
+        let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
         let uid = self.0.uid();
 
         let def = quote! {
@@ -215,10 +259,13 @@ impl<'r> RegTestGenerator<'r> {
 
 impl TestCases {
     /// Generate test cases for each register.
-    pub fn from_registers(registers: &Registers) -> Result<TestCases, GenerateError> {
+    pub fn from_registers(
+        registers: &Registers<u32>,
+        config: &TestConfig,
+    ) -> Result<TestCases, GenerateError> {
         let mut test_fns_and_defs_by_periph = HashMap::new();
         for register in registers.iter() {
-            let test_gen = RegTestGenerator::from_register(register);
+            let test_gen = RegTestGenerator::from_register(register, config);
 
             let test_fn = test_gen.gen_test_fn()?;
             let test_fn_str = format!("{}", test_fn);
@@ -227,7 +274,7 @@ impl TestCases {
             let test_def_str = format!("{}", test_def);
 
             test_fns_and_defs_by_periph
-                .entry(register.peripheral_name.clone())
+                .entry(register.path.periph.clone())
                 .or_insert(vec![])
                 .push((test_fn_str, test_def_str));
         }
