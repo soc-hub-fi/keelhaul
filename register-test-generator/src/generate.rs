@@ -156,7 +156,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
 
         let read_value_binding = Self::read_value_binding();
-        let reset_val = self.0.reset_val;
+        let reset_val = self.0.properties.reset_value;
         match config.on_fail {
             // If reset value is incorrect, panic
             FailureImplementation::Panic => quote! {
@@ -194,26 +194,28 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", reg.size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", reg.properties.size.to_rust_type_str());
         let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test =
-            if reg.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Read) {
-                self.gen_read_test()
-            } else {
-                quote!()
-            };
+        let read_test = if reg.properties.access.is_read()
+            && config.reg_test_kinds.contains(&RegTestKind::Read)
+        {
+            self.gen_read_test()
+        } else {
+            quote!()
+        };
 
         // Only generate reset value test if register is readable
-        let reset_val_test =
-            if self.0.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Reset) {
-                self.gen_reset_val_test(config)
-            } else {
-                quote!()
-            };
+        let reset_val_test = if self.0.properties.access.is_read()
+            && config.reg_test_kinds.contains(&RegTestKind::Reset)
+        {
+            self.gen_reset_val_test(config)
+        } else {
+            quote!()
+        };
 
         let ret = quote! {
             #[allow(non_snake_case)]

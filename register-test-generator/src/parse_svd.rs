@@ -2,7 +2,8 @@
 
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
-    NotImplementedError, PtrWidth, RegPath, Register, Registers, SvdParseError,
+    NotImplementedError, Protection, PtrWidth, RegPath, Register, RegisterPropertiesGroup,
+    RegisterPropertiesGroupBuilder, Registers, SvdParseError,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -14,6 +15,7 @@ use std::{
     fs::read_to_string,
     panic,
     path::PathBuf,
+    str::FromStr,
 };
 
 /// Try to extract path to excludes-file from environment variable.
@@ -253,6 +255,7 @@ struct RegisterParent {
     cluster_name: Option<String>,
     peripheral_base: u64,
     cluster_offset: Option<u64>,
+    properties: RegisterPropertiesGroupBuilder,
 }
 
 fn process_register(
@@ -290,8 +293,84 @@ fn process_register(
         return Ok(None);
     }
 
-    let reset_val = match find_text_in_node_by_tag_name(&node, "resetValue") {
-        Ok(value) => Some(parse_nonneg_int_u64(value)?),
+    // Inherit from parent and replace if found.
+    let mut properties = parent.properties.clone();
+    if let Ok(size) = find_text_in_node_by_tag_name(&node, "size") {
+        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
+    };
+    if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
+        properties.access = Some(Access::from_svd_access_type(access).unwrap());
+    };
+    if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
+        properties.protection = Some(Protection::from_str(protection).unwrap());
+    };
+    if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
+        let reset_value = parse_nonneg_int_u64(reset_value)?;
+        properties.reset_value = Some(reset_value);
+    };
+    if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
+        let reset_mask = parse_nonneg_int_u64(reset_mask)?;
+        properties.reset_mask = Some(reset_mask);
+    };
+
+    let size = match properties.size {
+        Some(value) => value,
+        None => {
+            warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
+            PtrWidth::U32
+        }
+    };
+    let access = match properties.access {
+        Some(value) => value,
+        None => {
+            warn!("register {reg_path} or it's parents have not defined access. Access is assumed to be 'read-write'.");
+            Access::ReadWrite
+        }
+    };
+    let protection = match properties.protection {
+        Some(value) => value,
+        None => {
+            warn!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
+            Protection::NonSecureOrSecure
+        }
+    };
+    let reset_value = match properties.reset_value {
+        Some(value) => value,
+        None => {
+            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be 'u32'.");
+            0
+        }
+    };
+    let reset_mask = match properties.reset_mask {
+        Some(value) => value,
+        None => {
+            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be 'u64::MAX'.");
+            u64::MAX
+        }
+    };
+
+    /* FIXME: this block should be used
+    let size = properties.size.expect(&format!(
+        "register {reg_path} or it's parents have not defined size"
+    ));
+    let access = properties.access.expect(&format!(
+        "register {reg_path} or it's parents have not defined access"
+    ));
+    let protection = properties.protection.expect(&format!(
+        "register {reg_path} or it's parents have not defined protection"
+    ));
+    let reset_value = properties.reset_value.expect(&format!(
+        "register {reg_path} or it's parents have not defined reset value"
+    ));
+    let reset_mask = properties.reset_mask.expect(&format!(
+        "register {reg_path} or it's parents have not defined reset mask"
+    ));
+    */
+
+    /*
+    // FIXME: maybe handle group parsing somewhere else
+    let size = match find_text_in_node_by_tag_name(&node, "size") {
+        Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?)?),
         Err(_) => None,
     };
     let access = Access::from_svd_access_type(
@@ -318,23 +397,41 @@ fn process_register(
             warn!("register {reg_path} does not have size. Size is assumed to be 'u32'.");
             PtrWidth::U32
         }
+    }?;
+    let protection = match find_text_in_node_by_tag_name(&node, "protection") {
+        Ok(protection) => Some(Protection::from_str(protection)?),
+        Err(_) => None,
     };
+    let reset_value = match find_text_in_node_by_tag_name(&node, "resetValue") {
+        Ok(value) => Some(parse_nonneg_int_u64(value)?),
+        Err(_) => None,
+    };
+    let reset_mask = match find_text_in_node_by_tag_name(&node, "resetMask") {
+        Ok(value) => Some(parse_nonneg_int_u64(value)?),
+        Err(_) => None,
+    };
+    */
 
     let addr = AddrRepr::<u64>::Comps {
         base: parent.peripheral_base,
-        // ???: cluster assumed to always exist
         cluster: parent.cluster_offset,
         offset: addr_offset,
     };
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
 
+    let properties = RegisterPropertiesGroup {
+        size,
+        access,
+        protection,
+        reset_value,
+        reset_mask,
+    };
+
     let register = Register {
-        reset_val,
         path,
         addr,
-        access,
-        size,
+        properties,
     };
     Ok(Some(register))
 }
@@ -349,11 +446,32 @@ fn process_cluster(
     let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
     let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
 
+    // Inherit from parent and replace if found.
+    let mut properties = parent.properties.clone();
+    if let Ok(size) = find_text_in_node_by_tag_name(&node, "size") {
+        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
+    };
+    if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
+        properties.access = Some(Access::from_svd_access_type(access).unwrap());
+    };
+    if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
+        properties.protection = Some(Protection::from_str(protection).unwrap());
+    };
+    if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
+        let reset_value = parse_nonneg_int_u64(reset_value)?;
+        properties.reset_value = Some(reset_value);
+    };
+    if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
+        let reset_mask = parse_nonneg_int_u64(reset_mask)?;
+        properties.reset_mask = Some(reset_mask);
+    };
+
     let current = RegisterParent {
         peripheral_name: parent.peripheral_name.clone(),
         cluster_name: Some(name),
         peripheral_base: parent.peripheral_base,
         cluster_offset: Some(addr_offset),
+        properties,
     };
 
     let mut registers = Vec::new();
@@ -380,11 +498,53 @@ fn process_peripheral(
         return Ok(None);
     }
 
+    let size = match find_text_in_node_by_tag_name(&node, "size") {
+        // TODO: handle error
+        Ok(value) => {
+            warn!("p {value}");
+            Some(PtrWidth::from_bit_count(value.parse()?).unwrap())
+        }
+        Err(_) => None,
+    };
+    let access = match find_text_in_node_by_tag_name(&node, "access") {
+        // TODO: handle error
+        Ok(value) => Some(Access::from_svd_access_type(value).unwrap()),
+        Err(_) => None,
+    };
+    let protection = match find_text_in_node_by_tag_name(&node, "protection") {
+        // TODO: handle error
+        Ok(value) => Some(Protection::from_str(value).unwrap()),
+        Err(_) => None,
+    };
+    let reset_value = match find_text_in_node_by_tag_name(&node, "resetValue") {
+        Ok(value) => {
+            let value = parse_nonneg_int_u64(value)?;
+            Some(value)
+        }
+        Err(_) => None,
+    };
+    let reset_mask = match find_text_in_node_by_tag_name(&node, "resetMask") {
+        Ok(value) => {
+            let value = parse_nonneg_int_u64(value)?;
+            Some(value)
+        }
+        Err(_) => None,
+    };
+
+    let properties = RegisterPropertiesGroupBuilder {
+        size,
+        access,
+        protection,
+        reset_value,
+        reset_mask,
+    };
+
     let current = RegisterParent {
         peripheral_name: name,
         cluster_name: None,
         peripheral_base: base_addr,
         cluster_offset: None,
+        properties,
     };
 
     let registers_nodes = node
