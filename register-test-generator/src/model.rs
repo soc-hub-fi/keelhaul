@@ -1,5 +1,6 @@
 //! Encodes information about memory mapped registers. This information can be
 //! used to generate test cases.
+use itertools::Itertools;
 use log::warn;
 use std::ops;
 
@@ -77,11 +78,38 @@ impl PtrWidth {
     }
 }
 
+/// Hierarchical representation of a register's path
+///
+/// E.g., PERIPHERAL-CLUSTER-REG
+pub struct RegPath {
+    pub periph: String,
+    pub cluster: Option<String>,
+    pub reg: String,
+}
+
+impl RegPath {
+    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
+        Self {
+            periph,
+            cluster,
+            reg,
+        }
+    }
+
+    pub fn join(&self, sep: &str) -> String {
+        let mut v = vec![&self.periph];
+        if let Some(cl) = self.cluster.as_ref() {
+            v.push(cl);
+        }
+        v.push(&self.reg);
+
+        v.into_iter().join(sep)
+    }
+}
+
 /// Represents a single memory-mapped I/O register.
 pub struct Register {
-    pub peripheral_name: String,
-    pub cluster_name: String,
-    pub reg_name: String,
+    pub path: RegPath,
     pub base_addr: u64,
     pub cluster_addr_offset: u64,
     pub reg_addr_offset: u64,
@@ -99,7 +127,7 @@ impl Register {
         let cluster = self.cluster_addr_offset;
         let offset = self.reg_addr_offset;
         let err = GenerateError::AddrOverflow(
-            self.full_path("-"),
+            self.path.join("-"),
             AddrRepr::Comps {
                 base,
                 cluster,
@@ -111,18 +139,9 @@ impl Register {
             .ok_or(err)
     }
 
-    pub fn full_path(&self, sep: &str) -> String {
-        [
-            self.peripheral_name.clone(),
-            self.cluster_name.clone(),
-            self.reg_name.clone(),
-        ]
-        .join(sep)
-    }
-
     /// Get register's unique identifier.
     pub fn uid(&self) -> String {
-        self.full_path("-")
+        self.path.join("-")
     }
 }
 

@@ -2,7 +2,7 @@
 
 use crate::{
     get_or_create, validate_path_existence, Access, NotImplementedError, ParseError, PtrWidth,
-    Register, Registers,
+    RegPath, Register, Registers,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -278,8 +278,15 @@ fn find_registers(
                 let reg_name = find_text_in_node_by_tag_name(&register, "name")?.to_string();
 
                 //let reg_name = remove_illegal_characters(reg_name);
-                let reg_path = format!("{}-{}-{}", peripheral_name, cluster_name, reg_name);
+                let path = RegPath::from_components(
+                    peripheral_name.clone(),
+                    Some(cluster_name.clone()),
+                    reg_name.clone(),
+                );
+                let reg_path = path.join("-");
 
+                // FIXME: we match against only the register's name, not the path. This is not a
+                // great way to exclude registers. We should match against the entire path.
                 if reg_filter.is_blocked(&reg_name.to_string()) {
                     info!("register {reg_name} is was not included due to values set in PATH_EXCLUDES");
                     continue;
@@ -307,9 +314,10 @@ fn find_registers(
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     entry.insert(reg_name.clone());
                     let register = Register {
-                        peripheral_name: peripheral_name.clone(),
-                        cluster_name: cluster_name.clone(),
-                        reg_name,
+                        // ???: I noticed that cluster is assumed to always exist even though it's
+                        // optional in the data model. Wrap in Some for now and expect breakage
+                        // somewhere prior to this line.
+                        path,
                         base_addr,
                         cluster_addr_offset,
                         reg_addr_offset,

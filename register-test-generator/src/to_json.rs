@@ -6,9 +6,11 @@ impl Register {
     /// Transform register structure to hashmap.
     pub fn to_hashmap(&self) -> HashMap<&str, String> {
         HashMap::from([
-            ("name_peripheral", self.peripheral_name.clone()),
-            ("name_cluster", self.cluster_name.clone()),
-            ("name_register", self.reg_name.clone()),
+            ("name_peripheral", self.path.periph.clone()),
+            // ???: cluster is assumed to always exist. This assumption is
+            // incorrect and will break.
+            ("name_cluster", self.path.cluster.as_ref().unwrap().clone()),
+            ("name_register", self.path.reg.clone()),
             ("address_base", self.base_addr.to_string()),
             (
                 "address_offset_cluster",

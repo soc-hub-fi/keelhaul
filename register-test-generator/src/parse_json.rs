@@ -1,6 +1,6 @@
 use json::JsonValue;
 
-use crate::{JsonParseError, PtrWidth, Register, Registers};
+use crate::{JsonParseError, PtrWidth, RegPath, Register, Registers};
 
 impl TryFrom<&json::object::Object> for Register {
     type Error = JsonParseError;
@@ -23,9 +23,10 @@ impl TryFrom<&json::object::Object> for Register {
         let can_write = get_field(value, "can_write")?.parse()?;
         let size = PtrWidth::try_from_rust_type_str(&get_field(value, "size")?)?;
         Ok(Register {
-            peripheral_name: name_peripheral,
-            cluster_name: name_cluster,
-            reg_name: name_register,
+            // ???: I noticed that the parser assumes cluster to always exist even though it's
+            // optional in the data model. Wrap in Some for now and expect breakage somewhere prior
+            // to this line.
+            path: RegPath::from_components(name_peripheral, Some(name_cluster), name_register),
             base_addr: address_base,
             cluster_addr_offset: address_offset_cluster,
             reg_addr_offset: address_offset_register,
