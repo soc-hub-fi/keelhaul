@@ -75,6 +75,8 @@ pub enum JsonParseError {
     ParseBool(#[from] ParseBoolError),
     #[error("{0} is not a known Rust type string")]
     ParseTypeStr(String),
+    #[error("could not parse")]
+    ParseError(#[from] ParseError),
 }
 
 #[derive(Error, Debug)]
@@ -87,12 +89,14 @@ pub enum ParseError {
     InvalidInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
-    #[error("invalid access type: {0}")]
+    #[error("invalid CMSIS-SVD access type: {0}")]
     InvalidAccessType(String),
     #[error("failed to convert {0} bits into a valid pointer width")]
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
+    #[error("address for {0} does not fit in architecture pointer: {1:?}")]
+    AddrOverflow(String, AddrRepr<u64>),
 }
 
 #[derive(Error, Debug)]
@@ -103,18 +107,8 @@ pub enum NotImplementedError {
     SvdArray(String),
 }
 
-#[derive(Debug)]
-pub enum AddrRepr<T> {
-    Comps {
-        base: T,
-        cluster: Option<T>,
-        offset: T,
-    },
-    Full(T),
-}
-
 #[derive(Error, Debug)]
 pub enum GenerateError {
-    #[error("generated address for {0} does not fit in a 64-bit pointer: {1:?}")]
+    #[error("generated address for {0} does not fit in architecture pointer: {1:?}")]
     AddrOverflow(String, AddrRepr<u64>),
 }

@@ -116,7 +116,7 @@ impl Default for TestConfig {
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r, 'c>(&'r Register, &'c TestConfig);
+struct RegTestGenerator<'r, 'c>(&'r Register<u32>, &'c TestConfig);
 
 impl<'r, 'c> RegTestGenerator<'r, 'c> {
     /// Name for the binding to the pointer to the memory mapped register
@@ -134,7 +134,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     }
 
     /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register, config: &'c TestConfig) -> Self {
+    pub fn from_register(reg: &'r Register<u32>, config: &'c TestConfig) -> Self {
         Self(reg, config)
     }
 
@@ -172,19 +172,18 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     }
 
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
-        Ok(format_ident!(
-            "test_{}_{:#x}",
-            self.0.path.reg,
-            self.0.full_address()?
-        ))
+        let reg = self.0;
+        let full_addr: Result<u32, _> = reg.full_addr();
+        Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
     }
 
     /// Generates a test function
     ///
     /// Example output:
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// pub fn test_something_0xdeadbeef() {
+    ///     #[allow(unused)]
     ///     let reg_ptr =*mut u32 = 0xdeadbeef as *mut u32;
     ///
     ///     let _read_value = unsafe { read_volatile(reg_ptr) };
@@ -196,20 +195,21 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
         let reg_size_ty = format_ident!("{}", reg.size.to_rust_type_str());
-        let addr_hex: TokenStream = format!("{:#x}", reg.full_address()?).parse().unwrap();
+        let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test = if reg.is_read && config.reg_test_kinds.contains(&RegTestKind::Read) {
-            self.gen_read_test()
-        } else {
-            quote!()
-        };
+        let read_test =
+            if reg.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Read) {
+                self.gen_read_test()
+            } else {
+                quote!()
+            };
 
         // Only generate reset value test if register is readable
         let reset_val_test =
-            if self.0.is_read && config.reg_test_kinds.contains(&RegTestKind::Reset) {
+            if self.0.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Reset) {
                 self.gen_reset_val_test(config)
             } else {
                 quote!()
@@ -232,12 +232,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///
     /// Example output:
     ///
-    /// ```rust
-    /// pub fn test_something_0xdeadbeef() {
-    ///     let reg_ptr =*mut u32 = 0xdeadbeef as *mut u32;
-    ///
-    ///     let _read_value = unsafe { read_volatile(reg_ptr) };
-    /// }
+    /// ```rust,no_run
     /// TestCase {
     ///     function: foo::test_something_0xdeafbeef,
     ///     addr: 0xdeafbeef,
@@ -248,7 +243,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         let fn_name = self.gen_test_fn_ident()?;
         let periph_name_lc: TokenStream = self.0.path.periph.to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
-        let addr_hex: TokenStream = format!("{:#x}", self.0.full_address()?).parse().unwrap();
+        let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
         let uid = self.0.uid();
 
         let def = quote! {
@@ -265,7 +260,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 impl TestCases {
     /// Generate test cases for each register.
     pub fn from_registers(
-        registers: &Registers,
+        registers: &Registers<u32>,
         config: &TestConfig,
     ) -> Result<TestCases, GenerateError> {
         let mut test_fns_and_defs_by_periph = HashMap::new();

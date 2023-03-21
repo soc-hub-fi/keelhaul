@@ -2,9 +2,9 @@
 //! used to generate test cases.
 use itertools::Itertools;
 use log::warn;
-use std::ops;
+use std::{ops, str::FromStr};
 
-use crate::{AddrRepr, GenerateError, ParseError};
+use crate::{GenerateError, ParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -49,6 +49,36 @@ impl Access {
     }
 }
 
+impl FromStr for Access {
+    type Err = ParseError;
+
+    /// Convert from CMSIS-SVD / IP-XACT `accessType` string
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read-only" => Ok(Access::ReadOnly),
+            "write-only" => Ok(Access::WriteOnly),
+            "read-write" => Ok(Access::ReadWrite),
+            "writeOnce" => Ok(Access::WriteOnce),
+            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            s => Err(ParseError::InvalidAccessType(s.to_owned())),
+        }
+    }
+}
+
+impl ToString for Access {
+    /// Convert into CMSIS-SVD / IP-XACT `accessType` string
+    fn to_string(&self) -> String {
+        match self {
+            Access::ReadOnly => "read-only",
+            Access::WriteOnly => "write-only",
+            Access::ReadWrite => "read-write",
+            Access::WriteOnce => "writeOnce",
+            Access::ReadWriteOnce => "read-writeOnce",
+        }
+        .to_string()
+    }
+}
+
 pub enum PtrWidth {
     U8,
     U16,
@@ -80,7 +110,7 @@ impl PtrWidth {
 
 /// Hierarchical representation of a register's path
 ///
-/// E.g., PERIPHERAL-CLUSTER-REG
+/// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
 pub struct RegPath {
     pub periph: String,
     pub cluster: Option<String>,
@@ -96,6 +126,7 @@ impl RegPath {
         }
     }
 
+    /// Joins the path elements into one string
     pub fn join(&self, sep: &str) -> String {
         let mut v = vec![&self.periph];
         if let Some(cl) = self.cluster.as_ref() {
@@ -107,56 +138,134 @@ impl RegPath {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum AddrRepr<T: num::CheckedAdd> {
+    Comps {
+        base: T,
+        cluster: Option<T>,
+        offset: T,
+    },
+    Full(T),
+}
+
+impl<T> AddrRepr<T>
+where
+    T: num::CheckedAdd + Clone,
+{
+    /// Get register's absolute memory address
+    ///
+    /// Returns None on address overflow.
+    pub fn full(&self) -> Option<T> {
+        match self {
+            AddrRepr::Full(addr) => Some(addr.clone()),
+            AddrRepr::Comps {
+                base,
+                cluster,
+                offset,
+            } => {
+                let mut addr = Some(base.clone());
+                if let Some(cl) = cluster {
+                    addr = addr.and_then(|x| x.checked_add(cl));
+                }
+                addr.and_then(|x| x.checked_add(offset))
+            }
+        }
+    }
+}
+
+// Allow conversion from a 32-bit address representation to a 64-bit
+// representation to simplify debug implementations
+impl From<AddrRepr<u32>> for AddrRepr<u64> {
+    fn from(value: AddrRepr<u32>) -> Self {
+        match value {
+            AddrRepr::Comps {
+                base,
+                cluster,
+                offset,
+            } => AddrRepr::Comps {
+                base: base.into(),
+                cluster: cluster.map(|x| x.into()),
+                offset: offset.into(),
+            },
+            AddrRepr::Full(u) => AddrRepr::Full(u.into()),
+        }
+    }
+}
+
+// 64-bit address can be fallibly converted to a 32-bit address. Returns Err on
+// overflow.
+impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
+    type Error = <u64 as TryInto<u32>>::Error;
+
+    fn try_from(value: AddrRepr<u64>) -> Result<Self, Self::Error> {
+        match value {
+            AddrRepr::Comps {
+                base,
+                cluster,
+                offset,
+            } => {
+                let base: u32 = base.try_into()?;
+                let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
+                let offset: u32 = offset.try_into()?;
+                Ok(AddrRepr::Comps {
+                    base,
+                    cluster,
+                    offset,
+                })
+            }
+            AddrRepr::Full(u) => Ok(AddrRepr::Full(u.try_into()?)),
+        }
+    }
+}
+
 /// Represents a single memory-mapped I/O register.
-pub struct Register {
+pub struct Register<T: num::CheckedAdd> {
+    /// Hierarchical path, e.g. `PERIPH-CLUSTER-REG`
     pub path: RegPath,
-    pub base_addr: u64,
-    pub cluster_addr_offset: u64,
-    pub reg_addr_offset: u64,
-    // TODO: this should be optional but isn't?
-    pub reset_val: u64,
-    pub is_read: bool,
-    pub is_write: bool,
+    /// Physical address of the register
+    pub addr: AddrRepr<T>,
+    /// Optional reset value
+    ///
+    /// This is the value the register will have after device reset
+    pub reset_val: Option<u64>,
+    /// Read-write or read-only etc.
+    pub access: Access,
+    /// The size or width of this register, e.g. 8-, 16-, 32-, or 64-bit
     pub size: PtrWidth,
 }
 
-impl Register {
-    /// Get register's absolute memory address.
-    pub fn full_address(&self) -> Result<u64, GenerateError> {
-        let base = self.base_addr;
-        let cluster = self.cluster_addr_offset;
-        let offset = self.reg_addr_offset;
-        let err = GenerateError::AddrOverflow(
+impl<T> Register<T>
+where
+    T: num::CheckedAdd + Clone,
+    AddrRepr<u64>: From<AddrRepr<T>>,
+{
+    /// Get register's absolute memory address
+    pub fn full_addr(&self) -> Result<T, GenerateError> {
+        self.addr.full().ok_or(GenerateError::AddrOverflow(
             self.path.join("-"),
-            AddrRepr::Comps {
-                base,
-                // ???: cluster is assumed to always exist. This is incorrect.
-                cluster: Some(cluster),
-                offset,
-            },
-        );
-        base.checked_add(cluster)
-            .and_then(|x| x.checked_add(offset))
-            .ok_or(err)
+            self.addr.clone().into(),
+        ))
     }
 
-    /// Get register's unique identifier.
+    /// Get register's unique identifier
+    ///
+    /// Constructed from the hierarchical path, e.g., PERIPH-CLUSTER-REG.
     pub fn uid(&self) -> String {
         self.path.join("-")
     }
 }
 
 /// A list of registers parsed from SVD or IP-XACT (newtype).
-pub struct Registers(Vec<Register>);
+pub struct Registers<T: num::CheckedAdd>(Vec<Register<T>>);
 
-impl From<Vec<Register>> for Registers {
-    fn from(value: Vec<Register>) -> Self {
+impl<T: num::CheckedAdd> From<Vec<Register<T>>> for Registers<T> {
+    fn from(value: Vec<Register<T>>) -> Self {
         Self(value)
     }
 }
 
-impl ops::Deref for Registers {
-    type Target = Vec<Register>;
+impl<T: num::CheckedAdd> ops::Deref for Registers<T> {
+    type Target = Vec<Register<T>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

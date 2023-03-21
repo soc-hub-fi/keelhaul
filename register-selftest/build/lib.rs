@@ -42,7 +42,7 @@ fn get_input_json() -> PathBuf {
 }
 
 /// Get register objects.
-fn get_registers() -> Result<Registers, JsonParseError> {
+fn get_registers() -> Result<Registers<u32>, JsonParseError> {
     let input_json = get_input_json();
     let json_content = read_to_string(input_json).expect("Failed to read parser results.");
     let parsed_json = json::parse(&json_content).expect("Failed to parse parser results.");
