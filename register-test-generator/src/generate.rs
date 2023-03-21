@@ -268,10 +268,10 @@ impl TestCases {
             let test_gen = RegTestGenerator::from_register(register, config);
 
             let test_fn = test_gen.gen_test_fn()?;
-            let test_fn_str = format!("{}", test_fn);
+            let test_fn_str = format!("{test_fn}");
 
             let test_def = test_gen.gen_test_def()?;
-            let test_def_str = format!("{}", test_def);
+            let test_def_str = format!("{test_def}");
 
             test_fns_and_defs_by_periph
                 .entry(register.path.periph.clone())
@@ -298,7 +298,7 @@ impl TestCases {
             .collect::<String>();
 
         Ok(TestCases {
-            test_cases: vec![mod_strings, format!("{}", test_case_array)],
+            test_cases: vec![mod_strings, format!("{test_case_array}")],
             test_case_count,
         })
     }
