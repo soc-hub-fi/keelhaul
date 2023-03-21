@@ -130,7 +130,8 @@ impl Register {
             self.path.join("-"),
             AddrRepr::Comps {
                 base,
-                cluster,
+                // ???: cluster is assumed to always exist. This is incorrect.
+                cluster: Some(cluster),
                 offset,
             },
         );
