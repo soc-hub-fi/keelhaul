@@ -109,7 +109,10 @@ pub const PARSED_FILENAME: &str = "parsed.json";
 
 /// Find a child node with given tag name.
 fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, SvdParseError> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdParseError::ExpectedTag(tag.to_owned()))
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdParseError::ExpectedTagInElement {
+        elem_name: node.tag_name().name().to_owned(),
+        tag: tag.to_owned(),
+    })
 }
 
 /// Try to find a child node with given name.

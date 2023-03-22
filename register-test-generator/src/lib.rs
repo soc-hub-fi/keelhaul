@@ -68,8 +68,8 @@ pub enum CommonParseError {
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {
-    #[error("expected field in node: {0}")]
-    ExpectedTag(String),
+    #[error("expected tag {tag:?} in element {elem_name:?}")]
+    ExpectedTagInElement { elem_name: String, tag: String },
     #[error("could not parse int")]
     ParseInt(#[from] ParseIntError),
     #[error("expected int: {0}")]
