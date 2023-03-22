@@ -2,7 +2,7 @@
 
 use crate::{
     validate_path_existence, Access, AddrRepr, NotImplementedError, ParseError, PtrWidth, RegPath,
-    Register, Registers,
+    Register, Registers, SvdParseError,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -108,8 +108,8 @@ fn read_input_svd_to_string() -> String {
 pub const PARSED_FILENAME: &str = "parsed.json";
 
 /// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, ParseError> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(ParseError::ExpectedTag(tag.to_owned()))
+fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, SvdParseError> {
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdParseError::ExpectedTag(tag.to_owned()))
 }
 
 /// Try to find a child node with given name.
@@ -120,28 +120,28 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
 }
 
 trait ArchUsize<U> {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<U, ParseError>;
+    fn from_str_radix(digits: &str, radix: u32) -> Result<U, SvdParseError>;
 }
 
 impl ArchUsize<u32> for u32 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, ParseError> {
-        u32::from_str_radix(digits, radix).map_err(ParseError::from)
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, SvdParseError> {
+        u32::from_str_radix(digits, radix).map_err(SvdParseError::from)
     }
 }
 
 impl ArchUsize<u64> for u64 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, ParseError> {
-        u64::from_str_radix(digits, radix).map_err(ParseError::from)
+    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, SvdParseError> {
+        u64::from_str_radix(digits, radix).map_err(SvdParseError::from)
     }
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, ParseError> {
+fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
     match c {
         'k' | 'K' => Ok(1024),
         'm' | 'M' => Ok(1024 * 1024),
         'g' | 'G' => Ok(1024 * 1024 * 1024),
         't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
-        _ => Err(ParseError::InvalidSizeMultiplierSuffix(c)),
+        _ => Err(SvdParseError::InvalidSizeMultiplierSuffix(c)),
     }
 }
 
@@ -158,7 +158,7 @@ fn parse_nonneg_int_u64_works() {
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int_u64(text: &str) -> Result<u64, ParseError> {
+fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
     lazy_static! {
@@ -204,7 +204,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, ParseError> {
         let size_mult = captures.get(2);
         (number, size_mult)
     } else {
-        return Err(ParseError::InvalidInt(text.to_owned()));
+        return Err(SvdParseError::InvalidInt(text.to_owned()));
     };
 
     let size_mult: Option<u64> = size_mult_capture
@@ -231,7 +231,7 @@ fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
-) -> Result<Registers<u32>, ParseError> {
+) -> Result<Registers<u32>, SvdParseError> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
     let mut addresses = HashMap::new();
@@ -292,7 +292,12 @@ fn find_registers(
                 }))?;
                 let size_str = find_text_in_node_by_tag_name(&register, "size")?;
                 let size: u64 = size_str.parse()?;
-                let size = PtrWidth::from_bit_count(size)?;
+                let size = match PtrWidth::from_bit_count(size) {
+                    Some(size) => size,
+                    None => {
+                        return Err(SvdParseError::BitCountToPtrWidth(size));
+                    }
+                };
 
                 let full_address = base_addr + cluster_addr_offset + reg_addr_offset;
                 let addr = AddrRepr::<u64>::Comps {
@@ -302,7 +307,7 @@ fn find_registers(
                     offset: reg_addr_offset,
                 };
                 let addr = AddrRepr::<u32>::try_from(addr.clone())
-                    .map_err(|_| ParseError::AddrOverflow(path.join("-"), addr.clone()))?;
+                    .map_err(|_| SvdParseError::AddrOverflow(path.join("-"), addr.clone()))?;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     entry.insert(reg_name.clone());
                     let register = Register {
@@ -334,7 +339,7 @@ fn find_registers(
 }
 
 /// Parse SVD-file.
-pub fn parse() -> Result<Registers<u32>, ParseError> {
+pub fn parse() -> Result<Registers<u32>, SvdParseError> {
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter = ItemFilter::new(include_peripherals, exclude_peripherals.unwrap_or(vec![]));

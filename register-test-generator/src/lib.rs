@@ -10,7 +10,7 @@ pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
-use std::{fs::File, num::ParseIntError, path::PathBuf, str::ParseBoolError};
+use std::{fs::File, num::ParseIntError, path::PathBuf};
 use thiserror::Error;
 /// Check that path to a file exists.
 ///
@@ -60,6 +60,12 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
 
 #[derive(Error, Debug)]
 pub enum ParseError {
+    #[error("invalid access type in input: {0}")]
+    InvalidAccessType(String),
+}
+
+#[derive(Error, Debug)]
+pub enum SvdParseError {
     #[error("expected field in node: {0}")]
     ExpectedTag(String),
     #[error("could not parse int")]
@@ -68,14 +74,14 @@ pub enum ParseError {
     InvalidInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
-    #[error("invalid CMSIS-SVD access type: {0}")]
-    InvalidAccessType(String),
     #[error("failed to convert {0} bits into a valid pointer width")]
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
     #[error("address for {0} does not fit in architecture pointer: {1:?}")]
     AddrOverflow(String, AddrRepr<u64>),
+    #[error("generic parse error")]
+    GenericParse(#[from] ParseError),
 }
 
 #[derive(Error, Debug)]

@@ -97,13 +97,17 @@ impl PtrWidth {
         }
     }
 
-    pub fn from_bit_count(bc: u64) -> Result<Self, ParseError> {
+    /// Convert a bit count to [PtrWidth]
+    ///
+    /// Returns None if the conversion cannot be done.
+    #[must_use]
+    pub fn from_bit_count(bc: u64) -> Option<Self> {
         match bc {
-            8 => Ok(PtrWidth::U8),
-            16 => Ok(PtrWidth::U16),
-            32 => Ok(PtrWidth::U32),
-            64 => Ok(PtrWidth::U64),
-            bc => Err(ParseError::BitCountToPtrWidth(bc)),
+            8 => Some(PtrWidth::U8),
+            16 => Some(PtrWidth::U16),
+            32 => Some(PtrWidth::U32),
+            64 => Some(PtrWidth::U64),
+            _bc => None,
         }
     }
 }
