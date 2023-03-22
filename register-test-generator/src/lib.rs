@@ -59,24 +59,6 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
 }
 
 #[derive(Error, Debug)]
-pub enum JsonParseError {
-    #[error("expected JSON object: {0}")]
-    ExpectedObject(String),
-    #[error("expected JSON array: {0}")]
-    ExpectedArray(String),
-    #[error("JSON object does not contain field for '{0}'")]
-    FieldNotFound(String),
-    #[error("could not parse int")]
-    ParseInt(#[from] ParseIntError),
-    #[error("could not parse bool")]
-    ParseBool(#[from] ParseBoolError),
-    #[error("{0} is not a known Rust type string")]
-    ParseTypeStr(String),
-    #[error("could not parse")]
-    ParseError(#[from] ParseError),
-}
-
-#[derive(Error, Debug)]
 pub enum ParseError {
     #[error("expected field in node: {0}")]
     ExpectedTag(String),
