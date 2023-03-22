@@ -335,7 +335,7 @@ fn process_register(
     let reset_value = match properties.reset_value {
         Some(value) => value,
         None => {
-            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be 'u32'.");
+            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
             0
         }
     };
