@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    get_or_create, validate_path_existence, Access, AddrRepr, NotImplementedError, ParseError,
-    PtrWidth, RegPath, Register, Registers,
+    validate_path_existence, Access, AddrRepr, NotImplementedError, ParseError, PtrWidth, RegPath,
+    Register, Registers,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -11,8 +11,7 @@ use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap},
     env,
-    fs::{self, read_to_string, File},
-    io::Write,
+    fs::read_to_string,
     panic,
     path::PathBuf,
 };
@@ -107,21 +106,6 @@ fn read_input_svd_to_string() -> String {
 }
 
 pub const PARSED_FILENAME: &str = "parsed.json";
-
-/// Extract path to output file from environment variable.
-/// Get handle to output file.
-fn open_output_file() -> File {
-    // Safety: OUT_DIR always exists
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let path_str = format!("{out_dir}/{PARSED_FILENAME}");
-    let path = get_or_create(&path_str);
-    fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .expect("Failed to open output file.")
-}
 
 /// Find a child node with given tag name.
 fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, ParseError> {
@@ -349,27 +333,17 @@ fn find_registers(
     Ok(registers.into())
 }
 
-/// Write found registers to output file.
-fn write_output(registers: &[Register<u32>], file: &mut File) {
-    let registers_as_hashmaps = registers.iter().map(Register::to_hashmap).collect_vec();
-    let output = json::stringify(registers_as_hashmaps);
-    file.write_all(output.as_bytes())
-        .expect("Failed to write to output file.");
-}
-
 /// Parse SVD-file.
-pub fn parse() {
+pub fn parse() -> Result<Registers<u32>, ParseError> {
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter = ItemFilter::new(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
     let reg_filter = ItemFilter::new(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter).unwrap();
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter)?;
     info!("Found {} registers.", registers.len());
-
-    let mut file_output = open_output_file();
-    write_output(&registers, &mut file_output);
+    Ok(registers)
 }
 
 impl Access {

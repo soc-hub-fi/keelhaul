@@ -4,13 +4,10 @@
 
 mod generate;
 mod model;
-mod parse_json;
 mod parse_svd;
-mod to_json;
 
 pub use generate::*;
 pub use model::*;
-pub use parse_json::*;
 pub use parse_svd::*;
 
 use std::{fs::File, num::ParseIntError, path::PathBuf, str::ParseBoolError};
