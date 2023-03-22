@@ -424,6 +424,40 @@ fn process_cluster(
     Ok(Some(registers))
 }
 
+impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
+    type Error = SvdParseError;
+
+    fn try_from(value: &Node) -> Result<Self, Self::Error> {
+        let size = match find_text_in_node_by_tag_name(value, "size") {
+            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
+            Err(_) => None,
+        };
+        let access = match find_text_in_node_by_tag_name(value, "access") {
+            Ok(access) => Some(Access::from_svd_access_type(access)?),
+            Err(_) => None,
+        };
+        let protection = match find_text_in_node_by_tag_name(value, "protection") {
+            Ok(protection) => Some(Protection::from_str(protection)?),
+            Err(_) => None,
+        };
+        let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
+            Ok(reset_value) => Some(parse_nonneg_int_u64(reset_value)?),
+            Err(_) => None,
+        };
+        let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
+            Ok(reset_mask) => Some(parse_nonneg_int_u64(reset_mask)?),
+            Err(_) => None,
+        };
+        Ok(RegisterPropertiesGroupBuilder {
+            size,
+            access,
+            protection,
+            reset_value,
+            reset_mask,
+        })
+    }
+}
+
 fn process_peripheral(
     node: Node,
     periph_filter: &ItemFilter<String>,
@@ -439,42 +473,12 @@ fn process_peripheral(
         return Ok(None);
     }
 
-    let size = match find_text_in_node_by_tag_name(&node, "size") {
-        // TODO: handle error
-        Ok(value) => Some(PtrWidth::from_bit_count(value.parse()?).unwrap()),
-        Err(_) => None,
-    };
-    let access = match find_text_in_node_by_tag_name(&node, "access") {
-        Ok(value) => Some(Access::from_svd_access_type(value)?),
-        Err(_) => None,
-    };
-    let protection = match find_text_in_node_by_tag_name(&node, "protection") {
-        Ok(value) => Some(Protection::from_str(value)?),
-        Err(_) => None,
-    };
-    let reset_value = match find_text_in_node_by_tag_name(&node, "resetValue") {
-        Ok(reset_value) => Some(parse_nonneg_int_u64(reset_value)?),
-        Err(_) => None,
-    };
-    let reset_mask = match find_text_in_node_by_tag_name(&node, "resetMask") {
-        Ok(reset_mask) => Some(parse_nonneg_int_u64(reset_mask)?),
-        Err(_) => None,
-    };
-
-    let properties = RegisterPropertiesGroupBuilder {
-        size,
-        access,
-        protection,
-        reset_value,
-        reset_mask,
-    };
-
     let current = RegisterParent {
         peripheral_name: name,
         cluster_name: None,
         peripheral_base: base_addr,
         cluster_offset: None,
-        properties,
+        properties: RegisterPropertiesGroupBuilder::try_from(&node)?,
     };
 
     let registers_nodes = node
