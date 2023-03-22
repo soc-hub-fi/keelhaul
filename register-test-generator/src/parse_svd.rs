@@ -120,22 +120,6 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
         .map(|n| n.text().expect("Node does not have text."))
 }
 
-trait ArchUsize<U> {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<U, SvdParseError>;
-}
-
-impl ArchUsize<u32> for u32 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u32, SvdParseError> {
-        u32::from_str_radix(digits, radix).map_err(SvdParseError::from)
-    }
-}
-
-impl ArchUsize<u64> for u64 {
-    fn from_str_radix(digits: &str, radix: u32) -> Result<u64, SvdParseError> {
-        u64::from_str_radix(digits, radix).map_err(SvdParseError::from)
-    }
-}
-
 fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
     match c {
         'k' | 'K' => Ok(1024),
