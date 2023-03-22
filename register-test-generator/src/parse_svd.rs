@@ -500,12 +500,10 @@ fn process_peripheral(
         Err(_) => None,
     };
     let access = match find_text_in_node_by_tag_name(&node, "access") {
-        // TODO: handle error
         Ok(value) => Some(Access::from_svd_access_type(value)?),
         Err(_) => None,
     };
     let protection = match find_text_in_node_by_tag_name(&node, "protection") {
-        // TODO: handle error
         Ok(value) => Some(Protection::from_str(value)?),
         Err(_) => None,
     };
