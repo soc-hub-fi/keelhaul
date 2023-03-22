@@ -258,6 +258,30 @@ struct RegisterParent {
     properties: RegisterPropertiesGroupBuilder,
 }
 
+/// Inherit properties from parent and update with current node's properties if defined.
+fn inherit_and_update_properties(
+    parent: &RegisterParent,
+    node: &Node,
+) -> Result<RegisterPropertiesGroupBuilder, SvdParseError> {
+    let mut properties = parent.properties.clone();
+    if let Ok(size) = find_text_in_node_by_tag_name(node, "size") {
+        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
+    };
+    if let Ok(access) = find_text_in_node_by_tag_name(node, "access") {
+        properties.access = Some(Access::from_svd_access_type(access)?);
+    };
+    if let Ok(protection) = find_text_in_node_by_tag_name(node, "protection") {
+        properties.protection = Some(Protection::from_str(protection)?);
+    };
+    if let Ok(reset_value) = find_text_in_node_by_tag_name(node, "resetValue") {
+        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
+    };
+    if let Ok(reset_mask) = find_text_in_node_by_tag_name(node, "resetMask") {
+        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
+    };
+    Ok(properties)
+}
+
 fn process_register(
     parent: &RegisterParent,
     node: Node,
@@ -293,23 +317,7 @@ fn process_register(
         return Ok(None);
     }
 
-    // Inherit from parent and replace if found.
-    let mut properties = parent.properties.clone();
-    if let Ok(size) = find_text_in_node_by_tag_name(&node, "size") {
-        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
-    };
-    if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access)?);
-    };
-    if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
-        properties.protection = Some(Protection::from_str(protection)?);
-    };
-    if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
-        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
-    };
-    if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
-        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
-    };
+    let properties = inherit_and_update_properties(parent, &node)?;
 
     let size = match properties.size {
         Some(value) => value,
@@ -365,50 +373,13 @@ fn process_register(
     ));
     */
 
-    /*
-    // FIXME: maybe handle group parsing somewhere else
-    let size = match find_text_in_node_by_tag_name(&node, "size") {
-        Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?)?),
-        Err(_) => None,
+    let properties = RegisterPropertiesGroup {
+        size,
+        access,
+        protection,
+        reset_value,
+        reset_mask,
     };
-    let access = Access::from_svd_access_type(
-        maybe_find_text_in_node_by_tag_name(&node, "access").unwrap_or_else(|| {
-            warn!(
-                "register {} does not have access type. Access type is assumed to be 'read-write'.",
-                reg_path
-            );
-            "read-write"
-        }),
-    )?;
-    let size = match find_text_in_node_by_tag_name(&node, "size") {
-        Ok(size) => {
-            let size = size.parse()?;
-            match PtrWidth::from_bit_count(size) {
-                Some(size) => size,
-                None => {
-                    return Err(SvdParseError::BitCountToPtrWidth(size));
-                }
-            }
-        }
-        Err(_) => {
-            // FIXME: not acceptable default
-            warn!("register {reg_path} does not have size. Size is assumed to be 'u32'.");
-            PtrWidth::U32
-        }
-    }?;
-    let protection = match find_text_in_node_by_tag_name(&node, "protection") {
-        Ok(protection) => Some(Protection::from_str(protection)?),
-        Err(_) => None,
-    };
-    let reset_value = match find_text_in_node_by_tag_name(&node, "resetValue") {
-        Ok(value) => Some(parse_nonneg_int_u64(value)?),
-        Err(_) => None,
-    };
-    let reset_mask = match find_text_in_node_by_tag_name(&node, "resetMask") {
-        Ok(value) => Some(parse_nonneg_int_u64(value)?),
-        Err(_) => None,
-    };
-    */
 
     let addr = AddrRepr::<u64>::Comps {
         base: parent.peripheral_base,
@@ -417,14 +388,6 @@ fn process_register(
     };
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
-
-    let properties = RegisterPropertiesGroup {
-        size,
-        access,
-        protection,
-        reset_value,
-        reset_mask,
-    };
 
     let register = Register {
         path,
@@ -444,30 +407,12 @@ fn process_cluster(
     let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
     let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
 
-    // Inherit from parent and replace if found.
-    let mut properties = parent.properties.clone();
-    if let Ok(size) = find_text_in_node_by_tag_name(&node, "size") {
-        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
-    };
-    if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access)?);
-    };
-    if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
-        properties.protection = Some(Protection::from_str(protection)?);
-    };
-    if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
-        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
-    };
-    if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
-        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
-    };
-
     let current = RegisterParent {
         peripheral_name: parent.peripheral_name.clone(),
         cluster_name: Some(name),
         peripheral_base: parent.peripheral_base,
         cluster_offset: Some(addr_offset),
-        properties,
+        properties: inherit_and_update_properties(parent, &node)?,
     };
 
     let mut registers = Vec::new();
