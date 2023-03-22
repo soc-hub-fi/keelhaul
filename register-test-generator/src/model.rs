@@ -4,7 +4,7 @@ use itertools::Itertools;
 use log::warn;
 use std::{ops, str::FromStr};
 
-use crate::{GenerateError, ParseError};
+use crate::{CommonParseError, GenerateError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -50,7 +50,7 @@ impl Access {
 }
 
 impl FromStr for Access {
-    type Err = ParseError;
+    type Err = CommonParseError;
 
     /// Convert from CMSIS-SVD / IP-XACT `accessType` string
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -60,7 +60,7 @@ impl FromStr for Access {
             "read-write" => Ok(Access::ReadWrite),
             "writeOnce" => Ok(Access::WriteOnce),
             "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            s => Err(ParseError::InvalidAccessType(s.to_owned())),
+            s => Err(CommonParseError::InvalidAccessType(s.to_owned())),
         }
     }
 }

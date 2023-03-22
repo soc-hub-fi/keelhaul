@@ -58,12 +58,14 @@ pub fn get_or_create(path_str: &str) -> PathBuf {
     }
 }
 
+/// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
 #[derive(Error, Debug)]
-pub enum ParseError {
+pub enum CommonParseError {
     #[error("invalid access type in input: {0}")]
     InvalidAccessType(String),
 }
 
+/// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {
     #[error("expected field in node: {0}")]
@@ -81,7 +83,7 @@ pub enum SvdParseError {
     #[error("address for {0} does not fit in architecture pointer: {1:?}")]
     AddrOverflow(String, AddrRepr<u64>),
     #[error("generic parse error")]
-    GenericParse(#[from] ParseError),
+    GenericParse(#[from] CommonParseError),
 }
 
 #[derive(Error, Debug)]

@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrRepr, NotImplementedError, ParseError, PtrWidth, RegPath,
-    Register, Registers, SvdParseError,
+    validate_path_existence, Access, AddrRepr, CommonParseError, NotImplementedError, PtrWidth,
+    RegPath, Register, Registers, SvdParseError,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -353,14 +353,14 @@ pub fn parse() -> Result<Registers<u32>, SvdParseError> {
 
 impl Access {
     /// Implements parsing access type as specified by CMSIS-SVD schema
-    pub fn from_svd_access_type(s: &str) -> Result<Self, ParseError> {
+    pub fn from_svd_access_type(s: &str) -> Result<Self, CommonParseError> {
         match s {
             "read-only" => Ok(Access::ReadOnly),
             "write-only" => Ok(Access::WriteOnly),
             "read-write" => Ok(Access::ReadWrite),
             "writeOnce" => Ok(Access::WriteOnce),
             "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            _ => Err(ParseError::InvalidAccessType(s.to_owned())),
+            _ => Err(CommonParseError::InvalidAccessType(s.to_owned())),
         }
     }
 }
