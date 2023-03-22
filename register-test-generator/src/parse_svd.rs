@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrRepr, CommonParseError, NotImplementedError, PtrWidth,
-    RegPath, Register, Registers, SvdParseError,
+    validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError,
+    NotImplementedError, PtrWidth, RegPath, Register, Registers, SvdParseError,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -309,8 +309,9 @@ fn find_registers(
                     cluster: Some(cluster_addr_offset),
                     offset: reg_addr_offset,
                 };
-                let addr = AddrRepr::<u32>::try_from(addr.clone())
-                    .map_err(|_| SvdParseError::AddrOverflow(path.join("-"), addr.clone()))?;
+                let addr = AddrRepr::<u32>::try_from(addr.clone()).map_err(|_| {
+                    SvdParseError::AddrOverflow(AddrOverflowError(path.join("-"), addr.clone()))
+                })?;
                 if let Entry::Vacant(entry) = addresses.entry(full_address) {
                     entry.insert(reg_name.clone());
                     let register = Register {

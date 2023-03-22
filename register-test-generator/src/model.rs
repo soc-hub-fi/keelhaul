@@ -4,7 +4,7 @@ use itertools::Itertools;
 use log::warn;
 use std::{ops, str::FromStr};
 
-use crate::{CommonParseError, GenerateError};
+use crate::{AddrOverflowError, CommonParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -244,8 +244,8 @@ where
     AddrRepr<u64>: From<AddrRepr<T>>,
 {
     /// Get register's absolute memory address
-    pub fn full_addr(&self) -> Result<T, GenerateError> {
-        self.addr.full().ok_or(GenerateError::AddrOverflow(
+    pub fn full_addr(&self) -> Result<T, AddrOverflowError> {
+        self.addr.full().ok_or(AddrOverflowError(
             self.path.join("-"),
             self.addr.clone().into(),
         ))

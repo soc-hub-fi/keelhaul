@@ -65,6 +65,10 @@ pub enum CommonParseError {
     InvalidAccessType(String),
 }
 
+#[derive(Error, Debug)]
+#[error("address for {0} does not fit in architecture pointer {1:?}")]
+pub struct AddrOverflowError(String, AddrRepr<u64>);
+
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {
@@ -80,8 +84,8 @@ pub enum SvdParseError {
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
-    #[error("address for {0} does not fit in architecture pointer: {1:?}")]
-    AddrOverflow(String, AddrRepr<u64>),
+    #[error("parsed address overflows")]
+    AddrOverflow(#[from] AddrOverflowError),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
 }
@@ -94,8 +98,9 @@ pub enum NotImplementedError {
     SvdArray(String),
 }
 
+/// Error that happened during test case generation.
 #[derive(Error, Debug)]
 pub enum GenerateError {
-    #[error("generated address for {0} does not fit in architecture pointer: {1:?}")]
-    AddrOverflow(String, AddrRepr<u64>),
+    #[error("generated address overflows")]
+    AddrOverflow(#[from] AddrOverflowError),
 }
