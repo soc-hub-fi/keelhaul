@@ -72,8 +72,8 @@ pub enum SvdParseError {
     ExpectedTagInElement { elem_name: String, tag: String },
     #[error("could not parse int")]
     ParseInt(#[from] ParseIntError),
-    #[error("expected int: {0}")]
-    InvalidInt(String),
+    #[error("could not parse nonneg int from {0}")]
+    InvalidNonnegInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
     #[error("failed to convert {0} bits into a valid pointer width")]

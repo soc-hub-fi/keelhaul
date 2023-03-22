@@ -207,7 +207,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let size_mult = captures.get(2);
         (number, size_mult)
     } else {
-        return Err(SvdParseError::InvalidInt(text.to_owned()));
+        return Err(SvdParseError::InvalidNonnegInt(text.to_owned()));
     };
 
     let size_mult: Option<u64> = size_mult_capture
