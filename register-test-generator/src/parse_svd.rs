@@ -299,18 +299,16 @@ fn process_register(
         properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
     };
     if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access).unwrap());
+        properties.access = Some(Access::from_svd_access_type(access)?);
     };
     if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
-        properties.protection = Some(Protection::from_str(protection).unwrap());
+        properties.protection = Some(Protection::from_str(protection)?);
     };
     if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
-        let reset_value = parse_nonneg_int_u64(reset_value)?;
-        properties.reset_value = Some(reset_value);
+        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
     };
     if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
-        let reset_mask = parse_nonneg_int_u64(reset_mask)?;
-        properties.reset_mask = Some(reset_mask);
+        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
     };
 
     let size = match properties.size {
@@ -452,18 +450,16 @@ fn process_cluster(
         properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
     };
     if let Ok(access) = find_text_in_node_by_tag_name(&node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access).unwrap());
+        properties.access = Some(Access::from_svd_access_type(access)?);
     };
     if let Ok(protection) = find_text_in_node_by_tag_name(&node, "protection") {
-        properties.protection = Some(Protection::from_str(protection).unwrap());
+        properties.protection = Some(Protection::from_str(protection)?);
     };
     if let Ok(reset_value) = find_text_in_node_by_tag_name(&node, "resetValue") {
-        let reset_value = parse_nonneg_int_u64(reset_value)?;
-        properties.reset_value = Some(reset_value);
+        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
     };
     if let Ok(reset_mask) = find_text_in_node_by_tag_name(&node, "resetMask") {
-        let reset_mask = parse_nonneg_int_u64(reset_mask)?;
-        properties.reset_mask = Some(reset_mask);
+        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
     };
 
     let current = RegisterParent {
@@ -500,34 +496,25 @@ fn process_peripheral(
 
     let size = match find_text_in_node_by_tag_name(&node, "size") {
         // TODO: handle error
-        Ok(value) => {
-            warn!("p {value}");
-            Some(PtrWidth::from_bit_count(value.parse()?).unwrap())
-        }
+        Ok(value) => Some(PtrWidth::from_bit_count(value.parse()?).unwrap()),
         Err(_) => None,
     };
     let access = match find_text_in_node_by_tag_name(&node, "access") {
         // TODO: handle error
-        Ok(value) => Some(Access::from_svd_access_type(value).unwrap()),
+        Ok(value) => Some(Access::from_svd_access_type(value)?),
         Err(_) => None,
     };
     let protection = match find_text_in_node_by_tag_name(&node, "protection") {
         // TODO: handle error
-        Ok(value) => Some(Protection::from_str(value).unwrap()),
+        Ok(value) => Some(Protection::from_str(value)?),
         Err(_) => None,
     };
     let reset_value = match find_text_in_node_by_tag_name(&node, "resetValue") {
-        Ok(value) => {
-            let value = parse_nonneg_int_u64(value)?;
-            Some(value)
-        }
+        Ok(reset_value) => Some(parse_nonneg_int_u64(reset_value)?),
         Err(_) => None,
     };
     let reset_mask = match find_text_in_node_by_tag_name(&node, "resetMask") {
-        Ok(value) => {
-            let value = parse_nonneg_int_u64(value)?;
-            Some(value)
-        }
+        Ok(reset_mask) => Some(parse_nonneg_int_u64(reset_mask)?),
         Err(_) => None,
     };
 
