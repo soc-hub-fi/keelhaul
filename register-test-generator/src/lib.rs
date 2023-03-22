@@ -76,7 +76,7 @@ pub enum SvdParseError {
     InvalidNonnegInt(String),
     #[error("invalid size multiplier suffix: {0}")]
     InvalidSizeMultiplierSuffix(char),
-    #[error("failed to convert {0} bits into a valid pointer width")]
+    #[error("failed to convert {0} bits into a valid pointer width, must be multiple of 8")]
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
