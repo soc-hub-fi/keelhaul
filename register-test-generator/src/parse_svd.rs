@@ -63,6 +63,10 @@ impl<T: PartialEq> ItemFilter<T> {
         }
     }
 
+    fn regex(regex: Regex) -> ItemFilter<T> {
+        Self::Regex(regex)
+    }
+
     fn is_allowed(&self, value: &T) -> bool
     where
         T: AsRef<str>,
@@ -233,6 +237,7 @@ fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
+    syms_regex: &Option<ItemFilter<String>>,
 ) -> Result<Registers<u32>, SvdParseError> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
@@ -270,6 +275,15 @@ fn find_registers(
                     reg_name.clone(),
                 );
                 let reg_path = path.join("-");
+
+                if let Some(syms_regex) = syms_regex {
+                    if syms_regex.is_blocked(&reg_path) {
+                        info!(
+                            "Register {reg_path} was not included due to regex set in SYMS_REGEX"
+                        );
+                        continue;
+                    }
+                }
 
                 // FIXME: we match against only the register's name, not the path. This is not a
                 // great way to exclude registers. We should match against the entire path.
@@ -348,13 +362,14 @@ pub fn parse() -> Result<Registers<u32>, Error> {
     let syms_regex = env::var("SYMS_REGEX")
         .ok()
         .map(|s| Regex::new(&s))
-        .transpose()?;
+        .transpose()?
+        .map(ItemFilter::regex);
     let periph_filter =
         ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter)?;
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_regex)?;
     info!("Found {} registers.", registers.len());
     Ok(registers)
 }
