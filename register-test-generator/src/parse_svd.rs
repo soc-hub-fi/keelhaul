@@ -2,8 +2,8 @@
 
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
-    NotImplementedError, Protection, PtrWidth, RegPath, Register, RegisterPropertiesGroup,
-    RegisterPropertiesGroupBuilder, Registers, SvdParseError,
+    NotImplementedError, Protection, PtrWidth, RegPath, Register, RegisterDimElementGroup,
+    RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers, SvdParseError,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -282,6 +282,17 @@ fn inherit_and_update_properties(
     Ok(properties)
 }
 
+impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
+    type Error = SvdParseError;
+
+    fn try_from(value: &Node) -> Result<Self, Self::Error> {
+        let dim = parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dim")?)?;
+        let dim_increment =
+            parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dimIncrement")?)?;
+        Ok(Self { dim, dim_increment })
+    }
+}
+
 fn process_register(
     parent: &RegisterParent,
     node: Node,
@@ -388,11 +399,16 @@ fn process_register(
     };
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
+    let dimensions = match RegisterDimElementGroup::try_from(&node) {
+        Ok(dimensions) => Some(dimensions),
+        Err(_) => None,
+    };
 
     let register = Register {
         path,
         addr,
         properties,
+        dimensions,
     };
     Ok(Some(register))
 }

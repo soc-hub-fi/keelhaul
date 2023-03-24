@@ -234,6 +234,7 @@ pub struct Register<T: num::CheckedAdd> {
     ///
     /// Cascades from higher levels to register level.
     pub properties: RegisterPropertiesGroup,
+    pub dimensions: Option<RegisterDimElementGroup>,
 }
 
 impl<T> Register<T>
@@ -339,4 +340,13 @@ pub struct RegisterPropertiesGroup {
     pub reset_value: u64,
     /// Register bits with defined reset value are marked as high.
     pub reset_mask: u64,
+}
+
+#[derive(Clone)]
+pub struct RegisterDimElementGroup {
+    pub dim: u64,
+    pub dim_increment: u64,
+    //pub dim_index: Option<>,
+    //pub dim_name: Option<String>,
+    //pub dim_array_index: Option<>,
 }
