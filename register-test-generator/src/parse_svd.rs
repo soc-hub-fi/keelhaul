@@ -52,7 +52,10 @@ enum ItemFilter<T: PartialEq> {
         // These items are always blocked even if present in `white_list`
         block_list: Vec<T>,
     },
-    Regex(Regex),
+    Regex {
+        allow: Option<Regex>,
+        block: Option<Regex>,
+    },
 }
 
 impl<T: PartialEq> ItemFilter<T> {
@@ -63,8 +66,8 @@ impl<T: PartialEq> ItemFilter<T> {
         }
     }
 
-    fn regex(regex: Regex) -> ItemFilter<T> {
-        Self::Regex(regex)
+    fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
+        Self::Regex { allow, block }
     }
 
     fn is_allowed(&self, value: &T) -> bool
@@ -86,7 +89,20 @@ impl<T: PartialEq> ItemFilter<T> {
                     None => true,
                 }
             }
-            ItemFilter::Regex(re) => re.is_match(value.as_ref()),
+            ItemFilter::Regex { allow, block } => {
+                // Items matched by block regex are always blocked
+                if let Some(block) = block {
+                    if block.is_match(value.as_ref()) {
+                        return false;
+                    }
+                }
+
+                if let Some(allow) = allow {
+                    allow.is_match(value.as_ref())
+                } else {
+                    true
+                }
+            }
         }
     }
 
@@ -237,7 +253,7 @@ fn find_registers(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
-    syms_regex: &Option<ItemFilter<String>>,
+    syms_regex: &ItemFilter<String>,
 ) -> Result<Registers<u32>, SvdParseError> {
     let mut peripherals = Vec::new();
     let mut registers = Vec::new();
@@ -276,13 +292,9 @@ fn find_registers(
                 );
                 let reg_path = path.join("-");
 
-                if let Some(syms_regex) = syms_regex {
-                    if syms_regex.is_blocked(&reg_path) {
-                        info!(
-                            "Register {reg_path} was not included due to regex set in SYMS_REGEX"
-                        );
-                        continue;
-                    }
+                if syms_regex.is_blocked(&reg_path) {
+                    info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
+                    continue;
                 }
 
                 // FIXME: we match against only the register's name, not the path. This is not a
@@ -359,17 +371,22 @@ fn find_registers(
 pub fn parse() -> Result<Registers<u32>, Error> {
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let syms_regex = env::var("SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?
-        .map(ItemFilter::regex);
     let periph_filter =
         ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
+    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
+
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_regex)?;
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)?;
     info!("Found {} registers.", registers.len());
     Ok(registers)
 }
