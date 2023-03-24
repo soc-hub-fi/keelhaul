@@ -58,6 +58,7 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
 pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
+    println!("cargo:rerun-if-env-changed=SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-changed=build.rs");
 
