@@ -69,6 +69,14 @@ pub enum CommonParseError {
 #[error("address for {0} does not fit in architecture pointer {1:?}")]
 pub struct AddrOverflowError(String, AddrRepr<u64>);
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("error while parsing SVD")]
+    SvdParse(#[from] SvdParseError),
+    #[error("error while compiling regex")]
+    Regex(#[from] regex::Error),
+}
+
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {

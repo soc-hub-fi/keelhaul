@@ -12,6 +12,7 @@ json = { workspace = true }
 thiserror = { workspace = true }
 fs-err = "2.9.0"
 log = { workspace = true }
+anyhow = "1.0.70"
 
 [lib]
 name = "register_selftest"
