@@ -1,5 +1,5 @@
 [workspace]
-members = ["register-test-generator", "register-selftest"]
+members = ["register-test-generator", "register-test-generator-cli", "register-selftest"]
 
 [workspace.dependencies]
 json = "0.12"
