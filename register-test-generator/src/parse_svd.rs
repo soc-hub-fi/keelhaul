@@ -1,7 +1,7 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError,
+    validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
     NotImplementedError, PtrWidth, RegPath, Register, Registers, SvdParseError,
 };
 use itertools::Itertools;
@@ -44,35 +44,52 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
 }
 
 /// What items of type `T` are allowed or not
-struct ItemFilter<T: PartialEq> {
-    // If set, only the specified items are allowed. If not set, all items are
-    // allowed except the ones listed in blocklist.
-    white_list: Option<Vec<T>>,
-    // These items are always blocked even if present in `white_list`
-    block_list: Vec<T>,
+enum ItemFilter<T: PartialEq> {
+    List {
+        // If set, only the specified items are allowed. If not set, all items are
+        // allowed except the ones listed in blocklist.
+        white_list: Option<Vec<T>>,
+        // These items are always blocked even if present in `white_list`
+        block_list: Vec<T>,
+    },
+    Regex(Regex),
 }
 
 impl<T: PartialEq> ItemFilter<T> {
-    fn new(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
-        Self {
+    fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+        Self::List {
             white_list,
             block_list,
         }
     }
 
-    fn is_allowed(&self, value: &T) -> bool {
-        // Items in block list are always blocked
-        if self.block_list.contains(value) {
-            return false;
-        }
+    fn is_allowed(&self, value: &T) -> bool
+    where
+        T: AsRef<str>,
+    {
+        match self {
+            ItemFilter::List {
+                white_list,
+                block_list,
+            } => {
+                // Items in block list are always blocked
+                if block_list.contains(value) {
+                    return false;
+                }
 
-        match &self.white_list {
-            Some(white_list) => white_list.contains(value),
-            None => true,
+                match &white_list {
+                    Some(white_list) => white_list.contains(value),
+                    None => true,
+                }
+            }
+            ItemFilter::Regex(re) => re.is_match(value.as_ref()),
         }
     }
 
-    fn is_blocked(&self, value: &T) -> bool {
+    fn is_blocked(&self, value: &T) -> bool
+    where
+        T: AsRef<str>,
+    {
         !self.is_allowed(value)
     }
 }
@@ -325,11 +342,16 @@ fn find_registers(
 }
 
 /// Parse SVD-file.
-pub fn parse() -> Result<Registers<u32>, SvdParseError> {
+pub fn parse() -> Result<Registers<u32>, Error> {
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let periph_filter = ItemFilter::new(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
-    let reg_filter = ItemFilter::new(None, read_excludes_from_env().unwrap_or(vec![]));
+    let syms_regex = env::var("SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let periph_filter =
+        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
+    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, &reg_filter, &periph_filter)?;

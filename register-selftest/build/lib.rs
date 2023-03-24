@@ -4,7 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, File};
 use log::LevelFilter;
-use register_test_generator::{SvdParseError, TestCases, TestConfig};
+use register_test_generator::{Error, TestCases, TestConfig};
 use std::{
     env,
     io::{self, Write},
@@ -55,7 +55,7 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
     Ok(())
 }
 
-pub fn main() -> Result<(), SvdParseError> {
+pub fn main() -> Result<(), Error> {
     println!("cargo:rerun-if-env-changed=INCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
