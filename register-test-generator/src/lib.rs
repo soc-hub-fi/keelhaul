@@ -75,6 +75,8 @@ pub enum Error {
     SvdParse(#[from] SvdParseError),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
+    #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
+    ZeroEntries,
 }
 
 /// Error that happened during parsing 'CMSIS-SVD'

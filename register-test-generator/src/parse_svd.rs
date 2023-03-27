@@ -608,8 +608,17 @@ pub fn parse() -> Result<Registers<u32>, Error> {
 
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
     let content = read_input_svd_to_string();
+
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)?;
+
+    // If zero registers were chosen for generation, this run is useless.
+    // Therefore we treat it as an error.
+    // TODO: allow ignoring this error for special cases with a suitable flag on Config-struct
+    if registers.is_empty() {
+        return Err(Error::ZeroEntries);
+    }
+
     info!("Found {} registers.", registers.len());
     Ok(registers)
 }
