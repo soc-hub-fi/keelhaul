@@ -96,6 +96,8 @@ pub enum SvdParseError {
     AddrOverflow(#[from] AddrOverflowError),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
+    #[error("invalid CMSIS-SVD protection type: {0}")]
+    InvalidProtectionType(String),
 }
 
 #[derive(Error, Debug)]

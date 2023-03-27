@@ -4,10 +4,11 @@ use itertools::Itertools;
 use log::warn;
 use std::{ops, str::FromStr};
 
-use crate::{AddrOverflowError, CommonParseError};
+use crate::{AddrOverflowError, CommonParseError, SvdParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
+#[derive(Clone)]
 pub enum Access {
     /// read-only
     ReadOnly,
@@ -79,6 +80,7 @@ impl ToString for Access {
     }
 }
 
+#[derive(Clone)]
 pub enum PtrWidth {
     U8,
     U16,
@@ -228,14 +230,11 @@ pub struct Register<T: num::CheckedAdd> {
     pub path: RegPath,
     /// Physical address of the register
     pub addr: AddrRepr<T>,
-    /// Optional reset value
+    /// Defines register bit width, security and reset properties.
     ///
-    /// This is the value the register will have after device reset
-    pub reset_val: Option<u64>,
-    /// Read-write or read-only etc.
-    pub access: Access,
-    /// The size or width of this register, e.g. 8-, 16-, 32-, or 64-bit
-    pub size: PtrWidth,
+    /// Cascades from higher levels to register level.
+    pub properties: RegisterPropertiesGroup,
+    pub dimensions: Option<RegisterDimElementGroup>,
 }
 
 impl<T> Register<T>
@@ -274,4 +273,80 @@ impl<T: num::CheckedAdd> ops::Deref for Registers<T> {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+/// Specify the security privilege to access an address region
+#[derive(Clone)]
+pub enum Protection {
+    /// Secure permission required for access
+    Secure,
+    /// Non-secure or secure permission required for access
+    NonSecureOrSecure,
+    /// Privileged permission required for access
+    Privileged,
+}
+
+impl FromStr for Protection {
+    type Err = SvdParseError;
+
+    /// Convert from CMSIS-SVD `protectionStringType` string
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "s" => Ok(Self::Secure),
+            "n" => Ok(Self::NonSecureOrSecure),
+            "p" => Ok(Self::Privileged),
+            _ => Err(SvdParseError::InvalidProtectionType(s.to_owned())),
+        }
+    }
+}
+
+impl ToString for Protection {
+    /// Convert to CMSIS-SVD `protectionStringType` string
+    fn to_string(&self) -> String {
+        match self {
+            Self::Secure => "s",
+            Self::NonSecureOrSecure => "n",
+            Self::Privileged => "p",
+        }
+        .to_owned()
+    }
+}
+
+#[derive(Clone)]
+pub struct RegisterPropertiesGroupBuilder {
+    /// Register bit-width.
+    pub size: Option<PtrWidth>,
+    /// Register access rights.
+    pub access: Option<Access>,
+    /// Register access privileges.
+    pub protection: Option<Protection>,
+    /// Register value after reset.
+    /// Actual reset value is calculated using reset value and reset mask.
+    pub reset_value: Option<u64>,
+    /// Register bits with defined reset value are marked as high.
+    pub reset_mask: Option<u64>,
+}
+
+#[derive(Clone)]
+pub struct RegisterPropertiesGroup {
+    /// Register bit-width.
+    pub size: PtrWidth,
+    /// Register access rights.
+    pub access: Access,
+    /// Register access privileges.
+    pub protection: Protection,
+    /// Register value after reset.
+    /// Actual reset value is calculated using reset value and reset mask.
+    pub reset_value: u64,
+    /// Register bits with defined reset value are marked as high.
+    pub reset_mask: u64,
+}
+
+#[derive(Clone)]
+pub struct RegisterDimElementGroup {
+    pub dim: u64,
+    pub dim_increment: u64,
+    //pub dim_index: Option<>,
+    //pub dim_name: Option<String>,
+    //pub dim_array_index: Option<>,
 }
