@@ -335,6 +335,11 @@ pub struct RegisterPropertiesGroup {
     pub access: Access,
     /// Register access privileges.
     pub protection: Protection,
+    // HACK: it's not correct to use u64 for `reset_value` and `reset_mask`.
+    // Instead it would be correct to use the type of whatever's contained in
+    // the register (not the architecture type). However, u64 is way easier to
+    // implement for now, and it's valid to cast the u64 to any smaller types
+    // when necessary.
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
     pub reset_value: u64,
