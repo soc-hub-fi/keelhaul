@@ -199,10 +199,11 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         let read_value_binding = Self::read_value_binding();
         let reset_val = self.0.properties.reset_value;
+        let reg_size_ty = format_ident!("{}", self.0.properties.size.to_rust_type_str());
         match config.on_fail {
             // If reset value is incorrect, panic
             FailureImplementation::Panic => quote! {
-                assert_eq!(#read_value_binding, #reset_val);
+                assert_eq!(#read_value_binding, #reset_val as #reg_size_ty);
             },
             // If reset value is incorrect, return it
             FailureImplementation::ReturnValue => quote! {
