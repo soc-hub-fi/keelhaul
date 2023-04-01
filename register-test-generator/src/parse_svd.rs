@@ -136,7 +136,9 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
 
 /// Read the input SVD to string
 fn read_input_svd_to_string() -> String {
-    let svd_path = env::var("PATH_SVD").unwrap_or_else(|_| panic!("PATH_SVD must be set"));
+    let svd_path = env::var("PATH_SVD").unwrap_or_else(|_| {
+        env::var("SVD_PATH").unwrap_or_else(|_| panic!("PATH_SVD or SVD_PATH must be set"))
+    });
     let svd_path = PathBuf::from(svd_path);
     if !svd_path.exists() {
         panic!("SVD was not found at {}", svd_path.display());

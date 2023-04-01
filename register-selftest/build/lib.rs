@@ -61,6 +61,7 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=EXCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
+    println!("cargo:rerun-if-env-changed=SVD_PATH");
     println!("cargo:rerun-if-changed=build.rs");
 
     // Install a logger to print useful messages into `cargo:warning={}`
