@@ -115,4 +115,6 @@ pub enum NotImplementedError {
 pub enum GenerateError {
     #[error("generated address overflows")]
     AddrOverflow(#[from] AddrOverflowError),
+    #[error("invalid configuration: {cause}, {c:#?}")]
+    InvalidConfig { c: TestConfig, cause: String },
 }

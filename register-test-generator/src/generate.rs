@@ -6,8 +6,9 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{
     collections::{HashMap, HashSet},
-    iter,
+    iter, str,
 };
+use thiserror::Error;
 
 /// Remove illegal characters from register name.
 ///
@@ -79,17 +80,35 @@ pub struct TestCases {
     pub test_case_count: usize,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-enum RegTestKind {
+#[derive(Error, Debug)]
+#[error("cannot parse test kind from {0}")]
+pub struct ParseTestKindError(String);
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum RegTestKind {
     Read,
     Reset,
 }
 
-enum FailureImplementation {
+impl str::FromStr for RegTestKind {
+    type Err = ParseTestKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(RegTestKind::Read),
+            "reset" => Ok(RegTestKind::Reset),
+            s => Err(ParseTestKindError(s.to_owned())),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum FailureImplementation {
     ReturnValue,
     Panic,
 }
 
+#[derive(Clone, Debug)]
 pub struct TestConfig {
     /// What types of tests to generate
     ///
@@ -109,6 +128,29 @@ impl Default for TestConfig {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
             on_fail: FailureImplementation::ReturnValue,
         }
+    }
+}
+
+impl TestConfig {
+    pub fn reg_test_kinds(
+        mut self,
+        reg_test_kinds: HashSet<RegTestKind>,
+    ) -> Result<TestConfig, GenerateError> {
+        if reg_test_kinds.contains(&RegTestKind::Reset)
+            && !reg_test_kinds.contains(&RegTestKind::Read)
+        {
+            return Err(GenerateError::InvalidConfig {
+                c: self,
+                cause: "enabling of reset test requires read test to be enabled as well".to_owned(),
+            });
+        }
+        self.reg_test_kinds = reg_test_kinds;
+        Ok(self)
+    }
+
+    pub fn on_fail(mut self, on_fail: FailureImplementation) -> Result<Self, GenerateError> {
+        self.on_fail = on_fail;
+        Ok(self)
     }
 }
 
