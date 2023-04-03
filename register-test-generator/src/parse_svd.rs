@@ -6,7 +6,7 @@ use crate::{
     RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers, SvdParseError,
 };
 use itertools::Itertools;
-use log::{info, warn};
+use log::{debug, info, warn};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
@@ -353,7 +353,7 @@ fn process_register(
     let protection = match properties.protection {
         Some(value) => value,
         None => {
-            warn!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
+            debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
             Protection::NonSecureOrSecure
         }
     };
