@@ -353,6 +353,8 @@ fn process_register(
     let protection = match properties.protection {
         Some(value) => value,
         None => {
+            // This is a very common omission from SVD. We should not warn about it unless required by user
+            // TODO: allow changing this to warn! or error! via top level config
             debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
             Protection::NonSecureOrSecure
         }
