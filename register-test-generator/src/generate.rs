@@ -122,7 +122,7 @@ impl str::FromStr for RegTestKind {
 
 #[derive(Clone, Debug)]
 pub enum FailureImplKind {
-    ReturnValue,
+    None,
     Panic,
 }
 
@@ -144,7 +144,7 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
-            on_fail: FailureImplKind::ReturnValue,
+            on_fail: FailureImplKind::None,
         }
     }
 }
