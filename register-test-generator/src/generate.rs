@@ -100,8 +100,12 @@ pub struct ParseTestKindError(String);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum RegTestKind {
+    /// The register value will be read
     Read,
-    Reset,
+    /// The read value will be compared against the reset value
+    ///
+    /// Only generated when the reset value is reported in source format
+    ReadIsResetVal,
 }
 
 impl str::FromStr for RegTestKind {
@@ -110,14 +114,14 @@ impl str::FromStr for RegTestKind {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "read" => Ok(RegTestKind::Read),
-            "reset" => Ok(RegTestKind::Reset),
+            "reset" | "read_is_reset_val" => Ok(RegTestKind::ReadIsResetVal),
             s => Err(ParseTestKindError(s.to_owned())),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum FailureImplementation {
+pub enum FailureImplKind {
     ReturnValue,
     Panic,
 }
@@ -133,14 +137,14 @@ pub struct TestConfig {
     ///
     /// [FailureImplementation::ReturnValue]: just return the possibly incorrect value
     /// [FailureImplementation::Panic]: panic on failure (e.g., through assert)
-    on_fail: FailureImplementation,
+    on_fail: FailureImplKind,
 }
 
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
-            on_fail: FailureImplementation::ReturnValue,
+            on_fail: FailureImplKind::ReturnValue,
         }
     }
 }
@@ -150,7 +154,7 @@ impl TestConfig {
         mut self,
         reg_test_kinds: HashSet<RegTestKind>,
     ) -> Result<TestConfig, GenerateError> {
-        if reg_test_kinds.contains(&RegTestKind::Reset)
+        if reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
             && !reg_test_kinds.contains(&RegTestKind::Read)
         {
             return Err(GenerateError::InvalidConfig {
@@ -162,7 +166,7 @@ impl TestConfig {
         Ok(self)
     }
 
-    pub fn on_fail(mut self, on_fail: FailureImplementation) -> Result<Self, GenerateError> {
+    pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
     }
@@ -216,11 +220,11 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         let reg_size_ty = format_ident!("{}", self.0.properties.size.to_rust_type_str());
         match config.on_fail {
             // If reset value is incorrect, panic
-            FailureImplementation::Panic => quote! {
+            FailureImplKind::Panic => quote! {
                 assert_eq!(#read_value_binding, #reset_val as #reg_size_ty);
             },
             // If reset value is incorrect, return it
-            FailureImplementation::ReturnValue => quote! {
+            FailureImplKind::None => quote! {
                 if #read_value_binding != #reset_val {
                     return #read_value_binding;
                 }
@@ -267,7 +271,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         // Only generate reset value test if register is readable
         let reset_val_test = if self.0.properties.access.is_read()
-            && config.reg_test_kinds.contains(&RegTestKind::Reset)
+            && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
         {
             self.gen_reset_val_test(config)
         } else {
