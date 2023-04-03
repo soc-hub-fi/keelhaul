@@ -42,9 +42,14 @@ fn gen_preamble() -> TokenStream {
     quote! {
         use core::ptr::*;
 
+        pub enum Error {
+        }
+
+        pub type Result<T> = core::result::Result<T, Error>;
+
         /// Represents a test case for a single register.
         pub struct TestCase<'a> {
-            pub function: fn(),
+            pub function: fn() -> Result<()>,
             pub addr: usize,
             pub uid: &'a str,
         }
@@ -144,7 +149,7 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
-            on_fail: FailureImplKind::None,
+            on_fail: FailureImplKind::Panic,
         }
     }
 }
@@ -223,12 +228,8 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
             FailureImplKind::Panic => quote! {
                 assert_eq!(#read_value_binding, #reset_val as #reg_size_ty);
             },
-            // If reset value is incorrect, return it
-            FailureImplKind::None => quote! {
-                if #read_value_binding != #reset_val {
-                    return #read_value_binding;
-                }
-            },
+            // If reset value is incorrect, do nothing
+            FailureImplKind::None => quote! {},
         }
     }
 
@@ -280,12 +281,13 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         let ret = quote! {
             #[allow(non_snake_case)]
-            pub fn #fn_name() {
+            pub fn #fn_name() -> Result<()> {
                 #[allow(unused)]
                 let #ptr_binding: *mut #reg_size_ty = #addr_hex as *mut #reg_size_ty;
 
                 #read_test
                 #reset_val_test
+                Ok(())
             }
         };
         Ok(ret)
