@@ -4,9 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, File};
 use log::LevelFilter;
-use register_test_generator::{
-    FailureImplementation, ParseTestKindError, RegTestKind, TestCases, TestConfig,
-};
+use register_test_generator::{ParseTestKindError, RegTestKind, TestCases, TestConfig};
 use std::{
     collections::HashSet,
     env,
@@ -33,14 +31,6 @@ fn get_output_file() -> File {
         .truncate(true)
         .open(path)
         .expect("Failed to open output file.")
-}
-
-/// Write test cases to output file.
-fn write_output(lines: &Vec<String>, file: &mut File) {
-    for line in lines {
-        file.write_all(line.as_bytes())
-            .expect("Failed to write to output file.");
-    }
 }
 
 /// Execute shell command.
@@ -90,14 +80,10 @@ pub fn main() -> anyhow::Result<()> {
 
     let mut test_cfg = TestConfig::default();
     if let Some(test_kind_set) = test_types_from_env()? {
-        // HACK: use panicking tests with scan for Headsail convenience, even if not requested
-        if test_kind_set.contains(&RegTestKind::Reset) {
-            test_cfg = test_cfg.on_fail(FailureImplementation::Panic)?;
-        }
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
     let test_cases = TestCases::from_registers(&registers, &test_cfg).unwrap();
-    write_output(&test_cases.test_cases, &mut file_output);
+    file_output.write_all(test_cases.to_module_string().as_bytes())?;
     let path = get_path_to_output();
     rustfmt_file(&path)
         .unwrap_or_else(|error| panic!("Failed to format file {}. {}", path.display(), error));

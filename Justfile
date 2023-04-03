@@ -5,6 +5,9 @@ default:
 build:
     cargo build --example=run_every_test
 
+build-release:
+    cargo build --example=run_every_test --release
+
 check:
     cargo check --example=run_every_test
 
