@@ -1,5 +1,5 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, Register, Registers};
+use crate::{GenerateError, PtrWidth, Register, Registers};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
@@ -8,6 +8,7 @@ use std::{
     collections::{HashMap, HashSet},
     iter, str,
 };
+use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// Remove illegal characters from register name.
@@ -38,11 +39,25 @@ fn _remove_illegal_characters(name: &str) -> String {
     name_new
 }
 
-fn gen_preamble() -> TokenStream {
+fn gen_preamble(config: &TestConfig) -> TokenStream {
+    // It costs a lot of code size to `#[derive(Debug)]` so we only do it if required
+    let opt_derive_debug = if config.derive_debug {
+        quote!(#[derive(Debug)])
+    } else {
+        quote!()
+    };
+
+    // Generate an error variant for all test case kinds
+    let error_variant_defs: TokenStream = RegTestKind::iter()
+        .filter_map(|test_kind| test_kind.error_variant_def(PtrWidth::U32, PtrWidth::U64))
+        .collect();
+
     quote! {
         use core::ptr::*;
 
+        #opt_derive_debug
         pub enum Error {
+            #error_variant_defs
         }
 
         pub type Result<T> = core::result::Result<T, Error>;
@@ -103,7 +118,7 @@ pub struct TestCases {
 #[error("cannot parse test kind from {0}")]
 pub struct ParseTestKindError(String);
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EnumIter)]
 pub enum RegTestKind {
     /// The register value will be read
     Read,
@@ -111,6 +126,47 @@ pub enum RegTestKind {
     ///
     /// Only generated when the reset value is reported in source format
     ReadIsResetVal,
+}
+
+impl RegTestKind {
+    /// Error variant for an error enumeration, including the comma at end
+    ///
+    /// # Parameters
+    ///
+    /// - `arch_ptr_width` - The architecture pointer size.
+    /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
+    ///   Error variant.
+    fn error_variant_def(
+        &self,
+        arch_ptr_width: PtrWidth,
+        max_value_width: PtrWidth,
+    ) -> Option<TokenStream> {
+        let arch_ptr_ty = format_ident!("{}", arch_ptr_width.to_rust_type_str());
+        let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());
+        match self {
+            RegTestKind::Read => None,
+            RegTestKind::ReadIsResetVal => Some(
+                // We try to avoid generating extra code as much as possible. Therefore we only
+                // reference existing static symbols or integers here.
+                quote! {
+                    /// The read value was not the expected value on reset
+                    ///
+                    /// This means that the source file (IP-XACT or SVD) claims that the register
+                    /// value on reset should be `reset_val` but it was `read_val` instead.
+                    ReadValueIsNotResetValue {
+                        /// The value that was read from the register
+                        read_val: #max_value_width,
+                        /// Expected value for this register on reset
+                        reset_val: #max_value_width,
+                        /// Register identifier or "full path"
+                        reg_uid: &'static str,
+                        /// Register address
+                        reg_addr: #arch_ptr_ty,
+                    },
+                },
+            ),
+        }
+    }
 }
 
 impl str::FromStr for RegTestKind {
@@ -129,6 +185,7 @@ impl str::FromStr for RegTestKind {
 pub enum FailureImplKind {
     None,
     Panic,
+    ReturnError,
 }
 
 #[derive(Clone, Debug)]
@@ -143,13 +200,16 @@ pub struct TestConfig {
     /// [FailureImplementation::ReturnValue]: just return the possibly incorrect value
     /// [FailureImplementation::Panic]: panic on failure (e.g., through assert)
     on_fail: FailureImplKind,
+    /// Generate `#[derive(Debug)]` for types such as Error
+    derive_debug: bool,
 }
 
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
-            on_fail: FailureImplKind::Panic,
+            on_fail: FailureImplKind::ReturnError,
+            derive_debug: false,
         }
     }
 }
@@ -215,7 +275,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
     /// Generates a test that verifies that the read value matches with reported
     /// reset value
-    fn gen_reset_val_test(&self, config: &TestConfig) -> TokenStream {
+    fn gen_reset_val_test(&self, config: &TestConfig) -> Result<TokenStream, GenerateError> {
         // Reset value test requires read test to be present. Can't check for
         // reset value unless it's been read before.
         debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
@@ -225,11 +285,26 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         let reg_size_ty = format_ident!("{}", self.0.properties.size.to_rust_type_str());
         match config.on_fail {
             // If reset value is incorrect, panic
-            FailureImplKind::Panic => quote! {
+            FailureImplKind::Panic => Ok(quote! {
                 assert_eq!(#read_value_binding, #reset_val as #reg_size_ty);
-            },
+            }),
             // If reset value is incorrect, do nothing
-            FailureImplKind::None => quote! {},
+            FailureImplKind::None => Ok(quote! {}),
+            FailureImplKind::ReturnError => {
+                let uid = self.0.uid();
+                let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
+                let max_val_width = quote!(u64);
+                Ok(quote! {
+                    if #read_value_binding != #reset_val as #reg_size_ty {
+                        return Err(Error::ReadValueIsNotResetValue {
+                                read_val: #read_value_binding as #max_val_width,
+                                reset_val: #reset_val,
+                                reg_uid: #uid,
+                                reg_addr: #addr_hex,
+                            })
+                    }
+                })
+            }
         }
     }
 
@@ -274,7 +349,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         let reset_val_test = if self.0.properties.access.is_read()
             && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
         {
-            self.gen_reset_val_test(config)
+            self.gen_reset_val_test(config)?
         } else {
             quote!()
         };
@@ -328,7 +403,7 @@ impl TestCases {
         registers: &Registers<u32>,
         config: &TestConfig,
     ) -> Result<TestCases, GenerateError> {
-        let preamble = gen_preamble().to_string();
+        let preamble = gen_preamble(config).to_string();
 
         let mut test_fns_and_defs_by_periph = HashMap::new();
         for register in registers.iter() {
