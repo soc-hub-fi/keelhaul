@@ -38,6 +38,19 @@ fn _remove_illegal_characters(name: &str) -> String {
     name_new
 }
 
+fn gen_preamble() -> TokenStream {
+    quote! {
+        use core::ptr::*;
+
+        /// Represents a test case for a single register.
+        pub struct TestCase<'a> {
+            pub function: fn(),
+            pub addr: usize,
+            pub uid: &'a str,
+        }
+    }
+}
+
 /// Place test cases in modules.
 fn create_modules(
     test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>>,
@@ -76,6 +89,7 @@ fn create_modules(
 
 /// Collection of all test cases for this build.
 pub struct TestCases {
+    pub preamble: String,
     pub test_cases: Vec<String>,
     pub test_case_count: usize,
 }
@@ -308,6 +322,8 @@ impl TestCases {
         registers: &Registers<u32>,
         config: &TestConfig,
     ) -> Result<TestCases, GenerateError> {
+        let preamble = gen_preamble().to_string();
+
         let mut test_fns_and_defs_by_periph = HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
@@ -343,12 +359,13 @@ impl TestCases {
             .collect::<String>();
 
         Ok(TestCases {
+            preamble,
             test_cases: vec![mod_strings, format!("{test_case_array}")],
             test_case_count,
         })
     }
 
     pub fn to_module_string(&self) -> String {
-        self.test_cases.join("\n")
+        self.preamble.clone() + "\n" + &self.test_cases.join("\n")
     }
 }
