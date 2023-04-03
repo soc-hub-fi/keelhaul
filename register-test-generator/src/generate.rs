@@ -347,4 +347,8 @@ impl TestCases {
             test_case_count,
         })
     }
+
+    pub fn to_module_string(&self) -> String {
+        self.test_cases.join("\n")
+    }
 }
