@@ -1,16 +1,17 @@
+use register_selftest::Error;
+
 fn main() {
-    // TODO: enum TestType { Read, Reset, }
-
-    /*
-    for (_index, test_case) in register_selftest::hpc::TEST_CASES.iter().enumerate() {
-        println!("{}", test_case.uid);
-    }
-    */
-
     for (_index, test_case) in register_selftest::TEST_CASES.iter().enumerate() {
         println!("{}", test_case.uid);
         (test_case.function)().unwrap_or_else(|err| match err {
-            _ => todo!(),
+            Error::ReadValueIsNotResetValue {
+                read_val,
+                reset_val,
+                reg_uid,
+                reg_addr,
+            } => {
+                println!("read value '{read_val}' was not expected reset val '{reset_val}' in register '{reg_uid}'@{reg_addr}");
+            }
         });
     }
 }
