@@ -15,18 +15,18 @@ use thiserror::Error;
 /// These characters will be put into test case names, and thus need to be removed.
 fn _remove_illegal_characters(name: &str) -> String {
     let mut name_new = name.to_owned();
-    let illegals = ['(', ')', '[', ']', '%'];
+    const ILLEGALS: &[char] = &['(', ')', '[', ']', '%'];
     let mut found_illegals = Vec::new();
-    for illegal in illegals {
-        if name_new.contains(illegal) {
+    for illegal in ILLEGALS {
+        if name_new.contains(*illegal) {
             found_illegals.push(illegal);
-            name_new = name_new.replace(illegal, "_");
+            name_new = name_new.replace(*illegal, "_");
         }
     }
     if !found_illegals.is_empty() {
         let symbols = found_illegals
             .iter()
-            .map(|c| format!("\"{}\"", c.to_owned()))
+            .map(|c| format!("\"{}\"", c))
             .join(", ");
         warn!(
             "Register {}'s name contains {} illegal characters: {}. These characters are replaced with underscores ('_').",
