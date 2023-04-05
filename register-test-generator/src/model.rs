@@ -1,8 +1,10 @@
 //! Encodes information about memory mapped registers. This information can be
 //! used to generate test cases.
+use core::fmt;
 use itertools::Itertools;
 use log::warn;
 use std::{ops, str::FromStr};
+use thiserror::Error;
 
 use crate::{AddrOverflowError, CommonParseError, SvdParseError};
 
@@ -337,6 +339,95 @@ pub struct RegisterPropertiesGroupBuilder {
     pub reset_value: Option<u64>,
     /// Register bits with defined reset value are marked as high.
     pub reset_mask: Option<u64>,
+}
+
+/// Variable-length register value
+#[derive(Clone, PartialEq)]
+pub(crate) enum RegValue {
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+}
+
+impl RegValue {
+    pub(crate) fn width(&self) -> PtrWidth {
+        match self {
+            RegValue::U8(_) => PtrWidth::U8,
+            RegValue::U16(_) => PtrWidth::U16,
+            RegValue::U32(_) => PtrWidth::U32,
+            RegValue::U64(_) => PtrWidth::U64,
+        }
+    }
+}
+
+impl fmt::LowerHex for RegValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegValue::U8(u) => u.fmt(f),
+            RegValue::U16(u) => u.fmt(f),
+            RegValue::U32(u) => u.fmt(f),
+            RegValue::U64(u) => u.fmt(f),
+        }
+    }
+}
+
+/// Variable-length register reset value
+///
+/// Register metadata commonly references its default value on reset, which we
+/// can automatically check for correctness. CMSIS-SVD mandates that reset
+/// values are always reported with their appropriate reset mask. This enables
+/// test cases to avoid reading from write-only bits or writing to read-only
+/// bits.
+///
+/// # Fields
+///
+/// `val`   - The reset value
+/// `mask`  - Mask for reading from or writing into the register, to assist in
+/// writing into partially protected registers.
+#[derive(Clone)]
+pub(crate) enum ResetValue {
+    U8 { val: u8, mask: u8 },
+    U16 { val: u16, mask: u16 },
+    U32 { val: u32, mask: u32 },
+    U64 { val: u64, mask: u64 },
+}
+
+#[derive(Debug, Error)]
+#[error("types are incompatible: {0} != {1}")]
+pub struct IncompatibleTypesError(PtrWidth, PtrWidth);
+
+impl ResetValue {
+    pub(crate) fn with_mask(
+        value: RegValue,
+        mask: RegValue,
+    ) -> Result<Self, IncompatibleTypesError> {
+        match (value, mask) {
+            (RegValue::U8(val), RegValue::U8(mask)) => Ok(ResetValue::U8 { val, mask }),
+            (RegValue::U16(val), RegValue::U16(mask)) => Ok(ResetValue::U16 { val, mask }),
+            (RegValue::U32(val), RegValue::U32(mask)) => Ok(ResetValue::U32 { val, mask }),
+            (RegValue::U64(val), RegValue::U64(mask)) => Ok(ResetValue::U64 { val, mask }),
+            (val, mask) => Err(IncompatibleTypesError(val.width(), mask.width())),
+        }
+    }
+
+    pub(crate) fn value(&self) -> RegValue {
+        match self {
+            ResetValue::U8 { val, .. } => RegValue::U8(val.clone()),
+            ResetValue::U16 { val, .. } => RegValue::U16(val.clone()),
+            ResetValue::U32 { val, .. } => RegValue::U32(val.clone()),
+            ResetValue::U64 { val, .. } => RegValue::U64(val.clone()),
+        }
+    }
+
+    pub(crate) fn mask(&self) -> RegValue {
+        match self {
+            ResetValue::U8 { mask, .. } => RegValue::U8(mask.clone()),
+            ResetValue::U16 { mask, .. } => RegValue::U16(mask.clone()),
+            ResetValue::U32 { mask, .. } => RegValue::U32(mask.clone()),
+            ResetValue::U64 { mask, .. } => RegValue::U64(mask.clone()),
+        }
+    }
 }
 
 #[derive(Clone)]
