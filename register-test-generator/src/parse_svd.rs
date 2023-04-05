@@ -3,11 +3,10 @@
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
     NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
-    RegisterDimElementGroup, RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers,
-    ResetValue, SvdParseError,
+    RegisterDimElementGroup, RegisterPropertiesGroupBuilder, Registers, SvdParseError,
 };
 use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{info, warn};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
@@ -338,76 +337,7 @@ fn process_register(
     }
 
     let properties = inherit_and_update_properties(parent, &node)?;
-
-    let value_size = match properties.size {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
-            PtrWidth::U32
-        }
-    };
-    let access = match properties.access {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined access. Access is assumed to be 'read-write'.");
-            Access::ReadWrite
-        }
-    };
-    let protection = match properties.protection {
-        Some(value) => value,
-        None => {
-            // This is a very common omission from SVD. We should not warn about it unless required by user
-            // TODO: allow changing this to warn! or error! via top level config
-            debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
-            Protection::NonSecureOrSecure
-        }
-    };
-    let reset_value = match properties.reset_value {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
-            match value_size {
-                PtrWidth::U8 => RegValue::U8(0),
-                PtrWidth::U16 => RegValue::U16(0),
-                PtrWidth::U32 => RegValue::U32(0),
-                PtrWidth::U64 => RegValue::U64(0),
-            }
-        }
-    };
-    let reset_mask = match properties.reset_mask {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be '{}::MAX'.", value_size);
-            match value_size {
-                PtrWidth::U8 => RegValue::U8(u8::MAX),
-                PtrWidth::U16 => RegValue::U16(u16::MAX),
-                PtrWidth::U32 => RegValue::U32(u32::MAX),
-                PtrWidth::U64 => RegValue::U64(u64::MAX),
-            }
-        }
-    };
-
-    /* FIXME: this block should be used
-    let size = properties.size.expect(&format!(
-        "register {reg_path} or it's parents have not defined size"
-    ));
-    let access = properties.access.expect(&format!(
-        "register {reg_path} or it's parents have not defined access"
-    ));
-    let protection = properties.protection.expect(&format!(
-        "register {reg_path} or it's parents have not defined protection"
-    ));
-    let reset_value = properties.reset_value.expect(&format!(
-        "register {reg_path} or it's parents have not defined reset value"
-    ));
-    let reset_mask = properties.reset_mask.expect(&format!(
-        "register {reg_path} or it's parents have not defined reset mask"
-    ));
-    */
-
-    let reset_value = ResetValue::with_mask(reset_value, reset_mask)?;
-
-    let properties = RegisterPropertiesGroup::new(value_size, access, protection, reset_value);
+    let properties = properties.build(&reg_path)?;
 
     let addr = AddrRepr::<u64>::new(parent.peripheral_base, parent.cluster_offset, addr_offset);
     let addr = AddrRepr::<u32>::try_from(addr.clone())
