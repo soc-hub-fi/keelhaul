@@ -252,7 +252,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
 }
 
 #[derive(Clone)]
-struct RegisterPropertiesGroupBuilder {
+struct RegPropGroupBuilder {
     /// Register bit-width.
     pub size: Option<PtrWidth>,
     /// Register access rights.
@@ -266,7 +266,7 @@ struct RegisterPropertiesGroupBuilder {
     pub(crate) reset_mask: Option<RegValue>,
 }
 
-impl RegisterPropertiesGroupBuilder {
+impl RegPropGroupBuilder {
     pub(crate) fn build(
         self,
         reg_path: &str,
@@ -314,7 +314,7 @@ impl RegisterPropertiesGroupBuilder {
     }
 }
 
-impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
+impl TryFrom<&Node<'_, '_>> for RegPropGroupBuilder {
     type Error = SvdParseError;
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
@@ -338,7 +338,7 @@ impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
             Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
             Err(_) => None,
         };
-        Ok(RegisterPropertiesGroupBuilder {
+        Ok(RegPropGroupBuilder {
             size,
             access,
             protection,
@@ -367,7 +367,7 @@ struct RegisterParent {
     kind: RegisterParentKind,
     periph_name: String,
     periph_base: u64,
-    properties: RegisterPropertiesGroupBuilder,
+    properties: RegPropGroupBuilder,
 }
 
 impl RegisterParent {
@@ -379,7 +379,7 @@ impl RegisterParent {
         Ok(Self {
             periph_name,
             periph_base: base_addr,
-            properties: RegisterPropertiesGroupBuilder::try_from(periph_node)?,
+            properties: RegPropGroupBuilder::try_from(periph_node)?,
             kind: RegisterParentKind::Periph,
         })
     }
@@ -405,7 +405,7 @@ impl RegisterParent {
 fn inherit_and_update_properties(
     parent: &RegisterParent,
     node: &Node,
-) -> Result<RegisterPropertiesGroupBuilder, SvdParseError> {
+) -> Result<RegPropGroupBuilder, SvdParseError> {
     let mut properties = parent.properties.clone();
     if let Ok(size) = find_text_in_node_by_tag_name(node, "size") {
         properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
