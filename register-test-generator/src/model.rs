@@ -80,7 +80,7 @@ impl ToString for Access {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PtrWidth {
     U8,
     U16,
@@ -111,6 +111,22 @@ impl PtrWidth {
             64 => Some(PtrWidth::U64),
             _bc => None,
         }
+    }
+
+    /// Maximum value representable by a binding of type [PtrWidth]
+    pub(crate) fn max_value(&self) -> RegValue {
+        match self {
+            PtrWidth::U8 => RegValue::U8(u8::MAX),
+            PtrWidth::U16 => RegValue::U16(u16::MAX),
+            PtrWidth::U32 => RegValue::U32(u32::MAX),
+            PtrWidth::U64 => RegValue::U64(u64::MAX),
+        }
+    }
+}
+
+impl fmt::Display for PtrWidth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_rust_type_str())
     }
 }
 
