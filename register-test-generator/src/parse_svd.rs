@@ -216,6 +216,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
     }
 
     // Pick either hexadecimal or decimal format based on which fits
+    // TODO: pick binary format on '#'
 
     let (number_part, size_mult_capture) = if HEX_NONNEG_INT_RE.is_match(text) {
         // Safety: we checked above that at least one match exists in text
