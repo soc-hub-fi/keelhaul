@@ -150,37 +150,39 @@ impl RegPath {
 /// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
 /// type allows converting between the two.
 #[derive(Clone, Debug)]
-pub enum AddrRepr<T: num::CheckedAdd> {
-    Comps {
-        base: T,
-        cluster: Option<T>,
-        offset: T,
-    },
-    Full(T),
+pub struct AddrRepr<T: num::CheckedAdd> {
+    base: T,
+    cluster: Option<T>,
+    offset: T,
 }
 
 impl<T> AddrRepr<T>
 where
     T: num::CheckedAdd + Clone,
 {
+    pub fn new(base: T, cluster: Option<T>, offset: T) -> Self {
+        Self {
+            base,
+            cluster,
+            offset,
+        }
+    }
+
     /// Get register's absolute memory address
     ///
     /// Returns None on address overflow.
     pub fn full(&self) -> Option<T> {
-        match self {
-            AddrRepr::Full(addr) => Some(addr.clone()),
-            AddrRepr::Comps {
-                base,
-                cluster,
-                offset,
-            } => {
-                let mut addr = Some(base.clone());
-                if let Some(cl) = cluster {
-                    addr = addr.and_then(|x| x.checked_add(cl));
-                }
-                addr.and_then(|x| x.checked_add(offset))
-            }
+        let AddrRepr {
+            base,
+            cluster,
+            offset,
+        } = self;
+
+        let mut addr = Some(base.clone());
+        if let Some(cl) = cluster {
+            addr = addr.and_then(|x| x.checked_add(cl));
         }
+        addr.and_then(|x| x.checked_add(offset))
     }
 }
 
@@ -188,17 +190,10 @@ where
 // representation to simplify debug implementations
 impl From<AddrRepr<u32>> for AddrRepr<u64> {
     fn from(value: AddrRepr<u32>) -> Self {
-        match value {
-            AddrRepr::Comps {
-                base,
-                cluster,
-                offset,
-            } => AddrRepr::Comps {
-                base: base.into(),
-                cluster: cluster.map(|x| x.into()),
-                offset: offset.into(),
-            },
-            AddrRepr::Full(u) => AddrRepr::Full(u.into()),
+        AddrRepr {
+            base: value.base.into(),
+            cluster: value.cluster.map(|x| x.into()),
+            offset: value.offset.into(),
         }
     }
 }
@@ -209,23 +204,20 @@ impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
     type Error = <u64 as TryInto<u32>>::Error;
 
     fn try_from(value: AddrRepr<u64>) -> Result<Self, Self::Error> {
-        match value {
-            AddrRepr::Comps {
-                base,
-                cluster,
-                offset,
-            } => {
-                let base: u32 = base.try_into()?;
-                let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
-                let offset: u32 = offset.try_into()?;
-                Ok(AddrRepr::Comps {
-                    base,
-                    cluster,
-                    offset,
-                })
-            }
-            AddrRepr::Full(u) => Ok(AddrRepr::Full(u.try_into()?)),
-        }
+        let AddrRepr {
+            base,
+            cluster,
+            offset,
+        } = value;
+
+        let base: u32 = base.try_into()?;
+        let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
+        let offset: u32 = offset.try_into()?;
+        Ok(AddrRepr {
+            base,
+            cluster,
+            offset,
+        })
     }
 }
 

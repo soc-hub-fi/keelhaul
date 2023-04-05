@@ -400,11 +400,7 @@ fn process_register(
         reset_mask,
     };
 
-    let addr = AddrRepr::<u64>::Comps {
-        base: parent.peripheral_base,
-        cluster: parent.cluster_offset,
-        offset: addr_offset,
-    };
+    let addr = AddrRepr::<u64>::new(parent.peripheral_base, parent.cluster_offset, addr_offset);
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
     let dimensions = match RegisterDimElementGroup::try_from(&node) {
