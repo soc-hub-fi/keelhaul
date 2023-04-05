@@ -67,7 +67,7 @@ pub enum CommonParseError {
 
 #[derive(Error, Debug)]
 #[error("address for {0} does not fit in architecture pointer {1:?}")]
-pub struct AddrOverflowError(String, AddrRepr<u64>);
+pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -94,8 +94,10 @@ pub enum SvdParseError {
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
-    #[error("parsed address overflows")]
-    AddrOverflow(#[from] AddrOverflowError),
+    #[error("parsed 32-bit address overflows")]
+    AddrOverflow32(#[from] AddrOverflowError<u32>),
+    #[error("parsed 64-bit address overflows")]
+    AddrOverflow64(#[from] AddrOverflowError<u64>),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
     #[error("invalid CMSIS-SVD protection type: {0}")]
@@ -113,8 +115,10 @@ pub enum NotImplementedError {
 /// Error that happened during test case generation.
 #[derive(Error, Debug)]
 pub enum GenerateError {
-    #[error("generated address overflows")]
-    AddrOverflow(#[from] AddrOverflowError),
+    #[error("generated 32-bit address overflows")]
+    AddrOverflow32(#[from] AddrOverflowError<u32>),
+    #[error("generated 64-bit address overflows")]
+    AddrOverflow64(#[from] AddrOverflowError<u64>),
     #[error("invalid configuration: {cause}, {c:#?}")]
     InvalidConfig { c: TestConfig, cause: String },
 }

@@ -237,10 +237,9 @@ pub struct Register<T: num::CheckedAdd> {
 impl<T> Register<T>
 where
     T: num::CheckedAdd + Clone,
-    AddrRepr<u64>: From<AddrRepr<T>>,
 {
     /// Get register's absolute memory address
-    pub fn full_addr(&self) -> Result<T, AddrOverflowError> {
+    pub fn full_addr(&self) -> Result<T, AddrOverflowError<T>> {
         self.addr.full().ok_or(AddrOverflowError(
             self.path.join("-"),
             self.addr.clone().into(),
