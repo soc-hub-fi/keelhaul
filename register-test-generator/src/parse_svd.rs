@@ -322,7 +322,7 @@ impl RegisterPropertiesGroupBuilder {
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
 struct RegisterParent {
-    peripheral_name: String,
+    periph_name: String,
     cluster_name: Option<String>,
     peripheral_base: u64,
     cluster_offset: Option<u64>,
@@ -366,17 +366,17 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
 
 fn process_register(
     parent: &RegisterParent,
-    node: Node,
+    register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Register<u32>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_string();
-    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
+    let name = find_text_in_node_by_tag_name(&register_node, "name")?.to_string();
+    let addr_offset_str = find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
     let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
-        parent.peripheral_name.clone(),
+        parent.periph_name.clone(),
         parent.cluster_name.clone(),
         name.clone(),
     );
@@ -399,13 +399,13 @@ fn process_register(
         return Ok(None);
     }
 
-    let properties = inherit_and_update_properties(parent, &node)?;
+    let properties = inherit_and_update_properties(parent, &register_node)?;
     let properties = properties.build(&reg_path)?;
 
     let addr = AddrRepr::<u64>::new(parent.peripheral_base, parent.cluster_offset, addr_offset);
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
-    let dimensions = match RegisterDimElementGroup::try_from(&node) {
+    let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
     };
@@ -421,24 +421,27 @@ fn process_register(
 
 fn process_cluster(
     parent: &RegisterParent,
-    node: Node,
+    cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
-    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
+    let name = find_text_in_node_by_tag_name(&cluster_node, "name")?.to_owned();
+    let addr_offset_str = find_text_in_node_by_tag_name(&cluster_node, "addressOffset")?;
     let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
 
     let current = RegisterParent {
-        peripheral_name: parent.peripheral_name.clone(),
+        periph_name: parent.periph_name.clone(),
         cluster_name: Some(name),
         peripheral_base: parent.peripheral_base,
         cluster_offset: Some(addr_offset),
-        properties: inherit_and_update_properties(parent, &node)?,
+        properties: inherit_and_update_properties(parent, &cluster_node)?,
     };
 
     let mut registers = Vec::new();
-    for register_node in node.children().filter(|n| n.has_tag_name("register")) {
+    for register_node in cluster_node
+        .children()
+        .filter(|n| n.has_tag_name("register"))
+    {
         if let Some(register) = process_register(&current, register_node, reg_filter, syms_regex)? {
             registers.push(register);
         }
@@ -481,13 +484,13 @@ impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
 }
 
 fn process_peripheral(
-    node: Node,
+    periph_node: Node,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
-    let base_addr_str = find_text_in_node_by_tag_name(&node, "baseAddress")?;
+    let name = find_text_in_node_by_tag_name(&periph_node, "name")?.to_owned();
+    let base_addr_str = find_text_in_node_by_tag_name(&periph_node, "baseAddress")?;
     let base_addr = parse_nonneg_int_u64(base_addr_str)?;
 
     if periph_filter.is_blocked(&name.to_lowercase()) {
@@ -496,14 +499,14 @@ fn process_peripheral(
     }
 
     let current = RegisterParent {
-        peripheral_name: name,
+        periph_name: name,
         cluster_name: None,
         peripheral_base: base_addr,
         cluster_offset: None,
-        properties: RegisterPropertiesGroupBuilder::try_from(&node)?,
+        properties: RegisterPropertiesGroupBuilder::try_from(&periph_node)?,
     };
 
-    let registers_nodes = node
+    let registers_nodes = periph_node
         .children()
         .filter(|n| n.has_tag_name("registers"))
         .collect_vec();
