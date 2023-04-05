@@ -267,6 +267,31 @@ struct RegPropGroupBuilder {
 }
 
 impl RegPropGroupBuilder {
+    /// Inherit properties from parent and update with current node's properties if defined.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - can be either cluster or register node
+    fn inherit_and_update_from(&self, node: &Node) -> Result<RegPropGroupBuilder, SvdParseError> {
+        let mut properties = self.clone();
+        if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
+            properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
+        };
+        if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
+            properties.access = Some(Access::from_svd_access_type(access)?);
+        };
+        if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
+            properties.protection = Some(Protection::from_str(protection)?);
+        };
+        if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
+            properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
+        };
+        if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
+            properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
+        };
+        Ok(properties)
+    }
+
     pub(crate) fn build(
         self,
         reg_path: &str,
@@ -392,41 +417,13 @@ impl RegisterParent {
         Ok(Self {
             periph_name: self.periph_name.clone(),
             periph_base: self.periph_base,
-            properties: inherit_and_update_properties(self, &cluster_node)?,
+            properties: self.properties.inherit_and_update_from(&cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
                 cluster_offset,
             },
         })
     }
-}
-
-/// Inherit properties from parent and update with current node's properties if defined.
-///
-/// # Arguments
-///
-/// * `node` - can be either cluster or register node
-fn inherit_and_update_properties(
-    parent: &RegisterParent,
-    node: &Node,
-) -> Result<RegPropGroupBuilder, SvdParseError> {
-    let mut properties = parent.properties.clone();
-    if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
-        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
-    };
-    if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access)?);
-    };
-    if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
-        properties.protection = Some(Protection::from_str(protection)?);
-    };
-    if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
-        properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
-    };
-    if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
-        properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
-    };
-    Ok(properties)
 }
 
 impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
@@ -478,7 +475,7 @@ fn process_register(
         return Ok(None);
     }
 
-    let properties = inherit_and_update_properties(parent, &register_node)?;
+    let properties = parent.properties.inherit_and_update_from(&register_node)?;
     let properties = properties.build(&reg_path)?;
 
     let addr = AddrRepr::<u64>::new(
