@@ -402,6 +402,10 @@ impl RegisterParent {
 }
 
 /// Inherit properties from parent and update with current node's properties if defined.
+///
+/// # Arguments
+///
+/// * `node` - can be either cluster or register node
 fn inherit_and_update_properties(
     parent: &RegisterParent,
     node: &Node,
