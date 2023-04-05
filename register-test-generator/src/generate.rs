@@ -1,5 +1,5 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, PtrWidth, Register, Registers};
+use crate::{GenerateError, PtrWidth, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
@@ -235,6 +235,98 @@ impl TestConfig {
         self.on_fail = on_fail;
         Ok(self)
     }
+}
+
+impl ResetValue {
+    fn gen_bitand(&self) -> TokenStream {
+        let (value, mask) = (self.value(), self.mask());
+        let value_lit = value.gen_literal_hex();
+
+        match mask {
+            mask if mask == mask.width().max_value() => {
+                quote!(#value_lit)
+            }
+            mask => {
+                let mask_bin = mask.gen_literal_bin();
+                quote! {
+                    (#value_lit & #mask_bin)
+                }
+            }
+        }
+    }
+}
+
+impl RegValue {
+    fn gen_literal_hex(&self) -> TokenStream {
+        match self {
+            RegValue::U8(u) => format!("{:#x}u8", u),
+            RegValue::U16(u) => format!("{:#x}u16", u),
+            RegValue::U32(u) => format!("{:#x}u32", u),
+            RegValue::U64(u) => format!("{:#x}u64", u),
+        }
+        .parse()
+        .unwrap()
+    }
+
+    fn gen_literal_bin(&self) -> TokenStream {
+        match self {
+            RegValue::U8(u) => format!("{:#b}u8", u),
+            RegValue::U16(u) => format!("{:#b}u16", u),
+            RegValue::U32(u) => format!("{:#b}u32", u),
+            RegValue::U64(u) => format!("{:#b}u64", u),
+        }
+        .parse()
+        .unwrap()
+    }
+}
+
+#[test]
+fn reset_value_bitands_generate() {
+    assert_eq!(
+        &ResetValue::U8 {
+            val: 0xb0,
+            mask: u8::MAX
+        }
+        .gen_bitand()
+        .to_string(),
+        "0xb0u8"
+    );
+    assert_eq!(
+        &ResetValue::U8 {
+            val: 0xb0,
+            mask: 0b0000_0001,
+        }
+        .gen_bitand()
+        .to_string(),
+        "(0xb0u8 & 0b1u8)"
+    );
+    assert_eq!(
+        &ResetValue::U8 {
+            val: 0xb0,
+            mask: 0b0000_0010,
+        }
+        .gen_bitand()
+        .to_string(),
+        "(0xb0u8 & 0b10u8)"
+    );
+    assert_eq!(
+        &ResetValue::U32 {
+            val: 0xdeadbeef,
+            mask: 0b0101_0101,
+        }
+        .gen_bitand()
+        .to_string(),
+        "(0xdeadbeefu32 & 0b1010101u32)"
+    );
+    assert_eq!(
+        &ResetValue::U32 {
+            val: 0xdeadbeef,
+            mask: u32::MAX,
+        }
+        .gen_bitand()
+        .to_string(),
+        "0xdeadbeefu32"
+    );
 }
 
 /// Generates test cases based on a [Register] definition and [TestConfig]
