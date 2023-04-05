@@ -282,7 +282,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         let read_value_binding = Self::read_value_binding();
         let reset_val = self.0.properties.reset_value;
-        let reg_size_ty = format_ident!("{}", self.0.properties.size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", self.0.properties.value_size.to_rust_type_str());
         match config.on_fail {
             // If reset value is incorrect, panic
             FailureImplKind::Panic => Ok(quote! {
@@ -331,7 +331,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", reg.properties.size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", reg.properties.value_size.to_rust_type_str());
         let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;

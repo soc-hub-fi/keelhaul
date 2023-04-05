@@ -325,8 +325,8 @@ pub struct RegisterPropertiesGroupBuilder {
 
 #[derive(Clone)]
 pub struct RegisterPropertiesGroup {
-    /// Register bit-width.
-    pub size: PtrWidth,
+    /// Register value bit-width.
+    pub value_size: PtrWidth,
     /// Register access rights.
     pub access: Access,
     /// Register access privileges.

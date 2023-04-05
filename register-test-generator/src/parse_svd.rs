@@ -336,7 +336,7 @@ fn process_register(
 
     let properties = inherit_and_update_properties(parent, &node)?;
 
-    let size = match properties.size {
+    let value_size = match properties.size {
         Some(value) => value,
         None => {
             warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
@@ -393,7 +393,7 @@ fn process_register(
     */
 
     let properties = RegisterPropertiesGroup {
-        size,
+        value_size,
         access,
         protection,
         reset_value,
