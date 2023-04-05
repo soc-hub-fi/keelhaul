@@ -1,8 +1,8 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
-    IncompatibleTypesError, NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
+    validate_path_existence, Access, AddrOverflowError, AddrRepr, Error, IncompatibleTypesError,
+    NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
     RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
@@ -278,7 +278,7 @@ impl RegPropGroupBuilder {
             properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
         };
         if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
-            properties.access = Some(Access::from_svd_access_type(access)?);
+            properties.access = Some(Access::from_str(access)?);
         };
         if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
             properties.protection = Some(Protection::from_str(protection)?);
@@ -348,7 +348,7 @@ impl TryFrom<&Node<'_, '_>> for RegPropGroupBuilder {
             Err(_) => None,
         };
         let access = match find_text_in_node_by_tag_name(value, "access") {
-            Ok(access) => Some(Access::from_svd_access_type(access)?),
+            Ok(access) => Some(Access::from_str(access)?),
             Err(_) => None,
         };
         let protection = match find_text_in_node_by_tag_name(value, "protection") {
@@ -662,18 +662,4 @@ pub fn parse() -> Result<Registers<u32>, Error> {
 
     info!("Found {} registers.", registers.len());
     Ok(registers)
-}
-
-impl Access {
-    /// Implements parsing access type as specified by CMSIS-SVD schema
-    pub fn from_svd_access_type(s: &str) -> Result<Self, CommonParseError> {
-        match s {
-            "read-only" => Ok(Access::ReadOnly),
-            "write-only" => Ok(Access::WriteOnly),
-            "read-write" => Ok(Access::ReadWrite),
-            "writeOnce" => Ok(Access::WriteOnce),
-            "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            _ => Err(CommonParseError::InvalidAccessType(s.to_owned())),
-        }
-    }
 }
