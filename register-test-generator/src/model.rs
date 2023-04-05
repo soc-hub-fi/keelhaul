@@ -270,6 +270,10 @@ where
     pub fn uid(&self) -> String {
         self.path.join("-")
     }
+
+    pub(crate) fn masked_reset(&self) -> &ResetValue {
+        &self.properties.reset_value
+    }
 }
 
 /// A list of registers parsed from SVD or IP-XACT (newtype).
@@ -336,9 +340,9 @@ pub struct RegisterPropertiesGroupBuilder {
     pub protection: Option<Protection>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
-    pub reset_value: Option<u64>,
+    pub(crate) reset_value: Option<RegValue>,
     /// Register bits with defined reset value are marked as high.
-    pub reset_mask: Option<u64>,
+    pub(crate) reset_mask: Option<RegValue>,
 }
 
 /// Variable-length register value
@@ -438,16 +442,28 @@ pub struct RegisterPropertiesGroup {
     pub access: Access,
     /// Register access privileges.
     pub protection: Protection,
-    // HACK: it's not correct to use u64 for `reset_value` and `reset_mask`.
-    // Instead it would be correct to use the type of whatever's contained in
-    // the register (not the architecture type). However, u64 is way easier to
-    // implement for now, and it's valid to cast the u64 to any smaller types
-    // when necessary.
-    /// Register value after reset.
-    /// Actual reset value is calculated using reset value and reset mask.
-    pub reset_value: u64,
-    /// Register bits with defined reset value are marked as high.
-    pub reset_mask: u64,
+    /// Expected register value after reset based on source format
+    ///
+    /// Checking for the value may require special considerations in registers
+    /// with read-only or write-only fields. These considerations are encoded in
+    /// [ResetValue].
+    reset_value: ResetValue,
+}
+
+impl RegisterPropertiesGroup {
+    pub(crate) fn new(
+        value_size: PtrWidth,
+        access: Access,
+        protection: Protection,
+        reset_value: ResetValue,
+    ) -> Self {
+        Self {
+            value_size,
+            access,
+            protection,
+            reset_value,
+        }
+    }
 }
 
 #[derive(Clone)]

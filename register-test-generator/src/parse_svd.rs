@@ -2,8 +2,9 @@
 
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
-    NotImplementedError, Protection, PtrWidth, RegPath, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers, SvdParseError,
+    NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers,
+    ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -280,10 +281,10 @@ fn inherit_and_update_properties(
         properties.protection = Some(Protection::from_str(protection)?);
     };
     if let Ok(reset_value) = find_text_in_node_by_tag_name(node, "resetValue") {
-        properties.reset_value = Some(parse_nonneg_int_u64(reset_value)?);
+        properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
     };
     if let Ok(reset_mask) = find_text_in_node_by_tag_name(node, "resetMask") {
-        properties.reset_mask = Some(parse_nonneg_int_u64(reset_mask)?);
+        properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
     };
     Ok(properties)
 }
@@ -363,14 +364,24 @@ fn process_register(
         Some(value) => value,
         None => {
             warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
-            0
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(0),
+                PtrWidth::U16 => RegValue::U16(0),
+                PtrWidth::U32 => RegValue::U32(0),
+                PtrWidth::U64 => RegValue::U64(0),
+            }
         }
     };
     let reset_mask = match properties.reset_mask {
         Some(value) => value,
         None => {
-            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be 'u64::MAX'.");
-            u64::MAX
+            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be '{}::MAX'.", value_size);
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(u8::MAX),
+                PtrWidth::U16 => RegValue::U16(u16::MAX),
+                PtrWidth::U32 => RegValue::U32(u32::MAX),
+                PtrWidth::U64 => RegValue::U64(u64::MAX),
+            }
         }
     };
 
@@ -392,13 +403,9 @@ fn process_register(
     ));
     */
 
-    let properties = RegisterPropertiesGroup {
-        value_size,
-        access,
-        protection,
-        reset_value,
-        reset_mask,
-    };
+    let reset_value = ResetValue::with_mask(reset_value, reset_mask)?;
+
+    let properties = RegisterPropertiesGroup::new(value_size, access, protection, reset_value);
 
     let addr = AddrRepr::<u64>::new(parent.peripheral_base, parent.cluster_offset, addr_offset);
     let addr = AddrRepr::<u32>::try_from(addr.clone())
@@ -461,11 +468,11 @@ impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
             Err(_) => None,
         };
         let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
-            Ok(reset_value) => Some(parse_nonneg_int_u64(reset_value)?),
+            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
             Err(_) => None,
         };
         let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
-            Ok(reset_mask) => Some(parse_nonneg_int_u64(reset_mask)?),
+            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
             Err(_) => None,
         };
         Ok(RegisterPropertiesGroupBuilder {
