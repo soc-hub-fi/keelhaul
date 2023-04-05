@@ -2,11 +2,11 @@
 
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
-    NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
-    RegisterDimElementGroup, RegisterPropertiesGroupBuilder, Registers, SvdParseError,
+    IncompatibleTypesError, NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
-use log::{info, warn};
+use log::{debug, info, warn};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
@@ -249,6 +249,69 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         Some(mult) => number_part * mult,
         None => number_part,
     })
+}
+
+#[derive(Clone)]
+struct RegisterPropertiesGroupBuilder {
+    /// Register bit-width.
+    pub size: Option<PtrWidth>,
+    /// Register access rights.
+    pub access: Option<Access>,
+    /// Register access privileges.
+    pub protection: Option<Protection>,
+    /// Register value after reset.
+    /// Actual reset value is calculated using reset value and reset mask.
+    pub(crate) reset_value: Option<RegValue>,
+    /// Register bits with defined reset value are marked as high.
+    pub(crate) reset_mask: Option<RegValue>,
+}
+
+impl RegisterPropertiesGroupBuilder {
+    pub(crate) fn build(
+        self,
+        reg_path: &str,
+    ) -> Result<RegisterPropertiesGroup, IncompatibleTypesError> {
+        let value_size = self.size.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
+            PtrWidth::U32
+        });
+        let access = self.access.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined access. Access is assumed to be 'read-write'.");
+            Access::ReadWrite
+        });
+        let protection = self.protection.unwrap_or_else(|| {
+            // This is a very common omission from SVD. We should not warn about it unless required by user
+            // TODO: allow changing this to warn! or error! via top level config
+            debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
+            Protection::NonSecureOrSecure
+        });
+        let reset_value = self.reset_value.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(0),
+                PtrWidth::U16 => RegValue::U16(0),
+                PtrWidth::U32 => RegValue::U32(0),
+                PtrWidth::U64 => RegValue::U64(0),
+            }
+        });
+        let reset_mask = self.reset_mask.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be '{}::MAX'.", value_size);
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(u8::MAX),
+                PtrWidth::U16 => RegValue::U16(u16::MAX),
+                PtrWidth::U32 => RegValue::U32(u32::MAX),
+                PtrWidth::U64 => RegValue::U64(u64::MAX),
+            }
+        });
+        let reset_value = ResetValue::with_mask(reset_value, reset_mask)?;
+
+        Ok(RegisterPropertiesGroup::new(
+            value_size,
+            access,
+            protection,
+            reset_value,
+        ))
+    }
 }
 
 // The presence of this pattern in the register name likely indicates that this
