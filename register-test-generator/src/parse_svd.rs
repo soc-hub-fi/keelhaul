@@ -314,6 +314,40 @@ impl RegisterPropertiesGroupBuilder {
     }
 }
 
+impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
+    type Error = SvdParseError;
+
+    fn try_from(value: &Node) -> Result<Self, Self::Error> {
+        let size = match find_text_in_node_by_tag_name(value, "size") {
+            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
+            Err(_) => None,
+        };
+        let access = match find_text_in_node_by_tag_name(value, "access") {
+            Ok(access) => Some(Access::from_svd_access_type(access)?),
+            Err(_) => None,
+        };
+        let protection = match find_text_in_node_by_tag_name(value, "protection") {
+            Ok(protection) => Some(Protection::from_str(protection)?),
+            Err(_) => None,
+        };
+        let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
+            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
+            Err(_) => None,
+        };
+        let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
+            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
+            Err(_) => None,
+        };
+        Ok(RegisterPropertiesGroupBuilder {
+            size,
+            access,
+            protection,
+            reset_value,
+            reset_mask,
+        })
+    }
+}
+
 // The presence of this pattern in the register name likely indicates that this
 // is an array register
 //
@@ -487,40 +521,6 @@ fn process_cluster(
         }
     }
     Ok(Some(registers))
-}
-
-impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
-    type Error = SvdParseError;
-
-    fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let size = match find_text_in_node_by_tag_name(value, "size") {
-            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
-            Err(_) => None,
-        };
-        let access = match find_text_in_node_by_tag_name(value, "access") {
-            Ok(access) => Some(Access::from_svd_access_type(access)?),
-            Err(_) => None,
-        };
-        let protection = match find_text_in_node_by_tag_name(value, "protection") {
-            Ok(protection) => Some(Protection::from_str(protection)?),
-            Err(_) => None,
-        };
-        let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
-            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
-            Err(_) => None,
-        };
-        let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
-            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
-            Err(_) => None,
-        };
-        Ok(RegisterPropertiesGroupBuilder {
-            size,
-            access,
-            protection,
-            reset_value,
-            reset_mask,
-        })
-    }
 }
 
 fn process_peripheral(
