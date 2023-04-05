@@ -318,10 +318,10 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///
     /// Example output:
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// pub fn test_something_0xdeadbeef() {
     ///     #[allow(unused)]
-    ///     let reg_ptr =*mut u32 = 0xdeadbeef as *mut u32;
+    ///     let reg_ptr: *mut u32 = 0xdeadbeef as *mut u32;
     ///
     ///     let _read_value = unsafe { read_volatile(reg_ptr) };
     /// }
@@ -372,7 +372,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///
     /// Example output:
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// TestCase {
     ///     function: foo::test_something_0xdeafbeef,
     ///     addr: 0xdeafbeef,
