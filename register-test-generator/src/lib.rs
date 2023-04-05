@@ -102,6 +102,8 @@ pub enum SvdParseError {
     GenericParse(#[from] CommonParseError),
     #[error("invalid CMSIS-SVD protection type: {0}")]
     InvalidProtectionType(String),
+    #[error("register reset value and mask are of different types")]
+    ResetValueMaskTypeMismatch(#[from] IncompatibleTypesError),
 }
 
 #[derive(Error, Debug)]
