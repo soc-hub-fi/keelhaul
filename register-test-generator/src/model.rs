@@ -330,21 +330,6 @@ impl ToString for Protection {
     }
 }
 
-#[derive(Clone)]
-pub struct RegisterPropertiesGroupBuilder {
-    /// Register bit-width.
-    pub size: Option<PtrWidth>,
-    /// Register access rights.
-    pub access: Option<Access>,
-    /// Register access privileges.
-    pub protection: Option<Protection>,
-    /// Register value after reset.
-    /// Actual reset value is calculated using reset value and reset mask.
-    pub(crate) reset_value: Option<RegValue>,
-    /// Register bits with defined reset value are marked as high.
-    pub(crate) reset_mask: Option<RegValue>,
-}
-
 /// Variable-length register value
 #[derive(Clone, PartialEq)]
 pub(crate) enum RegValue {

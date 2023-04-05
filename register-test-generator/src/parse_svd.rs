@@ -1,10 +1,9 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrOverflowError, AddrRepr, CommonParseError, Error,
+    validate_path_existence, Access, AddrOverflowError, AddrRepr, Error, IncompatibleTypesError,
     NotImplementedError, Protection, PtrWidth, RegPath, RegValue, Register,
-    RegisterDimElementGroup, RegisterPropertiesGroup, RegisterPropertiesGroupBuilder, Registers,
-    ResetValue, SvdParseError,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -180,6 +179,7 @@ fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
 fn parse_nonneg_int_u64_works() {
     assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
     assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
+    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
     assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
     assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
     assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
@@ -215,6 +215,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
     }
 
     // Pick either hexadecimal or decimal format based on which fits
+    // TODO: pick binary format on '#'
 
     let (number_part, size_mult_capture) = if HEX_NONNEG_INT_RE.is_match(text) {
         // Safety: we checked above that at least one match exists in text
@@ -250,6 +251,124 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
     })
 }
 
+#[derive(Clone)]
+struct RegPropGroupBuilder {
+    /// Register bit-width.
+    pub size: Option<PtrWidth>,
+    /// Register access rights.
+    pub access: Option<Access>,
+    /// Register access privileges.
+    pub protection: Option<Protection>,
+    /// Register value after reset.
+    /// Actual reset value is calculated using reset value and reset mask.
+    pub(crate) reset_value: Option<RegValue>,
+    /// Register bits with defined reset value are marked as high.
+    pub(crate) reset_mask: Option<RegValue>,
+}
+
+impl RegPropGroupBuilder {
+    fn try_from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+        let size = match find_text_in_node_by_tag_name(periph_node, "size") {
+            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
+            Err(_) => None,
+        };
+        let access = match find_text_in_node_by_tag_name(periph_node, "access") {
+            Ok(access) => Some(Access::from_str(access)?),
+            Err(_) => None,
+        };
+        let protection = match find_text_in_node_by_tag_name(periph_node, "protection") {
+            Ok(protection) => Some(Protection::from_str(protection)?),
+            Err(_) => None,
+        };
+        let reset_value = match find_text_in_node_by_tag_name(periph_node, "resetValue") {
+            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
+            Err(_) => None,
+        };
+        let reset_mask = match find_text_in_node_by_tag_name(periph_node, "resetMask") {
+            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
+            Err(_) => None,
+        };
+        Ok(RegPropGroupBuilder {
+            size,
+            access,
+            protection,
+            reset_value,
+            reset_mask,
+        })
+    }
+
+    /// Inherit properties from parent and update with current node's properties if defined.
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - can be either cluster or register node
+    fn inherit_and_update_from(&self, node: &Node) -> Result<RegPropGroupBuilder, SvdParseError> {
+        let mut properties = self.clone();
+        if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
+            properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
+        };
+        if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
+            properties.access = Some(Access::from_str(access)?);
+        };
+        if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
+            properties.protection = Some(Protection::from_str(protection)?);
+        };
+        if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
+            properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
+        };
+        if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
+            properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
+        };
+        Ok(properties)
+    }
+
+    pub(crate) fn build(
+        self,
+        reg_path: &str,
+    ) -> Result<RegisterPropertiesGroup, IncompatibleTypesError> {
+        let value_size = self.size.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
+            PtrWidth::U32
+        });
+        let access = self.access.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined access. Access is assumed to be 'read-write'.");
+            Access::ReadWrite
+        });
+        let protection = self.protection.unwrap_or_else(|| {
+            // This is a very common omission from SVD. We should not warn about it unless required by user
+            // TODO: allow changing this to warn! or error! via top level config
+            debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
+            Protection::NonSecureOrSecure
+        });
+        let reset_value = self.reset_value.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(0),
+                PtrWidth::U16 => RegValue::U16(0),
+                PtrWidth::U32 => RegValue::U32(0),
+                PtrWidth::U64 => RegValue::U64(0),
+            }
+        });
+        let reset_mask = self.reset_mask.unwrap_or_else(|| {
+            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be '{}::MAX'.", value_size);
+            match value_size {
+                PtrWidth::U8 => RegValue::U8(u8::MAX),
+                PtrWidth::U16 => RegValue::U16(u16::MAX),
+                PtrWidth::U32 => RegValue::U32(u32::MAX),
+                PtrWidth::U64 => RegValue::U64(u64::MAX),
+            }
+        });
+        let reset_value = ResetValue::with_mask(reset_value, reset_mask)?;
+
+        Ok(RegisterPropertiesGroup::new(
+            value_size,
+            access,
+            protection,
+            reset_value,
+        ))
+    }
+}
+
 // The presence of this pattern in the register name likely indicates that this
 // is an array register
 //
@@ -257,36 +376,50 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
 // fields for the reg in question
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
-struct RegisterParent {
-    peripheral_name: String,
-    cluster_name: Option<String>,
-    peripheral_base: u64,
-    cluster_offset: Option<u64>,
-    properties: RegisterPropertiesGroupBuilder,
+enum RegisterParentKind {
+    Periph,
+    Cluster {
+        cluster_name: String,
+        cluster_offset: u64,
+    },
 }
 
-/// Inherit properties from parent and update with current node's properties if defined.
-fn inherit_and_update_properties(
-    parent: &RegisterParent,
-    node: &Node,
-) -> Result<RegisterPropertiesGroupBuilder, SvdParseError> {
-    let mut properties = parent.properties.clone();
-    if let Ok(size) = find_text_in_node_by_tag_name(node, "size") {
-        properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
-    };
-    if let Ok(access) = find_text_in_node_by_tag_name(node, "access") {
-        properties.access = Some(Access::from_svd_access_type(access)?);
-    };
-    if let Ok(protection) = find_text_in_node_by_tag_name(node, "protection") {
-        properties.protection = Some(Protection::from_str(protection)?);
-    };
-    if let Ok(reset_value) = find_text_in_node_by_tag_name(node, "resetValue") {
-        properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
-    };
-    if let Ok(reset_mask) = find_text_in_node_by_tag_name(node, "resetMask") {
-        properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
-    };
-    Ok(properties)
+struct RegisterParent {
+    kind: RegisterParentKind,
+    periph_name: String,
+    periph_base: u64,
+    properties: RegPropGroupBuilder,
+}
+
+impl RegisterParent {
+    fn from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+        let base_addr_str = find_text_in_node_by_tag_name(&periph_node, "baseAddress")?;
+        let base_addr = parse_nonneg_int_u64(base_addr_str)?;
+        let periph_name = find_text_in_node_by_tag_name(&periph_node, "name")?.to_owned();
+
+        Ok(Self {
+            periph_name,
+            periph_base: base_addr,
+            properties: RegPropGroupBuilder::try_from_periph_node(periph_node)?,
+            kind: RegisterParentKind::Periph,
+        })
+    }
+
+    fn inherit_and_update_from_cluster(&self, cluster_node: &Node) -> Result<Self, SvdParseError> {
+        let cluster_name = find_text_in_node_by_tag_name(&cluster_node, "name")?.to_owned();
+        let cluster_offset_str = find_text_in_node_by_tag_name(&cluster_node, "addressOffset")?;
+        let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)?;
+
+        Ok(Self {
+            periph_name: self.periph_name.clone(),
+            periph_base: self.periph_base,
+            properties: self.properties.inherit_and_update_from(&cluster_node)?,
+            kind: RegisterParentKind::Cluster {
+                cluster_name,
+                cluster_offset,
+            },
+        })
+    }
 }
 
 impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
@@ -302,18 +435,21 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
 
 fn process_register(
     parent: &RegisterParent,
-    node: Node,
+    register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Register<u32>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_string();
-    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
+    let name = find_text_in_node_by_tag_name(&register_node, "name")?.to_string();
+    let addr_offset_str = find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
     let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
-        parent.peripheral_name.clone(),
-        parent.cluster_name.clone(),
+        parent.periph_name.clone(),
+        match &parent.kind {
+            RegisterParentKind::Periph => None,
+            RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
+        },
         name.clone(),
     );
     let reg_path = path.join("-");
@@ -335,82 +471,20 @@ fn process_register(
         return Ok(None);
     }
 
-    let properties = inherit_and_update_properties(parent, &node)?;
+    let properties = parent.properties.inherit_and_update_from(&register_node)?;
+    let properties = properties.build(&reg_path)?;
 
-    let value_size = match properties.size {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined size. Size is assumed to be 'u32'.");
-            PtrWidth::U32
-        }
-    };
-    let access = match properties.access {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined access. Access is assumed to be 'read-write'.");
-            Access::ReadWrite
-        }
-    };
-    let protection = match properties.protection {
-        Some(value) => value,
-        None => {
-            // This is a very common omission from SVD. We should not warn about it unless required by user
-            // TODO: allow changing this to warn! or error! via top level config
-            debug!("register {reg_path} or it's parents have not defined protection. Protection is assumed to be 'NonSecureOrSecure'.");
-            Protection::NonSecureOrSecure
-        }
-    };
-    let reset_value = match properties.reset_value {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined reset value. Reset value is assumed to be '0'.");
-            match value_size {
-                PtrWidth::U8 => RegValue::U8(0),
-                PtrWidth::U16 => RegValue::U16(0),
-                PtrWidth::U32 => RegValue::U32(0),
-                PtrWidth::U64 => RegValue::U64(0),
-            }
-        }
-    };
-    let reset_mask = match properties.reset_mask {
-        Some(value) => value,
-        None => {
-            warn!("register {reg_path} or it's parents have not defined reset mask. Reset mask is assumed to be '{}::MAX'.", value_size);
-            match value_size {
-                PtrWidth::U8 => RegValue::U8(u8::MAX),
-                PtrWidth::U16 => RegValue::U16(u16::MAX),
-                PtrWidth::U32 => RegValue::U32(u32::MAX),
-                PtrWidth::U64 => RegValue::U64(u64::MAX),
-            }
-        }
-    };
-
-    /* FIXME: this block should be used
-    let size = properties.size.expect(&format!(
-        "register {reg_path} or it's parents have not defined size"
-    ));
-    let access = properties.access.expect(&format!(
-        "register {reg_path} or it's parents have not defined access"
-    ));
-    let protection = properties.protection.expect(&format!(
-        "register {reg_path} or it's parents have not defined protection"
-    ));
-    let reset_value = properties.reset_value.expect(&format!(
-        "register {reg_path} or it's parents have not defined reset value"
-    ));
-    let reset_mask = properties.reset_mask.expect(&format!(
-        "register {reg_path} or it's parents have not defined reset mask"
-    ));
-    */
-
-    let reset_value = ResetValue::with_mask(reset_value, reset_mask)?;
-
-    let properties = RegisterPropertiesGroup::new(value_size, access, protection, reset_value);
-
-    let addr = AddrRepr::<u64>::new(parent.peripheral_base, parent.cluster_offset, addr_offset);
+    let addr = AddrRepr::<u64>::new(
+        parent.periph_base,
+        match parent.kind {
+            RegisterParentKind::Periph => None,
+            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset),
+        },
+        addr_offset,
+    );
     let addr = AddrRepr::<u32>::try_from(addr.clone())
         .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
-    let dimensions = match RegisterDimElementGroup::try_from(&node) {
+    let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
     };
@@ -426,89 +500,41 @@ fn process_register(
 
 fn process_cluster(
     parent: &RegisterParent,
-    node: Node,
+    cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
-    let addr_offset_str = find_text_in_node_by_tag_name(&node, "addressOffset")?;
-    let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
-
-    let current = RegisterParent {
-        peripheral_name: parent.peripheral_name.clone(),
-        cluster_name: Some(name),
-        peripheral_base: parent.peripheral_base,
-        cluster_offset: Some(addr_offset),
-        properties: inherit_and_update_properties(parent, &node)?,
-    };
+    let current_parent = parent.inherit_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
-    for register_node in node.children().filter(|n| n.has_tag_name("register")) {
-        if let Some(register) = process_register(&current, register_node, reg_filter, syms_regex)? {
+    for register_node in cluster_node
+        .children()
+        .filter(|n| n.has_tag_name("register"))
+    {
+        if let Some(register) =
+            process_register(&current_parent, register_node, reg_filter, syms_regex)?
+        {
             registers.push(register);
         }
     }
     Ok(Some(registers))
 }
 
-impl TryFrom<&Node<'_, '_>> for RegisterPropertiesGroupBuilder {
-    type Error = SvdParseError;
-
-    fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let size = match find_text_in_node_by_tag_name(value, "size") {
-            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
-            Err(_) => None,
-        };
-        let access = match find_text_in_node_by_tag_name(value, "access") {
-            Ok(access) => Some(Access::from_svd_access_type(access)?),
-            Err(_) => None,
-        };
-        let protection = match find_text_in_node_by_tag_name(value, "protection") {
-            Ok(protection) => Some(Protection::from_str(protection)?),
-            Err(_) => None,
-        };
-        let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
-            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
-            Err(_) => None,
-        };
-        let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
-            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
-            Err(_) => None,
-        };
-        Ok(RegisterPropertiesGroupBuilder {
-            size,
-            access,
-            protection,
-            reset_value,
-            reset_mask,
-        })
-    }
-}
-
 fn process_peripheral(
-    node: Node,
+    periph_node: Node,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
-    let name = find_text_in_node_by_tag_name(&node, "name")?.to_owned();
-    let base_addr_str = find_text_in_node_by_tag_name(&node, "baseAddress")?;
-    let base_addr = parse_nonneg_int_u64(base_addr_str)?;
+    let periph = RegisterParent::from_periph_node(&periph_node)?;
+    let periph_name = &periph.periph_name;
 
-    if periph_filter.is_blocked(&name.to_lowercase()) {
-        info!("Peripheral {name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
+    if periph_filter.is_blocked(&periph_name.to_lowercase()) {
+        info!("Peripheral {periph_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
         return Ok(None);
     }
 
-    let current = RegisterParent {
-        peripheral_name: name,
-        cluster_name: None,
-        peripheral_base: base_addr,
-        cluster_offset: None,
-        properties: RegisterPropertiesGroupBuilder::try_from(&node)?,
-    };
-
-    let registers_nodes = node
+    let registers_nodes = periph_node
         .children()
         .filter(|n| n.has_tag_name("registers"))
         .collect_vec();
@@ -524,7 +550,7 @@ fn process_peripheral(
         .filter(|n| n.has_tag_name("cluster"))
     {
         if let Some(cluster_registers) =
-            process_cluster(&current, cluster_node, reg_filter, syms_regex)?
+            process_cluster(&periph, cluster_node, reg_filter, syms_regex)?
         {
             registers.extend(cluster_registers);
         }
@@ -533,7 +559,7 @@ fn process_peripheral(
         .children()
         .filter(|n| n.has_tag_name("register"))
     {
-        if let Some(register) = process_register(&current, register_node, reg_filter, syms_regex)? {
+        if let Some(register) = process_register(&periph, register_node, reg_filter, syms_regex)? {
             registers.push(register);
         }
     }
@@ -632,18 +658,4 @@ pub fn parse() -> Result<Registers<u32>, Error> {
 
     info!("Found {} registers.", registers.len());
     Ok(registers)
-}
-
-impl Access {
-    /// Implements parsing access type as specified by CMSIS-SVD schema
-    pub fn from_svd_access_type(s: &str) -> Result<Self, CommonParseError> {
-        match s {
-            "read-only" => Ok(Access::ReadOnly),
-            "write-only" => Ok(Access::WriteOnly),
-            "read-write" => Ok(Access::ReadWrite),
-            "writeOnce" => Ok(Access::WriteOnce),
-            "read-writeOnce" => Ok(Access::ReadWriteOnce),
-            _ => Err(CommonParseError::InvalidAccessType(s.to_owned())),
-        }
-    }
 }
