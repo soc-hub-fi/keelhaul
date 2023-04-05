@@ -411,19 +411,19 @@ fn inherit_and_update_properties(
     node: &Node,
 ) -> Result<RegPropGroupBuilder, SvdParseError> {
     let mut properties = parent.properties.clone();
-    if let Ok(size) = find_text_in_node_by_tag_name(node, "size") {
+    if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
         properties.size = Some(PtrWidth::from_bit_count(size.parse()?).unwrap());
     };
-    if let Ok(access) = find_text_in_node_by_tag_name(node, "access") {
+    if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
         properties.access = Some(Access::from_svd_access_type(access)?);
     };
-    if let Ok(protection) = find_text_in_node_by_tag_name(node, "protection") {
+    if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
         properties.protection = Some(Protection::from_str(protection)?);
     };
-    if let Ok(reset_value) = find_text_in_node_by_tag_name(node, "resetValue") {
+    if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
         properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
     };
-    if let Ok(reset_mask) = find_text_in_node_by_tag_name(node, "resetMask") {
+    if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
         properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
     };
     Ok(properties)
