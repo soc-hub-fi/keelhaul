@@ -373,12 +373,13 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
 
         let read_value_binding = Self::read_value_binding();
-        let reset_val = self.0.properties.reset_value;
+        let masked_reset_frag = self.0.masked_reset().gen_bitand();
         let reg_size_ty = format_ident!("{}", self.0.properties.value_size.to_rust_type_str());
+
         match config.on_fail {
             // If reset value is incorrect, panic
             FailureImplKind::Panic => Ok(quote! {
-                assert_eq!(#read_value_binding, #reset_val as #reg_size_ty);
+                assert_eq!(#read_value_binding, #masked_reset_frag as #reg_size_ty);
             }),
             // If reset value is incorrect, do nothing
             FailureImplKind::None => Ok(quote! {}),
@@ -387,10 +388,10 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
                 let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
                 let max_val_width = quote!(u64);
                 Ok(quote! {
-                    if #read_value_binding != #reset_val as #reg_size_ty {
+                    if #read_value_binding != #masked_reset_frag as #reg_size_ty {
                         return Err(Error::ReadValueIsNotResetValue {
                                 read_val: #read_value_binding as #max_val_width,
-                                reset_val: #reset_val,
+                                reset_val: #masked_reset_frag,
                                 reg_uid: #uid,
                                 reg_addr: #addr_hex,
                             })
