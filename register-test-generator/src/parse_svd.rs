@@ -180,6 +180,7 @@ fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
 fn parse_nonneg_int_u64_works() {
     assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
     assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
+    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
     assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
     assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
     assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
