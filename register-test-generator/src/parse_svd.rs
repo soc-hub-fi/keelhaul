@@ -267,6 +267,36 @@ struct RegPropGroupBuilder {
 }
 
 impl RegPropGroupBuilder {
+    fn try_from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+        let size = match find_text_in_node_by_tag_name(periph_node, "size") {
+            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
+            Err(_) => None,
+        };
+        let access = match find_text_in_node_by_tag_name(periph_node, "access") {
+            Ok(access) => Some(Access::from_str(access)?),
+            Err(_) => None,
+        };
+        let protection = match find_text_in_node_by_tag_name(periph_node, "protection") {
+            Ok(protection) => Some(Protection::from_str(protection)?),
+            Err(_) => None,
+        };
+        let reset_value = match find_text_in_node_by_tag_name(periph_node, "resetValue") {
+            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
+            Err(_) => None,
+        };
+        let reset_mask = match find_text_in_node_by_tag_name(periph_node, "resetMask") {
+            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
+            Err(_) => None,
+        };
+        Ok(RegPropGroupBuilder {
+            size,
+            access,
+            protection,
+            reset_value,
+            reset_mask,
+        })
+    }
+
     /// Inherit properties from parent and update with current node's properties if defined.
     ///
     /// # Arguments
@@ -339,40 +369,6 @@ impl RegPropGroupBuilder {
     }
 }
 
-impl TryFrom<&Node<'_, '_>> for RegPropGroupBuilder {
-    type Error = SvdParseError;
-
-    fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let size = match find_text_in_node_by_tag_name(value, "size") {
-            Ok(size) => Some(PtrWidth::from_bit_count(size.parse()?).unwrap()),
-            Err(_) => None,
-        };
-        let access = match find_text_in_node_by_tag_name(value, "access") {
-            Ok(access) => Some(Access::from_str(access)?),
-            Err(_) => None,
-        };
-        let protection = match find_text_in_node_by_tag_name(value, "protection") {
-            Ok(protection) => Some(Protection::from_str(protection)?),
-            Err(_) => None,
-        };
-        let reset_value = match find_text_in_node_by_tag_name(value, "resetValue") {
-            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
-            Err(_) => None,
-        };
-        let reset_mask = match find_text_in_node_by_tag_name(value, "resetMask") {
-            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
-            Err(_) => None,
-        };
-        Ok(RegPropGroupBuilder {
-            size,
-            access,
-            protection,
-            reset_value,
-            reset_mask,
-        })
-    }
-}
-
 // The presence of this pattern in the register name likely indicates that this
 // is an array register
 //
@@ -404,7 +400,7 @@ impl RegisterParent {
         Ok(Self {
             periph_name,
             periph_base: base_addr,
-            properties: RegPropGroupBuilder::try_from(periph_node)?,
+            properties: RegPropGroupBuilder::try_from_periph_node(periph_node)?,
             kind: RegisterParentKind::Periph,
         })
     }
