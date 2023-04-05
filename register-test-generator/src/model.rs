@@ -144,6 +144,11 @@ impl RegPath {
     }
 }
 
+/// Address representation
+///
+/// Addresses can be represented as full addresses, such as 0xdead_beef or as
+/// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
+/// type allows converting between the two.
 #[derive(Clone, Debug)]
 pub enum AddrRepr<T: num::CheckedAdd> {
     Comps {
