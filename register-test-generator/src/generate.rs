@@ -1,12 +1,12 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{AddrOverflowError, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{
     collections::{HashMap, HashSet},
-    iter, str,
+    convert, fmt, iter, str,
 };
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
@@ -107,13 +107,6 @@ fn create_modules(
         .collect_vec()
 }
 
-/// Collection of all test cases for this build.
-pub struct TestCases {
-    pub preamble: String,
-    pub test_cases: Vec<String>,
-    pub test_case_count: usize,
-}
-
 #[derive(Error, Debug)]
 #[error("cannot parse test kind from {0}")]
 pub struct ParseTestKindError(String);
@@ -209,8 +202,8 @@ pub struct TestConfig {
     force_ignore_reset_mask: bool,
 }
 
-impl Default for TestConfig {
-    fn default() -> Self {
+impl TestConfig {
+    pub fn new() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
             on_fail: FailureImplKind::ReturnError,
@@ -219,9 +212,7 @@ impl Default for TestConfig {
             force_ignore_reset_mask: true,
         }
     }
-}
 
-impl TestConfig {
     pub fn reg_test_kinds(
         mut self,
         reg_test_kinds: HashSet<RegTestKind>,
@@ -244,7 +235,20 @@ impl TestConfig {
     }
 }
 
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResetValue {
+    /// Generates a "bitwise and" operation for reset value that can be used to
+    /// compare to the value received from the register
+    ///
+    /// # Examples
+    ///
+    /// `val = 0xb0`, `mask = u8::MAX` -> `0xb0u8`
+    /// `val = 0xb0`, `mask = 1` ->  `(0xb0u8 & 0b1u8)`
     fn gen_bitand(&self) -> TokenStream {
         let (value, mask) = (self.value(), self.mask());
         let value_lit = value.gen_literal_hex();
@@ -334,15 +338,31 @@ fn reset_value_bitands_generate() {
         .to_string(),
         "0xdeadbeefu32"
     );
+    assert_eq!(
+        &ResetValue::U64 {
+            val: 0xdead_beef_cafe_f00d,
+            mask: u64::MAX,
+        }
+        .gen_bitand()
+        .to_string(),
+        "0xdeadbeefcafef00du64"
+    );
 }
 
 /// Generates test cases based on a [Register] definition and [TestConfig]
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r, 'c>(&'r Register<u32>, &'c TestConfig);
+struct RegTestGenerator<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+    &'r Register<P>,
+    &'c TestConfig,
+);
 
-impl<'r, 'c> RegTestGenerator<'r, 'c> {
+impl<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>
+    RegTestGenerator<'r, 'c, P>
+where
+    GenerateError: convert::From<AddrOverflowError<P>>,
+{
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
@@ -358,7 +378,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     }
 
     /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register<u32>, config: &'c TestConfig) -> Self {
+    pub fn from_register(reg: &'r Register<P>, config: &'c TestConfig) -> Self {
         Self(reg, config)
     }
 
@@ -412,9 +432,15 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         }
     }
 
+    /// Generates a function identifier
+    ///
+    /// # Examples
+    ///
+    /// * `test_MCR_0xfff00004`
+    /// * `test_MDIO_RD_DATA_0xff40040c`
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         let reg = self.0;
-        let full_addr: Result<u32, _> = reg.full_addr();
+        let full_addr: Result<P, _> = reg.full_addr();
         Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
     }
 
@@ -501,12 +527,22 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     }
 }
 
+/// Collection of all test cases for this build.
+pub struct TestCases {
+    pub preamble: String,
+    pub test_cases: Vec<String>,
+    pub test_case_count: usize,
+}
+
 impl TestCases {
     /// Generate test cases for each register.
-    pub fn from_registers(
-        registers: &Registers<u32>,
+    pub fn from_registers<P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+        registers: &Registers<P>,
         config: &TestConfig,
-    ) -> Result<TestCases, GenerateError> {
+    ) -> Result<TestCases, GenerateError>
+    where
+        GenerateError: convert::From<AddrOverflowError<P>>,
+    {
         let preamble = gen_preamble(config).to_string();
 
         let mut test_fns_and_defs_by_periph = HashMap::new();

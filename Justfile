@@ -14,6 +14,9 @@ check:
 run:
     cargo run --example=run_every_test
 
+test:
+    cargo test -p register-test-generator
+
 doc:
     cargo doc --no-deps
 
