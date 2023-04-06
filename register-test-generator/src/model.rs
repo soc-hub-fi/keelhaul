@@ -6,7 +6,7 @@ use log::warn;
 use std::{ops, str::FromStr};
 use thiserror::Error;
 
-use crate::{AddrOverflowError, CommonParseError, SvdParseError};
+use crate::{AddrOverflowError, CommonParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -315,8 +315,10 @@ pub enum Protection {
     Privileged,
 }
 
+struct ProtectionTypeParseError(String);
+
 impl FromStr for Protection {
-    type Err = SvdParseError;
+    type Err = ProtectionTypeParseError;
 
     /// Convert from CMSIS-SVD `protectionStringType` string
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -324,7 +326,7 @@ impl FromStr for Protection {
             "s" => Ok(Self::Secure),
             "n" => Ok(Self::NonSecureOrSecure),
             "p" => Ok(Self::Privileged),
-            _ => Err(SvdParseError::InvalidProtectionType(s.to_owned())),
+            _ => Err(ProtectionTypeParseError(s.to_owned())),
         }
     }
 }

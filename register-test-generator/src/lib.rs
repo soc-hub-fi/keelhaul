@@ -10,7 +10,7 @@ pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
-use std::{fs::File, num::ParseIntError, path::PathBuf};
+use std::{fs::File, num::ParseIntError, path::PathBuf, str};
 use thiserror::Error;
 /// Check that path to a file exists.
 ///
@@ -70,9 +70,9 @@ pub enum CommonParseError {
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum Error<P: ArchPtrSize> {
     #[error("error while parsing SVD")]
-    SvdParse(#[from] SvdParseError),
+    SvdParse(#[from] SvdParseError<P>),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
@@ -81,7 +81,7 @@ pub enum Error {
 
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
-pub enum SvdParseError {
+pub enum SvdParseError<P: ArchPtrSize> {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
     ExpectedTagInElement { elem_name: String, tag: String },
     #[error("could not parse int")]
@@ -95,9 +95,11 @@ pub enum SvdParseError {
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
     #[error("parsed 32-bit address overflows")]
-    AddrOverflow32(#[from] AddrOverflowError<u32>),
+    AddrOverflow32(AddrOverflowError<u32>),
     #[error("parsed 64-bit address overflows")]
-    AddrOverflow64(#[from] AddrOverflowError<u64>),
+    AddrOverflow64(AddrOverflowError<u64>),
+    #[error("parsed ?-bit address overflows")]
+    AddrOverflow(AddrOverflowError<P>),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
     #[error("invalid CMSIS-SVD protection type: {0}")]
@@ -126,3 +128,17 @@ pub enum GenerateError {
     #[error("invalid configuration: {cause}, {c:#?}")]
     InvalidConfig { c: TestConfig, cause: String },
 }
+
+pub(crate) trait ArchPtrSize:
+    // `Num` for from_str_radix
+    num::Num +
+    // `CheckedAdd` for constructing full addresses from components safely
+    num::CheckedAdd +
+    // `FromStr` for parsing strings into addresses
+    str::FromStr +
+    // `From<u64>` because we may need to construct integer literals by hand and
+    // convert them into the `ArchPtrSize` type
+    From<u64> +
+    // Must be convertible to a RegValue
+    Into<RegValue>
+    {}

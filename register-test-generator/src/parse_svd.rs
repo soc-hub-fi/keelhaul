@@ -1,9 +1,9 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    validate_path_existence, Access, AddrOverflowError, AddrRepr, Error, IncompatibleTypesError,
-    NotImplementedError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    validate_path_existence, Access, AddrOverflowError, AddrRepr, ArchPtrSize, Error,
+    IncompatibleTypesError, NotImplementedError, Protection, PtrSize, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -11,11 +11,11 @@ use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env,
+    convert, env,
     fs::read_to_string,
     panic,
     path::PathBuf,
-    str::FromStr,
+    str::{self, FromStr},
 };
 
 /// Try to extract path to excludes-file from environment variable.
@@ -150,9 +150,19 @@ fn read_input_svd_to_string() -> String {
     read_to_string(svd_path).unwrap()
 }
 
+#[derive(Error, Debug)]
+#[error("expected tag {tag:?} in element {elem_name:?}")]
+struct SvdElementNotFoundInTagError {
+    elem_name: String,
+    tag: String,
+}
+
 /// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, SvdParseError> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdParseError::ExpectedTagInElement {
+fn find_text_in_node_by_tag_name<'a>(
+    node: &'a Node,
+    tag: &str,
+) -> Result<&'a str, SvdElementNotFoundInTagError> {
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdElementNotFoundInTagError {
         elem_name: node.tag_name().name().to_owned(),
         tag: tag.to_owned(),
     })
@@ -165,31 +175,45 @@ fn maybe_find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Option<
         .map(|n| n.text().expect("Node does not have text."))
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
+/// # Type arguments
+///
+/// * `P` - architecture pointer size
+fn binary_size_mult_from_char<P: ArchPtrSize>(c: char) -> Result<P, SvdParseError<P>>
+where
+    P: From<u64>,
+{
     match c {
-        'k' | 'K' => Ok(1024),
-        'm' | 'M' => Ok(1024 * 1024),
-        'g' | 'G' => Ok(1024 * 1024 * 1024),
-        't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
-        _ => Err(SvdParseError::InvalidSizeMultiplierSuffix(c)),
+        'k' | 'K' => Ok(1024.into()),
+        'm' | 'M' => Ok((1024 * 1024).into()),
+        'g' | 'G' => Ok((1024 * 1024 * 1024).into()),
+        't' | 'T' => Ok((1024 * 1024 * 1024 * 1024).into()),
+        _ => Err(SvdParseError::<P>::InvalidSizeMultiplierSuffix(c)),
     }
 }
 
 #[test]
 fn parse_nonneg_int_u64_works() {
-    assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int::<P>("0xFFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int::<P>("+0xFFB00000").unwrap(), 0xFFB00000);
     // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
-    assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
-    assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
-    assert_eq!(parse_nonneg_int_u64("437260288").unwrap(), 437260288);
+    assert_eq!(parse_nonneg_int::<P>("#FFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int::<P>("42").unwrap(), 42);
+    assert_eq!(parse_nonneg_int::<P>("1 k").unwrap(), 1024);
+    assert_eq!(parse_nonneg_int::<P>("437260288").unwrap(), 437260288);
 }
 
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
+///
+/// # Type arguments
+///
+/// * `P` - Architecture pointer size
+fn parse_nonneg_int<P: ArchPtrSize>(text: &str) -> Result<P, SvdParseError<P>>
+where
+    SvdParseError<P>: convert::From<<P as num::Num>::FromStrRadixErr>,
+    SvdParseError<P>: convert::From<<P as str::FromStr>::Err>,
+{
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
     lazy_static! {
@@ -222,7 +246,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = HEX_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = u64::from_str_radix(digits, 16)?;
+        let number = P::from_str_radix(digits, 16)?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
@@ -231,15 +255,15 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = DEC_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = digits.parse::<u64>()?;
+        let number = digits.parse::<P>()?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
     } else {
-        return Err(SvdParseError::InvalidNonnegInt(text.to_owned()));
+        return Err(SvdParseError::<P>::InvalidNonnegInt(text.to_owned()));
     };
 
-    let size_mult: Option<u64> = size_mult_capture
+    let size_mult: Option<P> = size_mult_capture
         // Safety: we know from the regex that there is only one possible size mult char
         .map(|s| s.as_str().chars().next().unwrap())
         .map(binary_size_mult_from_char)
@@ -267,7 +291,15 @@ struct RegPropGroupBuilder {
 }
 
 impl RegPropGroupBuilder {
-    fn try_from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+    /// # Type arguments
+    ///
+    /// * `P` - architecture pointer size
+    fn try_from_periph_node<P: ArchPtrSize>(periph_node: &Node) -> Result<Self, SvdParseError<P>>
+    where
+        RegValue: From<P>,
+        SvdParseError<P>: From<<P as num::Num>::FromStrRadixErr>,
+        SvdParseError<P>: From<<P as str::FromStr>::Err>,
+    {
         let size = match find_text_in_node_by_tag_name(periph_node, "size") {
             Ok(size) => Some(PtrSize::from_bit_count(size.parse()?).unwrap()),
             Err(_) => None,
@@ -281,11 +313,11 @@ impl RegPropGroupBuilder {
             Err(_) => None,
         };
         let reset_value = match find_text_in_node_by_tag_name(periph_node, "resetValue") {
-            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
+            Ok(reset_value) => Some(parse_nonneg_int::<P>(reset_value)?.into()),
             Err(_) => None,
         };
         let reset_mask = match find_text_in_node_by_tag_name(periph_node, "resetMask") {
-            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
+            Ok(reset_mask) => Some(parse_nonneg_int::<P>(reset_mask)?.into()),
             Err(_) => None,
         };
         Ok(RegPropGroupBuilder {
@@ -299,10 +331,17 @@ impl RegPropGroupBuilder {
 
     /// Inherit properties from parent and update with current node's properties if defined.
     ///
+    /// # Type arguments
+    ///
+    /// * `P` - architecture pointer size
+    ///
     /// # Arguments
     ///
     /// * `node` - can be either cluster or register node
-    fn inherit_and_update_from(&self, node: &Node) -> Result<RegPropGroupBuilder, SvdParseError> {
+    fn inherit_and_update_from<P: ArchPtrSize>(
+        &self,
+        node: &Node,
+    ) -> Result<RegPropGroupBuilder, SvdParseError<P>> {
         let mut properties = self.clone();
         if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
             properties.size = Some(PtrSize::from_bit_count(size.parse()?).unwrap());
@@ -314,10 +353,10 @@ impl RegPropGroupBuilder {
             properties.protection = Some(Protection::from_str(protection)?);
         };
         if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
-            properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
+            properties.reset_value = Some(parse_nonneg_int::<P>(reset_value)?.into());
         };
         if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
-            properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
+            properties.reset_mask = Some(parse_nonneg_int::<P>(reset_mask)?.into());
         };
         Ok(properties)
     }
@@ -376,39 +415,45 @@ impl RegPropGroupBuilder {
 // fields for the reg in question
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
-enum RegisterParentKind {
+/// # Type arguments
+///
+/// * `P` - architecture pointer size
+enum RegisterParentKind<P> {
     Periph,
     Cluster {
         cluster_name: String,
-        cluster_offset: u64,
+        cluster_offset: P,
     },
 }
 
-struct RegisterParent {
-    kind: RegisterParentKind,
+struct RegisterParent<P> {
+    kind: RegisterParentKind<P>,
     periph_name: String,
     periph_base: u64,
     properties: RegPropGroupBuilder,
 }
 
-impl RegisterParent {
-    fn from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+impl<P: ArchPtrSize> RegisterParent<P> {
+    fn from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError<P>> {
         let base_addr_str = find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
-        let base_addr = parse_nonneg_int_u64(base_addr_str)?;
+        let base_addr = parse_nonneg_int::<P>(base_addr_str)?;
         let periph_name = find_text_in_node_by_tag_name(periph_node, "name")?.to_owned();
 
         Ok(Self {
             periph_name,
             periph_base: base_addr,
-            properties: RegPropGroupBuilder::try_from_periph_node(periph_node)?,
+            properties: RegPropGroupBuilder::try_from_periph_node::<P>(periph_node)?,
             kind: RegisterParentKind::Periph,
         })
     }
 
-    fn inherit_and_update_from_cluster(&self, cluster_node: &Node) -> Result<Self, SvdParseError> {
+    fn inherit_and_update_from_cluster(
+        &self,
+        cluster_node: &Node,
+    ) -> Result<Self, SvdParseError<P>> {
         let cluster_name = find_text_in_node_by_tag_name(cluster_node, "name")?.to_owned();
         let cluster_offset_str = find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
-        let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)?;
+        let cluster_offset = parse_nonneg_int(cluster_offset_str)?;
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
@@ -422,26 +467,27 @@ impl RegisterParent {
     }
 }
 
-impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
-    type Error = SvdParseError;
-
-    fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let dim = parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dim")?)?;
+impl RegisterDimElementGroup {
+    fn try_from_reg_node(value: &Node) -> Result<Self, SvdParseError<P>> {
+        let dim = parse_nonneg_int::<u64>(find_text_in_node_by_tag_name(value, "dim")?)?;
         let dim_increment =
-            parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dimIncrement")?)?;
+            parse_nonneg_int::<u64>(find_text_in_node_by_tag_name(value, "dimIncrement")?)?;
         Ok(Self { dim, dim_increment })
     }
 }
 
-fn process_register(
-    parent: &RegisterParent,
+fn process_register<P: ArchPtrSize>(
+    parent: &RegisterParent<P>,
     register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Register<u32>>, SvdParseError> {
+) -> Result<Option<Register<u32>>, SvdParseError<P>>
+where
+    SvdParseError<P>: From<<P as num::Num>::FromStrRadixErr> + From<<P as str::FromStr>::Err>,
+{
     let name = find_text_in_node_by_tag_name(&register_node, "name")?.to_string();
     let addr_offset_str = find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
-    let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
+    let addr_offset = parse_nonneg_int::<P>(addr_offset_str)?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
@@ -474,7 +520,7 @@ fn process_register(
     let properties = parent.properties.inherit_and_update_from(&register_node)?;
     let properties = properties.build(&reg_path)?;
 
-    let addr = AddrRepr::<u64>::new(
+    let addr = AddrRepr::<P>::new(
         parent.periph_base,
         match parent.kind {
             RegisterParentKind::Periph => None,
@@ -482,9 +528,10 @@ fn process_register(
         },
         addr_offset,
     );
-    let addr = AddrRepr::<u32>::try_from(addr.clone())
-        .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
-    let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
+    let addr = AddrRepr::<u32>::try_from(addr.clone()).map_err(|_| {
+        SvdParseError::<P>::AddrOverflow32(AddrOverflowError(path.join("-"), addr.clone()))
+    })?;
+    let dimensions = match RegisterDimElementGroup::try_from_reg_node(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
     };
@@ -498,12 +545,12 @@ fn process_register(
     Ok(Some(register))
 }
 
-fn process_cluster(
-    parent: &RegisterParent,
+fn process_cluster<P: ArchPtrSize>(
+    parent: &RegisterParent<P>,
     cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
+) -> Result<Option<Vec<Register<u32>>>, SvdParseError<P>> {
     let current_parent = parent.inherit_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
@@ -520,13 +567,13 @@ fn process_cluster(
     Ok(Some(registers))
 }
 
-fn process_peripheral(
+fn process_peripheral<P: ArchPtrSize>(
     periph_node: Node,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
-    let periph = RegisterParent::from_periph_node(&periph_node)?;
+) -> Result<Option<Vec<Register<u32>>>, SvdParseError<P>> {
+    let periph = RegisterParent::<P>::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
     if periph_filter.is_blocked(&periph_name.to_lowercase()) {
@@ -567,12 +614,12 @@ fn process_peripheral(
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers(
+fn find_registers<P: ArchPtrSize>(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Registers<u32>, SvdParseError> {
+) -> Result<Registers<u32>, SvdParseError<P>> {
     let device_nodes = parsed
         .root()
         .children()
@@ -600,7 +647,7 @@ fn find_registers(
         .filter(|n| n.has_tag_name("peripheral"))
     {
         if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
+            process_peripheral::<P>(peripheral_node, periph_filter, reg_filter, syms_regex)?
         {
             registers.extend(peripheral_registers);
         }
@@ -628,7 +675,7 @@ fn find_registers(
 }
 
 /// Parse SVD-file.
-pub fn parse() -> Result<Registers<u32>, Error> {
+pub fn parse<P: ArchPtrSize>() -> Result<Registers<u32>, Error<P>> {
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =
@@ -647,7 +694,7 @@ pub fn parse() -> Result<Registers<u32>, Error> {
     let content = read_input_svd_to_string();
 
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)?;
+    let registers = find_registers::<P>(&parsed, &reg_filter, &periph_filter, &syms_filter)?;
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
