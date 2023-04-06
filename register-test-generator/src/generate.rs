@@ -249,6 +249,13 @@ impl Default for TestConfig {
 }
 
 impl ResetValue {
+    /// Generates a "bitwise and" operation for reset value that can be used to
+    /// compare to the value received from the register
+    ///
+    /// # Examples
+    ///
+    /// `val = 0xb0`, `mask = u8::MAX` -> `0xb0u8`
+    /// `val = 0xb0`, `mask = 1` ->  `(0xb0u8 & 0b1u8)`
     fn gen_bitand(&self) -> TokenStream {
         let (value, mask) = (self.value(), self.mask());
         let value_lit = value.gen_literal_hex();
