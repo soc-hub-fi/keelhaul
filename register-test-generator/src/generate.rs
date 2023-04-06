@@ -334,6 +334,15 @@ fn reset_value_bitands_generate() {
         .to_string(),
         "0xdeadbeefu32"
     );
+    assert_eq!(
+        &ResetValue::U64 {
+            val: 0xdead_beef_cafe_f00d,
+            mask: u64::MAX,
+        }
+        .gen_bitand()
+        .to_string(),
+        "0xdeadbeefcafef00du64"
+    );
 }
 
 /// Generates test cases based on a [Register] definition and [TestConfig]
