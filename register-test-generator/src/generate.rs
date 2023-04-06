@@ -209,8 +209,8 @@ pub struct TestConfig {
     force_ignore_reset_mask: bool,
 }
 
-impl Default for TestConfig {
-    fn default() -> Self {
+impl TestConfig {
+    pub fn new() -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
             on_fail: FailureImplKind::ReturnError,
@@ -219,9 +219,7 @@ impl Default for TestConfig {
             force_ignore_reset_mask: true,
         }
     }
-}
 
-impl TestConfig {
     pub fn reg_test_kinds(
         mut self,
         reg_test_kinds: HashSet<RegTestKind>,
@@ -241,6 +239,12 @@ impl TestConfig {
     pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
+    }
+}
+
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
