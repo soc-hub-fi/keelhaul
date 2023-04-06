@@ -107,13 +107,6 @@ fn create_modules(
         .collect_vec()
 }
 
-/// Collection of all test cases for this build.
-pub struct TestCases {
-    pub preamble: String,
-    pub test_cases: Vec<String>,
-    pub test_case_count: usize,
-}
-
 #[derive(Error, Debug)]
 #[error("cannot parse test kind from {0}")]
 pub struct ParseTestKindError(String);
@@ -526,6 +519,13 @@ where
         };
         Ok(def)
     }
+}
+
+/// Collection of all test cases for this build.
+pub struct TestCases {
+    pub preamble: String,
+    pub test_cases: Vec<String>,
+    pub test_case_count: usize,
 }
 
 impl TestCases {
