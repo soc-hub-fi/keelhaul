@@ -1,5 +1,5 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, PtrWidth, RegValue, Register, Registers, ResetValue};
+use crate::{GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
@@ -49,7 +49,7 @@ fn gen_preamble(config: &TestConfig) -> TokenStream {
 
     // Generate an error variant for all test case kinds
     let error_variant_defs: TokenStream = RegTestKind::iter()
-        .filter_map(|test_kind| test_kind.error_variant_def(PtrWidth::U32, PtrWidth::U64))
+        .filter_map(|test_kind| test_kind.error_variant_def(PtrSize::U32, PtrSize::U64))
         .collect();
 
     quote! {
@@ -138,8 +138,8 @@ impl RegTestKind {
     ///   Error variant.
     fn error_variant_def(
         &self,
-        arch_ptr_width: PtrWidth,
-        max_value_width: PtrWidth,
+        arch_ptr_width: PtrSize,
+        max_value_width: PtrSize,
     ) -> Option<TokenStream> {
         let arch_ptr_ty = format_ident!("{}", arch_ptr_width.to_rust_type_str());
         let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());

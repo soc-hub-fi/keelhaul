@@ -83,21 +83,21 @@ impl ToString for Access {
 }
 
 #[derive(Clone, Debug)]
-pub enum PtrWidth {
+pub enum PtrSize {
     U8,
     U16,
     U32,
     U64,
 }
 
-impl PtrWidth {
+impl PtrSize {
     /// E.g., u8, u16, u32, u64
     pub fn to_rust_type_str(&self) -> &str {
         match self {
-            PtrWidth::U8 => "u8",
-            PtrWidth::U16 => "u16",
-            PtrWidth::U32 => "u32",
-            PtrWidth::U64 => "u64",
+            PtrSize::U8 => "u8",
+            PtrSize::U16 => "u16",
+            PtrSize::U32 => "u32",
+            PtrSize::U64 => "u64",
         }
     }
 
@@ -107,10 +107,10 @@ impl PtrWidth {
     #[must_use]
     pub fn from_bit_count(bc: u64) -> Option<Self> {
         match bc {
-            8 => Some(PtrWidth::U8),
-            16 => Some(PtrWidth::U16),
-            32 => Some(PtrWidth::U32),
-            64 => Some(PtrWidth::U64),
+            8 => Some(PtrSize::U8),
+            16 => Some(PtrSize::U16),
+            32 => Some(PtrSize::U32),
+            64 => Some(PtrSize::U64),
             _bc => None,
         }
     }
@@ -118,15 +118,15 @@ impl PtrWidth {
     /// Maximum value representable by a binding of type [PtrWidth]
     pub(crate) fn max_value(&self) -> RegValue {
         match self {
-            PtrWidth::U8 => RegValue::U8(u8::MAX),
-            PtrWidth::U16 => RegValue::U16(u16::MAX),
-            PtrWidth::U32 => RegValue::U32(u32::MAX),
-            PtrWidth::U64 => RegValue::U64(u64::MAX),
+            PtrSize::U8 => RegValue::U8(u8::MAX),
+            PtrSize::U16 => RegValue::U16(u16::MAX),
+            PtrSize::U32 => RegValue::U32(u32::MAX),
+            PtrSize::U64 => RegValue::U64(u64::MAX),
         }
     }
 }
 
-impl fmt::Display for PtrWidth {
+impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_rust_type_str())
     }
@@ -339,12 +339,12 @@ pub(crate) enum RegValue {
 }
 
 impl RegValue {
-    pub(crate) fn width(&self) -> PtrWidth {
+    pub(crate) fn width(&self) -> PtrSize {
         match self {
-            RegValue::U8(_) => PtrWidth::U8,
-            RegValue::U16(_) => PtrWidth::U16,
-            RegValue::U32(_) => PtrWidth::U32,
-            RegValue::U64(_) => PtrWidth::U64,
+            RegValue::U8(_) => PtrSize::U8,
+            RegValue::U16(_) => PtrSize::U16,
+            RegValue::U32(_) => PtrSize::U32,
+            RegValue::U64(_) => PtrSize::U64,
         }
     }
 }
@@ -383,7 +383,7 @@ pub(crate) enum ResetValue {
 
 #[derive(Debug, Error)]
 #[error("types are incompatible: {0} != {1}")]
-pub struct IncompatibleTypesError(PtrWidth, PtrWidth);
+pub struct IncompatibleTypesError(PtrSize, PtrSize);
 
 impl ResetValue {
     pub(crate) fn with_mask(
@@ -421,7 +421,7 @@ impl ResetValue {
 #[derive(Clone)]
 pub struct RegisterPropertiesGroup {
     /// Register value bit-width.
-    pub value_size: PtrWidth,
+    pub value_size: PtrSize,
     /// Register access rights.
     pub access: Access,
     /// Register access privileges.
@@ -436,7 +436,7 @@ pub struct RegisterPropertiesGroup {
 
 impl RegisterPropertiesGroup {
     pub(crate) fn new(
-        value_size: PtrWidth,
+        value_size: PtrSize,
         access: Access,
         protection: Protection,
         reset_value: ResetValue,
