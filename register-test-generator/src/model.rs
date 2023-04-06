@@ -258,10 +258,9 @@ where
 {
     /// Get register's absolute memory address
     pub fn full_addr(&self) -> Result<T, AddrOverflowError<T>> {
-        self.addr.full().ok_or(AddrOverflowError(
-            self.path.join("-"),
-            self.addr.clone().into(),
-        ))
+        self.addr
+            .full()
+            .ok_or(AddrOverflowError(self.path.join("-"), self.addr.clone()))
     }
 
     /// Get register's unique identifier
@@ -402,19 +401,19 @@ impl ResetValue {
 
     pub(crate) fn value(&self) -> RegValue {
         match self {
-            ResetValue::U8 { val, .. } => RegValue::U8(val.clone()),
-            ResetValue::U16 { val, .. } => RegValue::U16(val.clone()),
-            ResetValue::U32 { val, .. } => RegValue::U32(val.clone()),
-            ResetValue::U64 { val, .. } => RegValue::U64(val.clone()),
+            ResetValue::U8 { val, .. } => RegValue::U8(*val),
+            ResetValue::U16 { val, .. } => RegValue::U16(*val),
+            ResetValue::U32 { val, .. } => RegValue::U32(*val),
+            ResetValue::U64 { val, .. } => RegValue::U64(*val),
         }
     }
 
     pub(crate) fn mask(&self) -> RegValue {
         match self {
-            ResetValue::U8 { mask, .. } => RegValue::U8(mask.clone()),
-            ResetValue::U16 { mask, .. } => RegValue::U16(mask.clone()),
-            ResetValue::U32 { mask, .. } => RegValue::U32(mask.clone()),
-            ResetValue::U64 { mask, .. } => RegValue::U64(mask.clone()),
+            ResetValue::U8 { mask, .. } => RegValue::U8(*mask),
+            ResetValue::U16 { mask, .. } => RegValue::U16(*mask),
+            ResetValue::U32 { mask, .. } => RegValue::U32(*mask),
+            ResetValue::U64 { mask, .. } => RegValue::U64(*mask),
         }
     }
 }

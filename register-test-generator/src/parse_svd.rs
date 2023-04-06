@@ -393,9 +393,9 @@ struct RegisterParent {
 
 impl RegisterParent {
     fn from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
-        let base_addr_str = find_text_in_node_by_tag_name(&periph_node, "baseAddress")?;
+        let base_addr_str = find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
         let base_addr = parse_nonneg_int_u64(base_addr_str)?;
-        let periph_name = find_text_in_node_by_tag_name(&periph_node, "name")?.to_owned();
+        let periph_name = find_text_in_node_by_tag_name(periph_node, "name")?.to_owned();
 
         Ok(Self {
             periph_name,
@@ -406,14 +406,14 @@ impl RegisterParent {
     }
 
     fn inherit_and_update_from_cluster(&self, cluster_node: &Node) -> Result<Self, SvdParseError> {
-        let cluster_name = find_text_in_node_by_tag_name(&cluster_node, "name")?.to_owned();
-        let cluster_offset_str = find_text_in_node_by_tag_name(&cluster_node, "addressOffset")?;
+        let cluster_name = find_text_in_node_by_tag_name(cluster_node, "name")?.to_owned();
+        let cluster_offset_str = find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
         let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)?;
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
             periph_base: self.periph_base,
-            properties: self.properties.inherit_and_update_from(&cluster_node)?,
+            properties: self.properties.inherit_and_update_from(cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
                 cluster_offset,
