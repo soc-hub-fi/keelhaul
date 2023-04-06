@@ -372,6 +372,30 @@ impl fmt::LowerHex for RegValue {
     }
 }
 
+impl From<u64> for RegValue {
+    fn from(value: u64) -> Self {
+        RegValue::U64(value)
+    }
+}
+
+impl From<u32> for RegValue {
+    fn from(value: u32) -> Self {
+        RegValue::U32(value)
+    }
+}
+
+impl From<u16> for RegValue {
+    fn from(value: u16) -> Self {
+        RegValue::U16(value)
+    }
+}
+
+impl From<u8> for RegValue {
+    fn from(value: u8) -> Self {
+        RegValue::U8(value)
+    }
+}
+
 /// Variable-length register reset value
 ///
 /// Register metadata commonly references its default value on reset, which we
