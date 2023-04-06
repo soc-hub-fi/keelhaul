@@ -1,12 +1,12 @@
 //! Generate test cases from model::* types
-use crate::{GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{AddrOverflowError, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{
     collections::{HashMap, HashSet},
-    iter, str,
+    convert, fmt, iter, str,
 };
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
@@ -360,9 +360,16 @@ fn reset_value_bitands_generate() {
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r, 'c>(&'r Register<u32>, &'c TestConfig);
+struct RegTestGenerator<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+    &'r Register<P>,
+    &'c TestConfig,
+);
 
-impl<'r, 'c> RegTestGenerator<'r, 'c> {
+impl<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>
+    RegTestGenerator<'r, 'c, P>
+where
+    GenerateError: convert::From<AddrOverflowError<P>>,
+{
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
@@ -378,7 +385,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     }
 
     /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register<u32>, config: &'c TestConfig) -> Self {
+    pub fn from_register(reg: &'r Register<P>, config: &'c TestConfig) -> Self {
         Self(reg, config)
     }
 
@@ -434,7 +441,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
 
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         let reg = self.0;
-        let full_addr: Result<u32, _> = reg.full_addr();
+        let full_addr: Result<P, _> = reg.full_addr();
         Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
     }
 
