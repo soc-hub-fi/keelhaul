@@ -530,10 +530,13 @@ pub struct TestCases {
 
 impl TestCases {
     /// Generate test cases for each register.
-    pub fn from_registers(
-        registers: &Registers<u32>,
+    pub fn from_registers<P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+        registers: &Registers<P>,
         config: &TestConfig,
-    ) -> Result<TestCases, GenerateError> {
+    ) -> Result<TestCases, GenerateError>
+    where
+        GenerateError: convert::From<AddrOverflowError<P>>,
+    {
         let preamble = gen_preamble(config).to_string();
 
         let mut test_fns_and_defs_by_periph = HashMap::new();
