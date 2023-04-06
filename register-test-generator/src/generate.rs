@@ -432,6 +432,12 @@ where
         }
     }
 
+    /// Generates a function identifier
+    ///
+    /// # Examples
+    ///
+    /// * `test_MCR_0xfff00004`
+    /// * `test_MDIO_RD_DATA_0xff40040c`
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         let reg = self.0;
         let full_addr: Result<P, _> = reg.full_addr();
