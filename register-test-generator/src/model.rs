@@ -167,18 +167,22 @@ impl RegPath {
 /// Addresses can be represented as full addresses, such as 0xdead_beef or as
 /// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
 /// type allows converting between the two.
+///
+/// # Type arguments
+///
+/// * `P` - type representing the architecture pointer size
 #[derive(Clone, Debug)]
-pub struct AddrRepr<T: num::CheckedAdd> {
-    base: T,
-    cluster: Option<T>,
-    offset: T,
+pub struct AddrRepr<P: num::CheckedAdd> {
+    base: P,
+    cluster: Option<P>,
+    offset: P,
 }
 
-impl<T> AddrRepr<T>
+impl<P> AddrRepr<P>
 where
-    T: num::CheckedAdd + Clone,
+    P: num::CheckedAdd + Clone,
 {
-    pub fn new(base: T, cluster: Option<T>, offset: T) -> Self {
+    pub fn new(base: P, cluster: Option<P>, offset: P) -> Self {
         Self {
             base,
             cluster,
@@ -189,7 +193,7 @@ where
     /// Get register's absolute memory address
     ///
     /// Returns None on address overflow.
-    pub fn full(&self) -> Option<T> {
+    pub fn full(&self) -> Option<P> {
         let AddrRepr {
             base,
             cluster,
@@ -240,11 +244,15 @@ impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
 }
 
 /// Represents a single memory-mapped I/O register.
-pub struct Register<T: num::CheckedAdd> {
+///
+/// # Type arguments
+///
+/// * `P` - type representing the architecture pointer size
+pub struct Register<P: num::CheckedAdd> {
     /// Hierarchical path, e.g. `PERIPH-CLUSTER-REG`
     pub path: RegPath,
     /// Physical address of the register
-    pub addr: AddrRepr<T>,
+    pub addr: AddrRepr<P>,
     /// Defines register bit width, security and reset properties.
     ///
     /// Cascades from higher levels to register level.
@@ -252,12 +260,12 @@ pub struct Register<T: num::CheckedAdd> {
     pub dimensions: Option<RegisterDimElementGroup>,
 }
 
-impl<T> Register<T>
+impl<P> Register<P>
 where
-    T: num::CheckedAdd + Clone,
+    P: num::CheckedAdd + Clone,
 {
     /// Get register's absolute memory address
-    pub fn full_addr(&self) -> Result<T, AddrOverflowError<T>> {
+    pub fn full_addr(&self) -> Result<P, AddrOverflowError<P>> {
         self.addr
             .full()
             .ok_or(AddrOverflowError(self.path.join("-"), self.addr.clone()))
@@ -275,17 +283,21 @@ where
     }
 }
 
-/// A list of registers parsed from SVD or IP-XACT (newtype).
-pub struct Registers<T: num::CheckedAdd>(Vec<Register<T>>);
+/// A list of registers parsed from SVD or IP-XACT (newtype)
+///
+/// # Type arguments
+///
+/// * `P` - type representing the architecture pointer size
+pub struct Registers<P: num::CheckedAdd>(Vec<Register<P>>);
 
-impl<T: num::CheckedAdd> From<Vec<Register<T>>> for Registers<T> {
-    fn from(value: Vec<Register<T>>) -> Self {
+impl<P: num::CheckedAdd> From<Vec<Register<P>>> for Registers<P> {
+    fn from(value: Vec<Register<P>>) -> Self {
         Self(value)
     }
 }
 
-impl<T: num::CheckedAdd> ops::Deref for Registers<T> {
-    type Target = Vec<Register<T>>;
+impl<P: num::CheckedAdd> ops::Deref for Registers<P> {
+    type Target = Vec<Register<P>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
