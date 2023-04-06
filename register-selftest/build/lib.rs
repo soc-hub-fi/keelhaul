@@ -2,9 +2,12 @@
 
 mod logger;
 
+use anyhow::Context;
 use fs_err::{self as fs, File};
-use log::LevelFilter;
-use register_test_generator::{ParseTestKindError, RegTestKind, TestCases, TestConfig};
+use log::{info, warn, LevelFilter};
+use register_test_generator::{
+    NotImplementedError, ParseTestKindError, PtrSize, RegTestKind, TestCases, TestConfig,
+};
 use std::{
     collections::HashSet,
     env,
@@ -62,6 +65,28 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
     .transpose()
 }
 
+fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
+    match env::var("ARCH_PTR_BYTES") {
+        Ok(arch_ptr_bytes_str) => {
+            let ptr_size = match arch_ptr_bytes_str
+                .parse::<u64>()
+                .with_context(|| "ARCH_PTR_BYTES")
+                .unwrap()
+            {
+                4 => Ok(PtrSize::U32),
+                8 => Ok(PtrSize::U64),
+                bytes => Err(NotImplementedError::PtrSize(bytes)),
+            }?;
+            info!("Selected ptr size: {:?}", ptr_size);
+            Ok(ptr_size)
+        }
+        Err(_) => {
+            warn!("ARCH_PTR_BYTES not specified, assuming 4-byte addressable platform (32-bit)");
+            Ok(PtrSize::U32)
+        }
+    }
+}
+
 pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
@@ -70,6 +95,7 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_TEST_KINDS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-env-changed=SVD_PATH");
+    println!("cargo:rerun-if-env-changed=ARCH_PTR_BYTES");
     println!("cargo:rerun-if-changed=build.rs");
 
     // Install a logger to print useful messages into `cargo:warning={}`
@@ -78,7 +104,9 @@ pub fn main() -> anyhow::Result<()> {
     let mut file_output = get_output_file();
     let registers = register_test_generator::parse()?;
 
-    let mut test_cfg = TestConfig::default();
+    let arch_ptr_size = arch_ptr_size_from_env()?;
+
+    let mut test_cfg = TestConfig::new(arch_ptr_size);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }

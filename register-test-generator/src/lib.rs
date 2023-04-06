@@ -112,6 +112,8 @@ pub enum NotImplementedError {
         "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"
     )]
     SvdArray(String),
+    #[error("generating tests for a platform with a {0}-byte pointer is not (yet?) supported")]
+    PtrSize(u64),
 }
 
 /// Error that happened during test case generation.

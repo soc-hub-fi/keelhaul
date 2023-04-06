@@ -200,16 +200,19 @@ pub struct TestConfig {
     /// This is useful because sometimes the people who make SVDs make all the
     /// reset masks zeros and we need to ignore them.
     force_ignore_reset_mask: bool,
+    /// Architecture native pointer size
+    arch_ptr_size: PtrSize,
 }
 
 impl TestConfig {
-    pub fn new() -> Self {
+    pub fn new(arch_ptr_size: PtrSize) -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
             on_fail: FailureImplKind::ReturnError,
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
             force_ignore_reset_mask: true,
+            arch_ptr_size,
         }
     }
 
@@ -232,12 +235,6 @@ impl TestConfig {
     pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
-    }
-}
-
-impl Default for TestConfig {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
