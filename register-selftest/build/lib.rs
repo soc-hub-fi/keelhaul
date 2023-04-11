@@ -16,9 +16,14 @@ use std::{
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    // Safety: OUT_DIR always exists at build time
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let out_dir = PathBuf::from(out_dir);
+    let out_dir = match env::var("OUTPUT_PATH") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => {
+            // Safety: OUT_DIR always exists at build time
+            let out_dir = env::var("OUT_DIR").unwrap();
+            PathBuf::from(out_dir)
+        }
+    };
     out_dir.join("register_selftest.rs")
 }
 
@@ -70,6 +75,7 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_TEST_KINDS");
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-env-changed=SVD_PATH");
+    println!("cargo:rerun-if-env-changed=OUTPUT_PATH");
     println!("cargo:rerun-if-changed=build.rs");
 
     // Install a logger to print useful messages into `cargo:warning={}`

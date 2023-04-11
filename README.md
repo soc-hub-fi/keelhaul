@@ -23,6 +23,8 @@ Set following environment variables.
     - Option `read_is_reset_val` **TODO**
     - You must give option in lowercase.
     - You must separate multiple options using comma `,`.
+- (optional) `OUTPUT_PATH`
+    - Absolute path where test case source file is written to.
 
 Build testcases.
 
