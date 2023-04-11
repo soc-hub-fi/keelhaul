@@ -3,7 +3,7 @@
 mod logger;
 
 use fs_err::{self as fs, File};
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use register_test_generator::{ParseTestKindError, RegTestKind, TestCases, TestConfig};
 use std::{
     collections::HashSet,
@@ -87,6 +87,6 @@ pub fn main() -> anyhow::Result<()> {
     let path = get_path_to_output();
     rustfmt_file(&path)
         .unwrap_or_else(|error| panic!("Failed to format file {}. {}", path.display(), error));
-    println!("Wrote {} test cases.", test_cases.test_case_count);
+    info!("Wrote {} test cases.", test_cases.test_case_count);
     Ok(())
 }
