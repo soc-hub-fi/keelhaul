@@ -396,6 +396,17 @@ impl From<u8> for RegValue {
     }
 }
 
+impl From<RegValue> for u64 {
+    fn from(value: RegValue) -> Self {
+        match value {
+            RegValue::U8(v) => v as u64,
+            RegValue::U16(v) => v as u64,
+            RegValue::U32(v) => v as u64,
+            RegValue::U64(v) => v,
+        }
+    }
+}
+
 /// Variable-length register reset value
 ///
 /// Register metadata commonly references its default value on reset, which we
