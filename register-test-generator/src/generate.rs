@@ -478,6 +478,7 @@ where
         // Only generate reset value test if register is readable
         let reset_val_test = if self.0.properties.access.is_read()
             && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
+            && u64::from(self.0.properties.reset().mask()) != 0u64
         {
             self.gen_reset_val_test(config)?
         } else {
