@@ -496,8 +496,8 @@ impl RegisterPropertiesGroup {
         }
     }
 
-    pub(crate) fn reset(&self) -> ResetValue {
-        self.reset_value.clone()
+    pub(crate) fn reset<'a>(&'a self) -> &'a ResetValue {
+        &self.reset_value
     }
 }
 
