@@ -2,8 +2,8 @@
 
 use crate::{
     validate_path_existence, Access, AddrOverflowError, AddrRepr, Error, IncompatibleTypesError,
-    NotImplementedError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    NotImplementedError, PositionalError, Protection, PtrSize, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -11,10 +11,8 @@ use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env,
-    fs::read_to_string,
-    panic,
-    path::PathBuf,
+    env, fs, panic,
+    path::{self, PathBuf},
     str::FromStr,
 };
 
@@ -33,7 +31,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
     let path_excludes = read_excludes_path_from_env();
     match path_excludes {
         Some(path) => {
-            let content = read_to_string(path).expect("Failed to read excludes content.");
+            let content = fs::read_to_string(path).expect("Failed to read excludes content.");
             let registers = content
                 .split('\n')
                 .into_iter()
@@ -135,27 +133,25 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
 }
 
 /// Read the input SVD to string
-fn read_input_svd_to_string() -> String {
-    let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| match env::var("PATH_SVD") {
-        Ok(p) => {
-            warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
-            p
-        }
-        Err(_) => panic!("PATH_SVD or SVD_PATH must be set"),
-    });
-    let svd_path = PathBuf::from(svd_path);
-    if !svd_path.exists() {
-        panic!("SVD was not found at {}", svd_path.display());
+fn read_to_string(fpath: &path::Path) -> String {
+    if !fpath.exists() {
+        panic!("SVD was not found at {}", fpath.display());
     }
-    read_to_string(svd_path).unwrap()
+    fs::read_to_string(fpath).unwrap()
 }
 
 /// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(node: &'a Node, tag: &str) -> Result<&'a str, SvdParseError> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(SvdParseError::ExpectedTagInElement {
-        elem_name: node.tag_name().name().to_owned(),
-        tag: tag.to_owned(),
-    })
+fn find_text_in_node_by_tag_name<'a>(
+    node: &'a Node,
+    tag: &str,
+) -> Result<&'a str, PositionalError<SvdParseError>> {
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(
+        SvdParseError::ExpectedTagInElement {
+            elem_name: node.tag_name().name().to_owned(),
+            tag: tag.to_owned(),
+        }
+        .with_byte_pos_range(node.range(), node.document()),
+    )
 }
 
 /// Try to find a child node with given name.
@@ -265,27 +261,39 @@ struct RegPropGroupBuilder {
     /// Register bits with defined reset value are marked as high.
     pub(crate) reset_mask: Option<RegValue>,
 }
+fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<SvdParseError> {
+    e.into().with_byte_pos_range(node.range(), node.document())
+}
 
 impl RegPropGroupBuilder {
-    fn try_from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+    fn try_from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
         let size = match find_text_in_node_by_tag_name(periph_node, "size") {
-            Ok(size) => Some(PtrSize::from_bit_count(size.parse()?).unwrap()),
+            Ok(size) => {
+                let bit_count = size.parse().map_err(|e| err_with_pos(e, periph_node))?;
+                Some(PtrSize::from_bit_count(bit_count).unwrap())
+            }
             Err(_) => None,
         };
         let access = match find_text_in_node_by_tag_name(periph_node, "access") {
-            Ok(access) => Some(Access::from_str(access)?),
+            Ok(access) => Some(Access::from_str(access).map_err(|e| err_with_pos(e, periph_node))?),
             Err(_) => None,
         };
         let protection = match find_text_in_node_by_tag_name(periph_node, "protection") {
-            Ok(protection) => Some(Protection::from_str(protection)?),
+            Ok(protection) => {
+                Some(Protection::from_str(protection).map_err(|e| err_with_pos(e, periph_node))?)
+            }
             Err(_) => None,
         };
         let reset_value = match find_text_in_node_by_tag_name(periph_node, "resetValue") {
-            Ok(reset_value) => Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?)),
+            Ok(reset_value) => Some(RegValue::U64(
+                parse_nonneg_int_u64(reset_value).map_err(|e| err_with_pos(e, periph_node))?,
+            )),
             Err(_) => None,
         };
         let reset_mask = match find_text_in_node_by_tag_name(periph_node, "resetMask") {
-            Ok(reset_mask) => Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?)),
+            Ok(reset_mask) => Some(RegValue::U64(
+                parse_nonneg_int_u64(reset_mask).map_err(|e| err_with_pos(e, periph_node))?,
+            )),
             Err(_) => None,
         };
         Ok(RegPropGroupBuilder {
@@ -302,22 +310,32 @@ impl RegPropGroupBuilder {
     /// # Arguments
     ///
     /// * `node` - can be either cluster or register node
-    fn inherit_and_update_from(&self, node: &Node) -> Result<RegPropGroupBuilder, SvdParseError> {
+    fn inherit_and_update_from(
+        &self,
+        node: &Node,
+    ) -> Result<RegPropGroupBuilder, PositionalError<SvdParseError>> {
         let mut properties = self.clone();
         if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
-            properties.size = Some(PtrSize::from_bit_count(size.parse()?).unwrap());
+            properties.size = Some(
+                PtrSize::from_bit_count(size.parse().map_err(|e| err_with_pos(e, node))?).unwrap(),
+            );
         };
         if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
-            properties.access = Some(Access::from_str(access)?);
+            properties.access = Some(Access::from_str(access).map_err(|e| err_with_pos(e, node))?);
         };
         if let Some(protection) = maybe_find_text_in_node_by_tag_name(node, "protection") {
-            properties.protection = Some(Protection::from_str(protection)?);
+            properties.protection =
+                Some(Protection::from_str(protection).map_err(|e| err_with_pos(e, node))?);
         };
         if let Some(reset_value) = maybe_find_text_in_node_by_tag_name(node, "resetValue") {
-            properties.reset_value = Some(RegValue::U64(parse_nonneg_int_u64(reset_value)?));
+            properties.reset_value = Some(RegValue::U64(
+                parse_nonneg_int_u64(reset_value).map_err(|e| err_with_pos(e, node))?,
+            ));
         };
         if let Some(reset_mask) = maybe_find_text_in_node_by_tag_name(node, "resetMask") {
-            properties.reset_mask = Some(RegValue::U64(parse_nonneg_int_u64(reset_mask)?));
+            properties.reset_mask = Some(RegValue::U64(
+                parse_nonneg_int_u64(reset_mask).map_err(|e| err_with_pos(e, node))?,
+            ));
         };
         Ok(properties)
     }
@@ -392,9 +410,10 @@ struct RegisterParent {
 }
 
 impl RegisterParent {
-    fn from_periph_node(periph_node: &Node) -> Result<Self, SvdParseError> {
+    fn from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
         let base_addr_str = find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
-        let base_addr = parse_nonneg_int_u64(base_addr_str)?;
+        let base_addr =
+            parse_nonneg_int_u64(base_addr_str).map_err(|e| err_with_pos(e, periph_node))?;
         let periph_name = find_text_in_node_by_tag_name(periph_node, "name")?.to_owned();
 
         Ok(Self {
@@ -405,10 +424,14 @@ impl RegisterParent {
         })
     }
 
-    fn inherit_and_update_from_cluster(&self, cluster_node: &Node) -> Result<Self, SvdParseError> {
+    fn inherit_and_update_from_cluster(
+        &self,
+        cluster_node: &Node,
+    ) -> Result<Self, PositionalError<SvdParseError>> {
         let cluster_name = find_text_in_node_by_tag_name(cluster_node, "name")?.to_owned();
         let cluster_offset_str = find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
-        let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)?;
+        let cluster_offset =
+            parse_nonneg_int_u64(cluster_offset_str).map_err(|e| err_with_pos(e, cluster_node))?;
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
@@ -423,12 +446,14 @@ impl RegisterParent {
 }
 
 impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
-    type Error = SvdParseError;
+    type Error = PositionalError<SvdParseError>;
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let dim = parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dim")?)?;
+        let dim = parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dim")?)
+            .map_err(|e| err_with_pos(e, value))?;
         let dim_increment =
-            parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dimIncrement")?)?;
+            parse_nonneg_int_u64(find_text_in_node_by_tag_name(value, "dimIncrement")?)
+                .map_err(|e| err_with_pos(e, value))?;
         Ok(Self { dim, dim_increment })
     }
 }
@@ -438,10 +463,11 @@ fn process_register(
     register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Register<u32>>, SvdParseError> {
+) -> Result<Option<Register<u32>>, PositionalError<SvdParseError>> {
     let name = find_text_in_node_by_tag_name(&register_node, "name")?.to_string();
     let addr_offset_str = find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
-    let addr_offset = parse_nonneg_int_u64(addr_offset_str)?;
+    let addr_offset =
+        parse_nonneg_int_u64(addr_offset_str).map_err(|e| err_with_pos(e, &register_node))?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
@@ -472,7 +498,9 @@ fn process_register(
     }
 
     let properties = parent.properties.inherit_and_update_from(&register_node)?;
-    let properties = properties.build(&reg_path)?;
+    let properties = properties
+        .build(&reg_path)
+        .map_err(|e| err_with_pos(e, &register_node))?;
 
     let addr = AddrRepr::<u64>::new(
         parent.periph_base,
@@ -483,7 +511,8 @@ fn process_register(
         addr_offset,
     );
     let addr = AddrRepr::<u32>::try_from(addr.clone())
-        .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))?;
+        .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))
+        .map_err(|e| err_with_pos(e, &register_node))?;
     let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
@@ -503,7 +532,7 @@ fn process_cluster(
     cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
+) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
     let current_parent = parent.inherit_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
@@ -525,7 +554,7 @@ fn process_peripheral(
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, SvdParseError> {
+) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
@@ -572,7 +601,7 @@ fn find_registers(
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Registers<u32>, SvdParseError> {
+) -> Result<Registers<u32>, PositionalError<SvdParseError>> {
     let device_nodes = parsed
         .root()
         .children()
@@ -644,10 +673,20 @@ pub fn parse() -> Result<Registers<u32>, Error> {
     let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
 
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
-    let content = read_input_svd_to_string();
+
+    let svd_fname = env::var("SVD_PATH").unwrap_or_else(|_| match env::var("PATH_SVD") {
+        Ok(p) => {
+            warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
+            p
+        }
+        Err(_) => panic!("PATH_SVD or SVD_PATH must be set"),
+    });
+    let svd_path = PathBuf::from(svd_fname.clone());
+    let content = read_to_string(&svd_path);
 
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)?;
+    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)
+        .map_err(|positional| positional.with_fname(svd_fname))?;
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.

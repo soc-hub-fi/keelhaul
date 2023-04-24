@@ -72,7 +72,7 @@ pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("error while parsing SVD")]
-    SvdParse(#[from] SvdParseError),
+    SvdParse(#[from] ParseFileError<SvdParseError>),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
