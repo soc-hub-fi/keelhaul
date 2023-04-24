@@ -10,7 +10,7 @@ pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
-use std::{fmt, fs::File, num::ParseIntError, path::PathBuf};
+use std::{fmt, fs::File, num::ParseIntError, ops, path::PathBuf};
 use thiserror::Error;
 /// Check that path to a file exists.
 ///
@@ -196,6 +196,30 @@ pub enum SvdParseError {
     InvalidProtectionType(String),
     #[error("register reset value and mask are of different types")]
     ResetValueMaskTypeMismatch(#[from] IncompatibleTypesError),
+}
+
+impl SvdParseError {
+    /// Convert into positional error, adding row and column information
+    pub(crate) fn with_text_pos_range(
+        self,
+        pos: ops::Range<roxmltree::TextPos>,
+    ) -> PositionalError<SvdParseError> {
+        PositionalError {
+            pos: pos.into(),
+            err: self,
+        }
+    }
+    pub(crate) fn with_byte_pos_range(
+        self,
+        byte_pos: ops::Range<usize>,
+        doc: &roxmltree::Document,
+    ) -> PositionalError<SvdParseError> {
+        let text_pos = ops::Range {
+            start: doc.text_pos_at(byte_pos.start),
+            end: doc.text_pos_at(byte_pos.end),
+        };
+        self.with_text_pos_range(text_pos)
+    }
 }
 
 #[derive(Error, Debug)]
