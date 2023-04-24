@@ -10,7 +10,7 @@ edition = "2021"
 json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-roxmltree = "0.18"
+roxmltree = { version = "0.18", features = ["positions"] }
 itertools = "0.10"
 regex = "1.7.1"
 lazy_static = "1.4.0"
