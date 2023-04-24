@@ -79,6 +79,13 @@ pub enum Error {
     ZeroEntries,
 }
 
+#[derive(Error, Debug)]
+#[error("CMSIS-SVD parse error --> {fname}:{err}")]
+pub struct ParseFileError<T> {
+    fname: String,
+    err: PositionalError<T>,
+}
+
 /// Representation of a file position in an error
 ///
 /// Indexes start from 1:1.
