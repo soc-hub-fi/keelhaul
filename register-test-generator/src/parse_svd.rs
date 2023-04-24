@@ -270,7 +270,9 @@ impl RegPropGroupBuilder {
         let size = match find_text_in_node_by_tag_name(periph_node, "size") {
             Ok(size) => {
                 let bit_count = size.parse().map_err(|e| err_with_pos(e, periph_node))?;
-                Some(PtrSize::from_bit_count(bit_count).unwrap())
+                Some(PtrSize::from_bit_count(bit_count).ok_or_else(|| {
+                    err_with_pos(SvdParseError::BitCountToPtrWidth(bit_count), periph_node)
+                })?)
             }
             Err(_) => None,
         };
@@ -316,9 +318,11 @@ impl RegPropGroupBuilder {
     ) -> Result<RegPropGroupBuilder, PositionalError<SvdParseError>> {
         let mut properties = self.clone();
         if let Some(size) = maybe_find_text_in_node_by_tag_name(node, "size") {
-            properties.size = Some(
-                PtrSize::from_bit_count(size.parse().map_err(|e| err_with_pos(e, node))?).unwrap(),
-            );
+            let bit_count = size.parse().map_err(|e| err_with_pos(e, node))?;
+            properties.size =
+                Some(PtrSize::from_bit_count(bit_count).ok_or_else(|| {
+                    err_with_pos(SvdParseError::BitCountToPtrWidth(bit_count), node)
+                })?);
         };
         if let Some(access) = maybe_find_text_in_node_by_tag_name(node, "access") {
             properties.access = Some(Access::from_str(access).map_err(|e| err_with_pos(e, node))?);
