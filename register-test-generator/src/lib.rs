@@ -150,6 +150,20 @@ impl fmt::Display for Position {
         }
     }
 }
+
+#[derive(Error, Debug)]
+#[error("{pos}\n{err}")]
+pub struct PositionalError<T> {
+    pos: Position,
+    err: T,
+}
+
+impl<T> PositionalError<T> {
+    pub(crate) fn with_fname(self, fname: String) -> ParseFileError<T> {
+        ParseFileError { fname, err: self }
+    }
+}
+
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {
