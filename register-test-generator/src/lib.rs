@@ -10,7 +10,7 @@ pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 
-use std::{fs::File, num::ParseIntError, path::PathBuf};
+use std::{fmt, fs::File, num::ParseIntError, path::PathBuf};
 use thiserror::Error;
 /// Check that path to a file exists.
 ///
@@ -79,6 +79,77 @@ pub enum Error {
     ZeroEntries,
 }
 
+/// Representation of a file position in an error
+///
+/// Indexes start from 1:1.
+#[derive(Debug)]
+pub(crate) enum Position {
+    Point {
+        line: u32,
+        col: u32,
+    },
+    Line {
+        line: u32,
+        start_col: u32,
+        end_col: u32,
+    },
+    MultiLine {
+        start_line: u32,
+        start_col: u32,
+        end_line: u32,
+        end_col: u32,
+    },
+}
+
+impl From<ops::Range<roxmltree::TextPos>> for Position {
+    fn from(value: ops::Range<roxmltree::TextPos>) -> Self {
+        if value.start.row == value.end.row {
+            // Same line, same column --> Point
+            if value.start.col == value.end.col {
+                Position::Point {
+                    line: value.start.row,
+                    col: value.start.col,
+                }
+            }
+            // Same line but different column --> Line
+            else {
+                Position::Line {
+                    line: value.start.row,
+                    start_col: value.start.col,
+                    end_col: value.end.col,
+                }
+            }
+        }
+        // Starts and ends on different lines --> MultiLine
+        else {
+            Position::MultiLine {
+                start_line: value.start.row,
+                start_col: value.start.col,
+                end_line: value.end.row,
+                end_col: value.end.col,
+            }
+        }
+    }
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Position::Point { line, col } => write!(f, "{line}:{col}"),
+            Position::Line {
+                line,
+                start_col,
+                end_col,
+            } => write!(f, "{line}:{start_col}-{end_col}"),
+            Position::MultiLine {
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+            } => write!(f, "{start_line}:{start_col}..{end_line}:{end_col}"),
+        }
+    }
+}
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
 pub enum SvdParseError {
