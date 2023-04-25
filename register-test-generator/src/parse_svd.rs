@@ -528,7 +528,7 @@ fn process_register(
         addr_offset,
     );
     let addr = AddrRepr::<u32>::try_from(addr.clone())
-        .map_err(|_| AddrOverflowError(path.join("-"), addr.clone()))
+        .map_err(|_| AddrOverflowError::new(path.join("-"), addr.clone()))
         .map_err(|e| err_with_pos(e, &register_node))?;
     let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),

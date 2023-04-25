@@ -266,9 +266,10 @@ where
 {
     /// Get register's absolute memory address
     pub fn full_addr(&self) -> Result<P, AddrOverflowError<P>> {
-        self.addr
-            .full()
-            .ok_or(AddrOverflowError(self.path.join("-"), self.addr.clone()))
+        self.addr.full().ok_or(AddrOverflowError::new(
+            self.path.join("-"),
+            self.addr.clone(),
+        ))
     }
 
     /// Get register's unique identifier
