@@ -18,29 +18,18 @@ use std::{
 
 /// Try to extract path to excludes-file from environment variable.
 fn read_excludes_path_from_env() -> Option<PathBuf> {
-    if let Ok(path_str) = env::var("PATH_EXCLUDES") {
-        let path = validate_path_existence(&path_str);
-        Some(path)
-    } else {
-        None
-    }
+    env::var("PATH_EXCLUDES")
+        .ok()
+        .map(|p| validate_path_existence(&p))
 }
 
 /// Try to get names of excluded registers.
 fn read_excludes_from_env() -> Option<Vec<String>> {
-    let path_excludes = read_excludes_path_from_env();
-    match path_excludes {
-        Some(path) => {
-            let content = fs::read_to_string(path).expect("Failed to read excludes content.");
-            let registers = content
-                .split('\n')
-                .into_iter()
-                .map(ToOwned::to_owned)
-                .collect_vec();
-            Some(registers)
-        }
-        None => None,
-    }
+    read_excludes_path_from_env().map(|path| {
+        let content = fs::read_to_string(path).expect("Failed to read excludes content.");
+        let registers = content.split('\n').map(ToOwned::to_owned).collect_vec();
+        registers
+    })
 }
 
 /// What items of type `T` are allowed or not
@@ -264,44 +253,45 @@ struct RegPropGroupBuilder {
     /// Register bits with defined reset value are marked as high.
     pub(crate) reset_mask: Option<RegValue>,
 }
+
 fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<SvdParseError> {
     e.into().with_byte_pos_range(node.range(), node.document())
 }
 
 impl RegPropGroupBuilder {
     fn try_from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
-        let size = match find_text_in_node_by_tag_name(periph_node, "size") {
-            Ok((size, size_node)) => {
+        let size = match maybe_find_text_in_node_by_tag_name(periph_node, "size") {
+            Some((size, size_node)) => {
                 let bit_count = size.parse().map_err(|e| err_with_pos(e, &size_node))?;
                 Some(PtrSize::from_bit_count(bit_count).ok_or_else(|| {
                     err_with_pos(SvdParseError::BitCountToPtrWidth(bit_count), &size_node)
                 })?)
             }
-            Err(_) => None,
+            None => None,
         };
-        let access = match find_text_in_node_by_tag_name(periph_node, "access") {
-            Ok((access, access_node)) => {
+        let access = match maybe_find_text_in_node_by_tag_name(periph_node, "access") {
+            Some((access, access_node)) => {
                 Some(Access::from_str(access).map_err(|e| err_with_pos(e, &access_node))?)
             }
-            Err(_) => None,
+            None => None,
         };
-        let protection = match find_text_in_node_by_tag_name(periph_node, "protection") {
-            Ok((prot, prot_node)) => {
+        let protection = match maybe_find_text_in_node_by_tag_name(periph_node, "protection") {
+            Some((prot, prot_node)) => {
                 Some(Protection::from_str(prot).map_err(|e| err_with_pos(e, &prot_node))?)
             }
-            Err(_) => None,
+            None => None,
         };
-        let reset_value = match find_text_in_node_by_tag_name(periph_node, "resetValue") {
-            Ok((reset_val, reset_val_node)) => Some(RegValue::U64(
+        let reset_value = match maybe_find_text_in_node_by_tag_name(periph_node, "resetValue") {
+            Some((reset_val, reset_val_node)) => Some(RegValue::U64(
                 parse_nonneg_int_u64(reset_val).map_err(|e| err_with_pos(e, &reset_val_node))?,
             )),
-            Err(_) => None,
+            None => None,
         };
-        let reset_mask = match find_text_in_node_by_tag_name(periph_node, "resetMask") {
-            Ok((reset_mask, reset_mask_node)) => Some(RegValue::U64(
+        let reset_mask = match maybe_find_text_in_node_by_tag_name(periph_node, "resetMask") {
+            Some((reset_mask, reset_mask_node)) => Some(RegValue::U64(
                 parse_nonneg_int_u64(reset_mask).map_err(|e| err_with_pos(e, &reset_mask_node))?,
             )),
-            Err(_) => None,
+            None => None,
         };
         Ok(RegPropGroupBuilder {
             size,
