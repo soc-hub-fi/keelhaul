@@ -17,7 +17,7 @@ use regex::Regex;
 use fs_err as fs;
 use std::{
     env,
-    path::{self, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 /// Returns contents of a file at `path`, panicking on any failure
@@ -136,12 +136,4 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
     } else {
         None
     }
-}
-
-/// Read the input SVD to string
-fn read_to_string(fpath: &path::Path) -> String {
-    if !fpath.exists() {
-        panic!("SVD was not found at {}", fpath.display());
-    }
-    fs::read_to_string(fpath).unwrap()
 }

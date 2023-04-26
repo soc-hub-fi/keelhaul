@@ -1,10 +1,10 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    read_excludes_from_env, read_to_string, read_vec_from_env, Access, AddrOverflowError, AddrRepr,
-    Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError, Protection,
-    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
-    Registers, ResetValue, SvdParseError,
+    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrOverflowError,
+    AddrRepr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError,
+    Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -569,15 +569,15 @@ pub fn parse() -> Result<Registers<u32>, Error> {
 
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
 
-    let svd_fname = env::var("SVD_PATH").unwrap_or_else(|_| match env::var("PATH_SVD") {
-        Ok(p) => {
-            warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
-            p
-        }
-        Err(_) => panic!("PATH_SVD or SVD_PATH must be set"),
+    let svd_fname = env::var("SVD_PATH").unwrap_or_else(|_| {
+        env::var("PATH_SVD")
+            .map(|p| {
+                warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
+                p
+            })
+            .unwrap_or_else(|err| panic!("PATH_SVD or SVD_PATH must be set: {err}"))
     });
-    let svd_path = PathBuf::from(svd_fname.clone());
-    let content = read_to_string(&svd_path);
+    let content = read_file_or_panic(&PathBuf::from(svd_fname.clone()));
 
     let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)
