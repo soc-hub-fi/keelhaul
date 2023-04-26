@@ -127,7 +127,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
     })
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct RegPropGroupBuilder {
     /// Register bit-width.
     pub size: Option<PtrSize>,
@@ -170,35 +170,20 @@ where
 }
 
 impl RegPropGroupBuilder {
-    fn try_from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
-        let size = process_prop_from_node_if_present("size", periph_node, |s| {
-            let bit_count = s.parse().map_err(SvdParseError::from);
-            bit_count.map(|bc| {
-                PtrSize::from_bit_count(bc).ok_or(SvdParseError::BitCountToPtrWidth(bc))
-            })?
-        })?;
-        let access = process_prop_from_node_if_present("access", periph_node, |s| {
-            Access::from_str(s).map_err(|e| e.into())
-        })?;
-        let protection = process_prop_from_node_if_present("protection", periph_node, |s| {
-            Protection::from_str(s)
-        })?;
-        let reset_value = process_prop_from_node_if_present("resetValue", periph_node, |s| {
-            let reset_value = parse_nonneg_int_u64(s);
-            reset_value.map(RegValue::U64)
-        })?;
-        let reset_mask = process_prop_from_node_if_present("resetMask", periph_node, |s| {
-            let reset_mask = parse_nonneg_int_u64(s);
-            reset_mask.map(RegValue::U64)
-        })?;
-
-        Ok(RegPropGroupBuilder {
-            size,
-            access,
-            protection,
-            reset_value,
-            reset_mask,
-        })
+    /// Returns a new RegPropGroupBuilder with applicable attributes from `node`
+    ///
+    /// Reads the following attributes from `node`:
+    ///
+    /// * size
+    /// * access
+    /// * resetValue
+    /// * resetMask
+    ///
+    /// If a value was not available, the respective field is set to None.
+    fn try_from_node(node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
+        let mut properties = RegPropGroupBuilder::default();
+        properties.update_from_node(node)?;
+        Ok(properties)
     }
 
     /// Inherit properties from parent and update with current node's properties if defined.
@@ -206,40 +191,57 @@ impl RegPropGroupBuilder {
     /// # Arguments
     ///
     /// * `node` - can be either cluster or register node
-    fn inherit_and_update_from(
+    fn clone_and_update_from_node(
         &self,
         node: &Node,
     ) -> Result<RegPropGroupBuilder, PositionalError<SvdParseError>> {
         let mut properties = self.clone();
-        if let Some((size, size_node)) = maybe_find_text_in_node_by_tag_name(node, "size") {
-            let bit_count = size.parse().map_err(|e| err_with_pos(e, &size_node))?;
-            properties.size = Some(PtrSize::from_bit_count(bit_count).ok_or_else(|| {
-                err_with_pos(SvdParseError::BitCountToPtrWidth(bit_count), &size_node)
-            })?);
-        };
-        if let Some((access, access_node)) = maybe_find_text_in_node_by_tag_name(node, "access") {
-            properties.access =
-                Some(Access::from_str(access).map_err(|e| err_with_pos(e, &access_node))?);
-        };
-        if let Some((prot, prot_node)) = maybe_find_text_in_node_by_tag_name(node, "protection") {
-            properties.protection =
-                Some(Protection::from_str(prot).map_err(|e| err_with_pos(e, &prot_node))?);
-        };
-        if let Some((reset_val, reset_val_node)) =
-            maybe_find_text_in_node_by_tag_name(node, "resetValue")
-        {
-            properties.reset_value = Some(RegValue::U64(
-                parse_nonneg_int_u64(reset_val).map_err(|e| err_with_pos(e, &reset_val_node))?,
-            ));
-        };
-        if let Some((reset_mask, reset_mask_node)) =
-            maybe_find_text_in_node_by_tag_name(node, "resetMask")
-        {
-            properties.reset_mask = Some(RegValue::U64(
-                parse_nonneg_int_u64(reset_mask).map_err(|e| err_with_pos(e, &reset_mask_node))?,
-            ));
-        };
+        properties.update_from_node(node)?;
         Ok(properties)
+    }
+
+    /// Update properties for this RegPropGroupBuilder where present
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - can be either peripheral, cluster, or register node
+    ///
+    /// Updates the following attributes from `node`:
+    ///
+    /// * size
+    /// * access
+    /// * resetValue
+    /// * resetMask
+    fn update_from_node(&mut self, node: &Node) -> Result<(), PositionalError<SvdParseError>> {
+        if let Some(size) = process_prop_from_node_if_present("size", node, |s| {
+            let bit_count = s.parse().map_err(SvdParseError::from);
+            bit_count.map(|bc| {
+                PtrSize::from_bit_count(bc).ok_or(SvdParseError::BitCountToPtrWidth(bc))
+            })?
+        })? {
+            self.size = Some(size);
+        }
+        if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
+            Access::from_str(s).map_err(|e| e.into())
+        })? {
+            self.access = Some(access);
+        };
+        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
+            Protection::from_str(s).map_err(|e| e.into())
+        })? {
+            self.protection = Some(protection);
+        };
+        if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
+            parse_nonneg_int_u64(s).map(RegValue::U64)
+        })? {
+            self.reset_value = Some(reset_value);
+        };
+        if let Some(reset_mask) = process_prop_from_node_if_present("resetMask", node, |s| {
+            parse_nonneg_int_u64(s).map(RegValue::U64)
+        })? {
+            self.reset_mask = Some(reset_mask);
+        };
+        Ok(())
     }
 
     pub(crate) fn build(
@@ -322,16 +324,18 @@ impl RegisterParent {
         Ok(Self {
             periph_name: periph_name.to_string(),
             periph_base: base_addr,
-            properties: RegPropGroupBuilder::try_from_periph_node(periph_node)?,
+            properties: RegPropGroupBuilder::try_from_node(periph_node)?,
             kind: RegisterParentKind::Periph,
         })
     }
 
-    fn inherit_and_update_from_cluster(
+    fn clone_and_update_from_cluster(
         &self,
         cluster_node: &Node,
     ) -> Result<Self, PositionalError<SvdParseError>> {
-        let (cluster_name, _) = find_text_in_node_by_tag_name(cluster_node, "name")?;
+        let cluster_name = find_text_in_node_by_tag_name(cluster_node, "name")?
+            .0
+            .to_owned();
         let (cluster_offset_str, cluster_offset_node) =
             find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
         let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)
@@ -340,9 +344,9 @@ impl RegisterParent {
         Ok(Self {
             periph_name: self.periph_name.clone(),
             periph_base: self.periph_base,
-            properties: self.properties.inherit_and_update_from(cluster_node)?,
+            properties: self.properties.clone_and_update_from_node(cluster_node)?,
             kind: RegisterParentKind::Cluster {
-                cluster_name: cluster_name.to_string(),
+                cluster_name,
                 cluster_offset,
             },
         })
@@ -403,7 +407,9 @@ fn process_register(
         return Ok(None);
     }
 
-    let properties = parent.properties.inherit_and_update_from(&register_node)?;
+    let properties = parent
+        .properties
+        .clone_and_update_from_node(&register_node)?;
     let properties = properties
         .build(&reg_path)
         .map_err(|e| err_with_pos(e, &register_node))?;
@@ -439,7 +445,7 @@ fn process_cluster(
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
-    let current_parent = parent.inherit_and_update_from_cluster(&cluster_node)?;
+    let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
     for register_node in cluster_node
