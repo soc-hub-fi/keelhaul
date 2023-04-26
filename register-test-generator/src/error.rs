@@ -5,12 +5,14 @@ use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum CommonParseError {
     #[error("invalid access type in input: {0}")]
     InvalidAccessType(String),
 }
 
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 #[error("address for {0} does not fit in architecture pointer {1}")]
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
@@ -124,6 +126,7 @@ impl<T> PositionalError<T> {
 
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum SvdParseError {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
     ExpectedTagInElement { elem_name: String, tag: String },
@@ -174,6 +177,7 @@ impl SvdParseError {
 }
 
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum NotImplementedError {
     #[error(
         "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"

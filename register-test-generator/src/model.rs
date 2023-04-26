@@ -102,7 +102,7 @@ impl ArchiPtr for u64 {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PtrSize {
     U8,
     U16,
@@ -200,7 +200,7 @@ impl RegPath {
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AddrRepr<P: num::CheckedAdd> {
     base: P,
     cluster: Option<P>,
@@ -476,6 +476,7 @@ pub(crate) enum ResetValue {
 }
 
 #[derive(Debug, Error)]
+#[cfg_attr(test, derive(PartialEq))]
 #[error("types are incompatible: {0} != {1}")]
 pub struct IncompatibleTypesError(PtrSize, PtrSize);
 
