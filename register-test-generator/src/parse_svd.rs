@@ -147,41 +147,51 @@ fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<Svd
     e.into().with_byte_pos_range(node.range(), node.document())
 }
 
+/// Finds a property from `node` by `tag`, calling `process` for its contents if present
+///
+/// Returns an error if value cannot be parsed in a legal way.
+///
+/// # Arguments
+///
+/// * `tag`     - The tag to locate within `node`
+/// * `node`    - The node to search (does not recurse)
+/// * `process` - The function to call for the found property
+fn process_prop_from_node_if_present<T, F>(
+    tag: &str,
+    node: &Node,
+    process: F,
+) -> Result<Option<T>, PositionalError<SvdParseError>>
+where
+    F: Fn(&str) -> Result<T, SvdParseError>,
+{
+    maybe_find_text_in_node_by_tag_name(node, tag)
+        .map(|(s, prop_node)| process(s).map_err(|e| err_with_pos(e, &prop_node)))
+        .transpose()
+}
+
 impl RegPropGroupBuilder {
     fn try_from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
-        let size = match maybe_find_text_in_node_by_tag_name(periph_node, "size") {
-            Some((size, size_node)) => {
-                let bit_count = size.parse().map_err(|e| err_with_pos(e, &size_node))?;
-                Some(PtrSize::from_bit_count(bit_count).ok_or_else(|| {
-                    err_with_pos(SvdParseError::BitCountToPtrWidth(bit_count), &size_node)
-                })?)
-            }
-            None => None,
-        };
-        let access = match maybe_find_text_in_node_by_tag_name(periph_node, "access") {
-            Some((access, access_node)) => {
-                Some(Access::from_str(access).map_err(|e| err_with_pos(e, &access_node))?)
-            }
-            None => None,
-        };
-        let protection = match maybe_find_text_in_node_by_tag_name(periph_node, "protection") {
-            Some((prot, prot_node)) => {
-                Some(Protection::from_str(prot).map_err(|e| err_with_pos(e, &prot_node))?)
-            }
-            None => None,
-        };
-        let reset_value = match maybe_find_text_in_node_by_tag_name(periph_node, "resetValue") {
-            Some((reset_val, reset_val_node)) => Some(RegValue::U64(
-                parse_nonneg_int_u64(reset_val).map_err(|e| err_with_pos(e, &reset_val_node))?,
-            )),
-            None => None,
-        };
-        let reset_mask = match maybe_find_text_in_node_by_tag_name(periph_node, "resetMask") {
-            Some((reset_mask, reset_mask_node)) => Some(RegValue::U64(
-                parse_nonneg_int_u64(reset_mask).map_err(|e| err_with_pos(e, &reset_mask_node))?,
-            )),
-            None => None,
-        };
+        let size = process_prop_from_node_if_present("size", periph_node, |s| {
+            let bit_count = s.parse().map_err(SvdParseError::from);
+            bit_count.map(|bc| {
+                PtrSize::from_bit_count(bc).ok_or(SvdParseError::BitCountToPtrWidth(bc))
+            })?
+        })?;
+        let access = process_prop_from_node_if_present("access", periph_node, |s| {
+            Access::from_str(s).map_err(|e| e.into())
+        })?;
+        let protection = process_prop_from_node_if_present("protection", periph_node, |s| {
+            Protection::from_str(s)
+        })?;
+        let reset_value = process_prop_from_node_if_present("resetValue", periph_node, |s| {
+            let reset_value = parse_nonneg_int_u64(s);
+            reset_value.map(RegValue::U64)
+        })?;
+        let reset_mask = process_prop_from_node_if_present("resetMask", periph_node, |s| {
+            let reset_mask = parse_nonneg_int_u64(s);
+            reset_mask.map(RegValue::U64)
+        })?;
+
         Ok(RegPropGroupBuilder {
             size,
             access,
