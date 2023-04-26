@@ -2,8 +2,8 @@
 
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrOverflowError,
-    AddrRepr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError,
-    Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    AddrRepr, ArchiPtr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError,
+    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
     RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
@@ -41,12 +41,12 @@ fn maybe_find_text_in_node_by_tag_name<'a>(
         .map(|n| (n.text().expect("Node does not have text."), n))
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
+fn binary_size_mult_from_char<P: ArchiPtr + From<u64>>(c: char) -> Result<P, SvdParseError> {
     match c {
-        'k' | 'K' => Ok(1024),
-        'm' | 'M' => Ok(1024 * 1024),
-        'g' | 'G' => Ok(1024 * 1024 * 1024),
-        't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
+        'k' | 'K' => Ok(1024.into()),
+        'm' | 'M' => Ok((1024 * 1024).into()),
+        'g' | 'G' => Ok((1024 * 1024 * 1024).into()),
+        't' | 'T' => Ok((1024 * 1024 * 1024 * 1024).into()),
         _ => Err(SvdParseError::InvalidSizeMultiplierSuffix(c)),
     }
 }
