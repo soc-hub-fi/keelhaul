@@ -120,20 +120,19 @@ impl<T: PartialEq> ItemFilter<T> {
     }
 }
 
-/// Read an environment variable into a Vec<String>
+/// Returns a vector containing elements read from environment variable `var` if
+/// the variable is present.
 ///
 /// # Parameters:
 ///
-/// `var` - The name of the environment variable
+/// `var` - The name of the environment variable to be read
 /// `sep` - The separator for Vec elements
-///
-/// Returns Some(`v`) if the variable is present, None otherwise
 fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
-    if let Ok(included_str) = env::var(var) {
-        let peripherals = included_str.split(sep).map(ToOwned::to_owned).collect_vec();
-        // TODO: validate that these are valid peripherals
-        Some(peripherals)
-    } else {
-        None
-    }
+    env::var(var)
+        .map(|s| {
+            let peripherals = s.split(sep).map(ToOwned::to_owned).collect_vec();
+            // TODO: validate that these are valid peripherals
+            peripherals
+        })
+        .ok()
 }
