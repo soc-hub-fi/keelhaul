@@ -3,7 +3,7 @@
 use core::fmt;
 use itertools::Itertools;
 use log::warn;
-use std::{ops, str::FromStr};
+use std::{ops, str};
 use thiserror::Error;
 
 use crate::{AddrOverflowError, CommonParseError, SvdParseError};
@@ -52,7 +52,7 @@ impl Access {
     }
 }
 
-impl FromStr for Access {
+impl str::FromStr for Access {
     type Err = CommonParseError;
 
     /// Convert from CMSIS-SVD / IP-XACT `accessType` string
@@ -342,7 +342,7 @@ pub enum Protection {
     Privileged,
 }
 
-impl FromStr for Protection {
+impl str::FromStr for Protection {
     type Err = SvdParseError;
 
     /// Convert from CMSIS-SVD `protectionStringType` string
