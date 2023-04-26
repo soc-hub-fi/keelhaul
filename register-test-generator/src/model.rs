@@ -3,7 +3,7 @@
 use core::fmt;
 use itertools::Itertools;
 use log::warn;
-use std::{ops, str::FromStr};
+use std::{hash, ops, str};
 use thiserror::Error;
 
 use crate::{AddrOverflowError, CommonParseError, SvdParseError};
@@ -52,7 +52,7 @@ impl Access {
     }
 }
 
-impl FromStr for Access {
+impl str::FromStr for Access {
     type Err = CommonParseError;
 
     /// Convert from CMSIS-SVD / IP-XACT `accessType` string
@@ -82,7 +82,35 @@ impl ToString for Access {
     }
 }
 
-#[derive(Clone, Debug)]
+pub trait ArchiPtr:
+    Clone +
+    Eq +
+    hash::Hash +
+    fmt::Debug +
+    // num::Num for from_str_radix
+    num::Num +
+    // num::CheckedAdd for pointer arithmetic / composable pointers
+    num::CheckedAdd +
+    // str::FromStr for converting strings into values
+    str::FromStr +
+    // Allow creating new values from 64-bit integers at runtime (if they fit)
+    TryFrom<u64> {
+    fn ptr_size() -> PtrSize;
+}
+
+impl ArchiPtr for u32 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U32
+    }
+}
+
+impl ArchiPtr for u64 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U64
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum PtrSize {
     U8,
     U16,
@@ -180,7 +208,7 @@ impl RegPath {
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AddrRepr<P: num::CheckedAdd> {
     base: P,
     cluster: Option<P>,
@@ -214,6 +242,23 @@ where
             addr = addr.and_then(|x| x.checked_add(cl));
         }
         addr.and_then(|x| x.checked_add(offset))
+    }
+}
+
+impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.cluster {
+            Some(cluster) => write!(
+                f,
+                "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
+                self.base, cluster, self.offset
+            ),
+            None => write!(
+                f,
+                "{{ base: {:#x}, offset: {:#x} }}",
+                self.base, self.offset
+            ),
+        }
     }
 }
 
@@ -325,7 +370,7 @@ pub enum Protection {
     Privileged,
 }
 
-impl FromStr for Protection {
+impl str::FromStr for Protection {
     type Err = SvdParseError;
 
     /// Convert from CMSIS-SVD `protectionStringType` string
@@ -439,6 +484,7 @@ pub(crate) enum ResetValue {
 }
 
 #[derive(Debug, Error)]
+#[cfg_attr(test, derive(PartialEq))]
 #[error("types are incompatible: {0} != {1}")]
 pub struct IncompatibleTypesError(PtrSize, PtrSize);
 

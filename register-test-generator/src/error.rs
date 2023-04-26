@@ -1,17 +1,19 @@
-use std::{fmt, ops};
+use std::{convert, fmt, ops};
 
 use crate::{AddrRepr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum CommonParseError {
     #[error("invalid access type in input: {0}")]
     InvalidAccessType(String),
 }
 
 #[derive(Error, Debug)]
-#[error("address for {0} does not fit in architecture pointer {1:?}")]
+#[cfg_attr(test, derive(PartialEq))]
+#[error("address for {0} does not fit in architecture pointer {1}")]
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
 impl<T: num::CheckedAdd> AddrOverflowError<T> {
@@ -124,10 +126,11 @@ impl<T> PositionalError<T> {
 
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum SvdParseError {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
     ExpectedTagInElement { elem_name: String, tag: String },
-    #[error("could not parse int")]
+    #[error("could not parse int: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
     #[error("could not parse nonneg int from {0}")]
     InvalidNonnegInt(String),
@@ -137,9 +140,9 @@ pub enum SvdParseError {
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
-    #[error("parsed 32-bit address overflows")]
+    #[error("parsed 32-bit address overflows\n{0}")]
     AddrOverflow32(#[from] AddrOverflowError<u32>),
-    #[error("parsed 64-bit address overflows")]
+    #[error("parsed 64-bit address overflows\n{0}")]
     AddrOverflow64(#[from] AddrOverflowError<u64>),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
@@ -147,6 +150,10 @@ pub enum SvdParseError {
     InvalidProtectionType(String),
     #[error("register reset value and mask are of different types")]
     ResetValueMaskTypeMismatch(#[from] IncompatibleTypesError),
+    #[error("internal error: infallible error should not be constructible")]
+    Infallible(#[from] convert::Infallible),
+    #[error("could not convert from int: {0}")]
+    TryFromInt(#[from] std::num::TryFromIntError),
 }
 
 impl SvdParseError {
@@ -174,6 +181,7 @@ impl SvdParseError {
 }
 
 #[derive(Error, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum NotImplementedError {
     #[error(
         "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"

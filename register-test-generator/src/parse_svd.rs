@@ -2,8 +2,8 @@
 
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrOverflowError,
-    AddrRepr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError,
-    Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    AddrRepr, ArchiPtr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError,
+    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
     RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
@@ -41,31 +41,47 @@ fn maybe_find_text_in_node_by_tag_name<'a>(
         .map(|n| (n.text().expect("Node does not have text."), n))
 }
 
-fn binary_size_mult_from_char(c: char) -> Result<u64, SvdParseError> {
+/// Returns the appropriate multiplier for given character, represented by type parameter `P`
+fn binary_size_mult_from_char<P: TryFrom<u64>>(c: char) -> Result<P, SvdParseError>
+where
+    SvdParseError: From<<P as TryFrom<u64>>::Error>,
+{
     match c {
-        'k' | 'K' => Ok(1024),
-        'm' | 'M' => Ok(1024 * 1024),
-        'g' | 'G' => Ok(1024 * 1024 * 1024),
-        't' | 'T' => Ok(1024 * 1024 * 1024 * 1024),
+        'k' | 'K' => Ok(1024u64.try_into()?),
+        'm' | 'M' => Ok((1024 * 1024u64).try_into()?),
+        'g' | 'G' => Ok((1024 * 1024 * 1024u64).try_into()?),
+        't' | 'T' => Ok((1024 * 1024 * 1024 * 1024u64).try_into()?),
         _ => Err(SvdParseError::InvalidSizeMultiplierSuffix(c)),
     }
 }
 
 #[test]
-fn parse_nonneg_int_u64_works() {
-    assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
-    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
-    assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
-    assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
-    assert_eq!(parse_nonneg_int_u64("437260288").unwrap(), 437260288);
+fn binary_size_mult_from_char_works() {
+    // 32-bit
+    assert_eq!(binary_size_mult_from_char('k'), Ok(1024u32));
+    assert_eq!(binary_size_mult_from_char('m'), Ok(1024 * 1024u32));
+    assert_eq!(binary_size_mult_from_char('g'), Ok(1024 * 1024 * 1024u32));
+    assert!(binary_size_mult_from_char::<u32>('t').is_err());
+
+    // 64-bit
+    assert_eq!(binary_size_mult_from_char('k'), Ok(1024u64));
+    assert_eq!(binary_size_mult_from_char('m'), Ok(1024 * 1024u64));
+    assert_eq!(binary_size_mult_from_char('g'), Ok(1024 * 1024 * 1024u64));
+    assert_eq!(
+        binary_size_mult_from_char('t'),
+        Ok(1024 * 1024 * 1024 * 1024u64)
+    );
 }
 
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
+fn parse_nonneg_int<P: ArchiPtr>(text: &str) -> Result<P, SvdParseError>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
     lazy_static! {
@@ -98,7 +114,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = HEX_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = u64::from_str_radix(digits, 16)?;
+        let number = P::from_str_radix(digits, 16)?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
@@ -107,7 +123,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = DEC_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = digits.parse::<u64>()?;
+        let number = digits.parse::<P>()?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
@@ -115,16 +131,33 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         return Err(SvdParseError::InvalidNonnegInt(text.to_owned()));
     };
 
-    let size_mult: Option<u64> = size_mult_capture
+    let size_mult: Option<P> = size_mult_capture
         // Safety: we know from the regex that there is only one possible size mult char
         .map(|s| s.as_str().chars().next().unwrap())
-        .map(binary_size_mult_from_char)
+        .map(|c| binary_size_mult_from_char(c))
         .transpose()?;
 
     Ok(match size_mult {
         Some(mult) => number_part * mult,
         None => number_part,
     })
+}
+
+#[test]
+fn parse_nonneg_int_works() {
+    assert_eq!(
+        parse_nonneg_int::<u32>("0xFFB00000").unwrap(),
+        0xFFB00000u32
+    );
+    assert_eq!(
+        parse_nonneg_int::<u32>("+0xFFB00000").unwrap(),
+        0xFFB00000u32
+    );
+    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
+    assert_eq!(parse_nonneg_int::<u32>("#FFB00000").unwrap(), 0xFFB00000u32);
+    assert_eq!(parse_nonneg_int::<u32>("42").unwrap(), 42u32);
+    assert_eq!(parse_nonneg_int::<u32>("1 k").unwrap(), 1024u32);
+    assert_eq!(parse_nonneg_int::<u32>("437260288").unwrap(), 437260288u32);
 }
 
 #[derive(Clone, Default)]
@@ -226,18 +259,18 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            Protection::from_str(s).map_err(|e| e.into())
-        })? {
+        if let Some(protection) =
+            process_prop_from_node_if_present("protection", node, |s| Protection::from_str(s))?
+        {
             self.protection = Some(protection);
         };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
-            parse_nonneg_int_u64(s).map(RegValue::U64)
+            parse_nonneg_int(s).map(RegValue::U64)
         })? {
             self.reset_value = Some(reset_value);
         };
         if let Some(reset_mask) = process_prop_from_node_if_present("resetMask", node, |s| {
-            parse_nonneg_int_u64(s).map(RegValue::U64)
+            parse_nonneg_int(s).map(RegValue::U64)
         })? {
             self.reset_mask = Some(reset_mask);
         };
@@ -290,27 +323,32 @@ impl RegPropGroupBuilder {
 // fields for the reg in question
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
-enum RegisterParentKind {
+enum RegisterParentKind<P: ArchiPtr> {
     Periph,
     Cluster {
         cluster_name: String,
-        cluster_offset: u64,
+        cluster_offset: P,
     },
 }
 
-struct RegisterParent {
-    kind: RegisterParentKind,
+struct RegisterParent<P: ArchiPtr> {
+    kind: RegisterParentKind<P>,
     periph_name: String,
-    periph_base: u64,
+    periph_base: P,
     properties: RegPropGroupBuilder,
 }
 
-impl RegisterParent {
+impl<P: ArchiPtr> RegisterParent<P>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
     fn from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
         let (base_addr_str, base_addr_node) =
             find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
         let base_addr =
-            parse_nonneg_int_u64(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
+            parse_nonneg_int(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
         let (periph_name, _) = find_text_in_node_by_tag_name(periph_node, "name")?;
 
         Ok(Self {
@@ -330,12 +368,12 @@ impl RegisterParent {
             .to_owned();
         let (cluster_offset_str, cluster_offset_node) =
             find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
-        let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)
+        let cluster_offset = parse_nonneg_int(cluster_offset_str)
             .map_err(|e| err_with_pos(e, &cluster_offset_node))?;
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
-            periph_base: self.periph_base,
+            periph_base: self.periph_base.clone(),
             properties: self.properties.clone_and_update_from_node(cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
@@ -350,27 +388,33 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
         let (dim, dim_node) = find_text_in_node_by_tag_name(value, "dim")?;
-        let dim = parse_nonneg_int_u64(dim).map_err(|e| err_with_pos(e, &dim_node))?;
+        let dim = parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?;
         let (dim_inc, dim_inc_node) = find_text_in_node_by_tag_name(value, "dimIncrement")?;
         let dim_increment =
-            parse_nonneg_int_u64(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
+            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
         Ok(Self { dim, dim_increment })
     }
 }
 
-fn process_register(
-    parent: &RegisterParent,
+fn process_register<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
     register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Register<u32>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Register<P>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let name = find_text_in_node_by_tag_name(&register_node, "name")?
         .0
         .to_owned();
     let (addr_offset_str, addr_offset_node) =
         find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
     let addr_offset =
-        parse_nonneg_int_u64(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
+        parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
@@ -407,17 +451,14 @@ fn process_register(
         .build(&reg_path)
         .map_err(|e| err_with_pos(e, &register_node))?;
 
-    let addr = AddrRepr::<u64>::new(
-        parent.periph_base,
-        match parent.kind {
+    let addr = AddrRepr::<P>::new(
+        parent.periph_base.clone(),
+        match &parent.kind {
             RegisterParentKind::Periph => None,
-            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset),
+            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
         },
         addr_offset,
     );
-    let addr = AddrRepr::<u32>::try_from(addr.clone())
-        .map_err(|_| AddrOverflowError::new(path.join("-"), addr.clone()))
-        .map_err(|e| err_with_pos(e, &register_node))?;
     let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
@@ -432,12 +473,18 @@ fn process_register(
     Ok(Some(register))
 }
 
-fn process_cluster(
-    parent: &RegisterParent,
+fn process_cluster<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
     cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
@@ -454,12 +501,18 @@ fn process_cluster(
     Ok(Some(registers))
 }
 
-fn process_peripheral(
+fn process_peripheral<P: ArchiPtr>(
     periph_node: Node,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
@@ -501,12 +554,18 @@ fn process_peripheral(
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers(
+fn find_registers<P: ArchiPtr>(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Registers<u32>, PositionalError<SvdParseError>> {
+) -> Result<Registers<P>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let device_nodes = parsed
         .root()
         .children()
@@ -569,12 +628,18 @@ fn find_registers(
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-fn parse_svd_into_registers(
+fn parse_svd_into_registers<P: ArchiPtr>(
     svd_path: &Path,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_filter: &ItemFilter<String>,
-) -> Result<Registers<u32>, Error> {
+) -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let svd_content = read_file_or_panic(svd_path);
 
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
@@ -593,7 +658,13 @@ fn parse_svd_into_registers(
 }
 
 /// Parse SVD-file.
-pub fn parse() -> Result<Registers<u32>, Error> {
+pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
         env::var("PATH_SVD")
             .map(|p| {
