@@ -3,7 +3,7 @@
 use core::fmt;
 use itertools::Itertools;
 use log::warn;
-use std::{ops, str};
+use std::{hash, ops, str};
 use thiserror::Error;
 
 use crate::{AddrOverflowError, CommonParseError, SvdParseError};
@@ -83,8 +83,14 @@ impl ToString for Access {
 }
 
 pub trait ArchiPtr:
+    Clone +
+    Eq +
+    hash::Hash +
+    fmt::Debug +
     // num::Num for from_str_radix
     num::Num +
+    // num::CheckedAdd for pointer arithmetic / composable pointers
+    num::CheckedAdd +
     // str::FromStr for converting strings into values
     str::FromStr +
     // Allow creating new values from 64-bit integers at runtime (if they fit)
