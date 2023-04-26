@@ -82,6 +82,26 @@ impl ToString for Access {
     }
 }
 
+pub trait ArchiPtr:
+    // num::Num for from_str_radix
+    num::Num +
+    // str::FromStr for converting strings into values
+    str::FromStr {
+    fn ptr_size() -> PtrSize;
+}
+
+impl ArchiPtr for u32 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U32
+    }
+}
+
+impl ArchiPtr for u64 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U64
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum PtrSize {
     U8,
