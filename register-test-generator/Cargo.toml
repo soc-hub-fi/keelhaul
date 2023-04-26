@@ -18,3 +18,4 @@ quote = "1.0.26"
 proc-macro2 = "1.0.52"
 num = "0.4.0"
 strum = { version = "0.24.1", features = ["derive"] }
+fs-err = "2.9.0"

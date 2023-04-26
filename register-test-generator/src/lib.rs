@@ -14,9 +14,9 @@ pub use model::*;
 pub use parse_svd::*;
 use regex::Regex;
 
+use fs_err as fs;
 use std::{
     env,
-    fs::{self},
     path::{self, Path, PathBuf},
 };
 
