@@ -142,6 +142,7 @@ struct RegPropGroupBuilder {
     pub(crate) reset_mask: Option<RegValue>,
 }
 
+/// Add text position information to an [SvdParseError] converting it into a [PositionalError]
 fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<SvdParseError> {
     e.into().with_byte_pos_range(node.range(), node.document())
 }
