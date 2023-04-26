@@ -323,22 +323,27 @@ impl RegPropGroupBuilder {
 // fields for the reg in question
 const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
 
-enum RegisterParentKind {
+enum RegisterParentKind<P: ArchiPtr> {
     Periph,
     Cluster {
         cluster_name: String,
-        cluster_offset: u64,
+        cluster_offset: P,
     },
 }
 
-struct RegisterParent {
-    kind: RegisterParentKind,
+struct RegisterParent<P: ArchiPtr> {
+    kind: RegisterParentKind<P>,
     periph_name: String,
-    periph_base: u64,
+    periph_base: P,
     properties: RegPropGroupBuilder,
 }
 
-impl RegisterParent {
+impl<P: ArchiPtr> RegisterParent<P>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
     fn from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
         let (base_addr_str, base_addr_node) =
             find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
@@ -368,7 +373,7 @@ impl RegisterParent {
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
-            periph_base: self.periph_base,
+            periph_base: self.periph_base.clone(),
             properties: self.properties.clone_and_update_from_node(cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
@@ -391,12 +396,18 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
     }
 }
 
-fn process_register(
-    parent: &RegisterParent,
+fn process_register<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
     register_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Register<u32>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Register<P>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let name = find_text_in_node_by_tag_name(&register_node, "name")?
         .0
         .to_owned();
@@ -440,17 +451,14 @@ fn process_register(
         .build(&reg_path)
         .map_err(|e| err_with_pos(e, &register_node))?;
 
-    let addr = AddrRepr::<u64>::new(
-        parent.periph_base,
-        match parent.kind {
+    let addr = AddrRepr::<P>::new(
+        parent.periph_base.clone(),
+        match &parent.kind {
             RegisterParentKind::Periph => None,
-            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset),
+            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
         },
         addr_offset,
     );
-    let addr = AddrRepr::<u32>::try_from(addr.clone())
-        .map_err(|_| AddrOverflowError::new(path.join("-"), addr.clone()))
-        .map_err(|e| err_with_pos(e, &register_node))?;
     let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
@@ -465,12 +473,18 @@ fn process_register(
     Ok(Some(register))
 }
 
-fn process_cluster(
-    parent: &RegisterParent,
+fn process_cluster<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
     cluster_node: Node,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
@@ -487,12 +501,18 @@ fn process_cluster(
     Ok(Some(registers))
 }
 
-fn process_peripheral(
+fn process_peripheral<P: ArchiPtr>(
     periph_node: Node,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<u32>>>, PositionalError<SvdParseError>> {
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
@@ -534,12 +554,18 @@ fn process_peripheral(
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers(
+fn find_registers<P: ArchiPtr>(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
-) -> Result<Registers<u32>, PositionalError<SvdParseError>> {
+) -> Result<Registers<P>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let device_nodes = parsed
         .root()
         .children()
@@ -602,12 +628,18 @@ fn find_registers(
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-fn parse_svd_into_registers(
+fn parse_svd_into_registers<P: ArchiPtr>(
     svd_path: &Path,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
     syms_filter: &ItemFilter<String>,
-) -> Result<Registers<u32>, Error> {
+) -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let svd_content = read_file_or_panic(svd_path);
 
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
@@ -626,7 +658,13 @@ fn parse_svd_into_registers(
 }
 
 /// Parse SVD-file.
-pub fn parse() -> Result<Registers<u32>, Error> {
+pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>
+        + From<AddrOverflowError<P>>,
+{
     let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
         env::var("PATH_SVD")
             .map(|p| {
