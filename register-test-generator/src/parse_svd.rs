@@ -52,20 +52,23 @@ fn binary_size_mult_from_char<P: ArchiPtr + From<u64>>(c: char) -> Result<P, Svd
 }
 
 #[test]
-fn parse_nonneg_int_u64_works() {
-    assert_eq!(parse_nonneg_int_u64("0xFFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("+0xFFB00000").unwrap(), 0xFFB00000);
+fn parse_nonneg_int_works() {
+    assert_eq!(parse_nonneg_int("0xFFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int("+0xFFB00000").unwrap(), 0xFFB00000);
     // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
-    assert_eq!(parse_nonneg_int_u64("#FFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int_u64("42").unwrap(), 42);
-    assert_eq!(parse_nonneg_int_u64("1 k").unwrap(), 1024);
-    assert_eq!(parse_nonneg_int_u64("437260288").unwrap(), 437260288);
+    assert_eq!(parse_nonneg_int("#FFB00000").unwrap(), 0xFFB00000);
+    assert_eq!(parse_nonneg_int("42").unwrap(), 42);
+    assert_eq!(parse_nonneg_int("1 k").unwrap(), 1024);
+    assert_eq!(parse_nonneg_int("437260288").unwrap(), 437260288);
 }
 
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
+fn parse_nonneg_int<P: ArchiPtr + From<u64>>(text: &str) -> Result<P, SvdParseError>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr> + From<<P as FromStr>::Err>,
+{
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
     lazy_static! {
@@ -98,7 +101,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = HEX_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = u64::from_str_radix(digits, 16)?;
+        let number = P::from_str_radix(digits, 16)?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
@@ -107,7 +110,7 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         let captures = DEC_NONNEG_INT_RE.captures_iter(text).next().unwrap();
 
         let digits = &captures[1];
-        let number = digits.parse::<u64>()?;
+        let number = digits.parse::<P>()?;
 
         let size_mult = captures.get(2);
         (number, size_mult)
@@ -115,10 +118,10 @@ fn parse_nonneg_int_u64(text: &str) -> Result<u64, SvdParseError> {
         return Err(SvdParseError::InvalidNonnegInt(text.to_owned()));
     };
 
-    let size_mult: Option<u64> = size_mult_capture
+    let size_mult: Option<P> = size_mult_capture
         // Safety: we know from the regex that there is only one possible size mult char
         .map(|s| s.as_str().chars().next().unwrap())
-        .map(binary_size_mult_from_char)
+        .map(|c| binary_size_mult_from_char(c))
         .transpose()?;
 
     Ok(match size_mult {
@@ -232,12 +235,12 @@ impl RegPropGroupBuilder {
             self.protection = Some(protection);
         };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
-            parse_nonneg_int_u64(s).map(RegValue::U64)
+            parse_nonneg_int(s).map(RegValue::U64)
         })? {
             self.reset_value = Some(reset_value);
         };
         if let Some(reset_mask) = process_prop_from_node_if_present("resetMask", node, |s| {
-            parse_nonneg_int_u64(s).map(RegValue::U64)
+            parse_nonneg_int(s).map(RegValue::U64)
         })? {
             self.reset_mask = Some(reset_mask);
         };
@@ -310,7 +313,7 @@ impl RegisterParent {
         let (base_addr_str, base_addr_node) =
             find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
         let base_addr =
-            parse_nonneg_int_u64(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
+            parse_nonneg_int(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
         let (periph_name, _) = find_text_in_node_by_tag_name(periph_node, "name")?;
 
         Ok(Self {
@@ -330,7 +333,7 @@ impl RegisterParent {
             .to_owned();
         let (cluster_offset_str, cluster_offset_node) =
             find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
-        let cluster_offset = parse_nonneg_int_u64(cluster_offset_str)
+        let cluster_offset = parse_nonneg_int(cluster_offset_str)
             .map_err(|e| err_with_pos(e, &cluster_offset_node))?;
 
         Ok(Self {
@@ -350,10 +353,10 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
         let (dim, dim_node) = find_text_in_node_by_tag_name(value, "dim")?;
-        let dim = parse_nonneg_int_u64(dim).map_err(|e| err_with_pos(e, &dim_node))?;
+        let dim = parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?;
         let (dim_inc, dim_inc_node) = find_text_in_node_by_tag_name(value, "dimIncrement")?;
         let dim_increment =
-            parse_nonneg_int_u64(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
+            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
         Ok(Self { dim, dim_increment })
     }
 }
@@ -370,7 +373,7 @@ fn process_register(
     let (addr_offset_str, addr_offset_node) =
         find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
     let addr_offset =
-        parse_nonneg_int_u64(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
+        parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
 
     //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
