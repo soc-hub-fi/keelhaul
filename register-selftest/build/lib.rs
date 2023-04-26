@@ -82,7 +82,7 @@ pub fn main() -> anyhow::Result<()> {
     logger::init(LevelFilter::Info);
 
     let mut file_output = get_output_file();
-    let registers = register_test_generator::parse()?;
+    let registers = register_test_generator::parse::<u32>()?;
 
     let mut test_cfg = TestConfig::default();
     if let Some(test_kind_set) = test_types_from_env()? {
