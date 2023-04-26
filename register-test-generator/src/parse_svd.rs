@@ -13,7 +13,7 @@ use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     env, panic,
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -551,8 +551,48 @@ fn find_registers(
     Ok(registers.into())
 }
 
+/// Parse the file at `svd_path` into a list of registers with provided filters & constraints
+///
+/// # Arguments
+///
+/// * `svd_path`        - The path to the SVD file
+/// * `reg_filter`      - What registers to include or exclude
+/// * `periph_filter`   - What peripherals to include or exclude
+/// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
+fn parse_svd_into_registers(
+    svd_path: &Path,
+    reg_filter: &ItemFilter<String>,
+    periph_filter: &ItemFilter<String>,
+    syms_filter: &ItemFilter<String>,
+) -> Result<Registers<u32>, Error> {
+    let svd_content = read_file_or_panic(svd_path);
+
+    let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
+    let registers = find_registers(&parsed, reg_filter, periph_filter, syms_filter)
+        .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
+
+    // If zero registers were chosen for generation, this run is useless.
+    // Therefore we treat it as an error.
+    // TODO: allow ignoring this error for special cases with a suitable flag on Config-struct
+    if registers.is_empty() {
+        return Err(Error::ZeroEntries);
+    }
+
+    info!("Found {} registers.", registers.len());
+    Ok(registers)
+}
+
 /// Parse SVD-file.
 pub fn parse() -> Result<Registers<u32>, Error> {
+    let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
+        env::var("PATH_SVD")
+            .map(|p| {
+                warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
+                p
+            })
+            .unwrap_or_else(|err| panic!("PATH_SVD or SVD_PATH must be set: {err}"))
+    });
+
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =
@@ -569,27 +609,10 @@ pub fn parse() -> Result<Registers<u32>, Error> {
 
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
 
-    let svd_fname = env::var("SVD_PATH").unwrap_or_else(|_| {
-        env::var("PATH_SVD")
-            .map(|p| {
-                warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
-                p
-            })
-            .unwrap_or_else(|err| panic!("PATH_SVD or SVD_PATH must be set: {err}"))
-    });
-    let content = read_file_or_panic(&PathBuf::from(svd_fname.clone()));
-
-    let parsed = Document::parse(&content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, &reg_filter, &periph_filter, &syms_filter)
-        .map_err(|positional| positional.with_fname(svd_fname))?;
-
-    // If zero registers were chosen for generation, this run is useless.
-    // Therefore we treat it as an error.
-    // TODO: allow ignoring this error for special cases with a suitable flag on Config-struct
-    if registers.is_empty() {
-        return Err(Error::ZeroEntries);
-    }
-
-    info!("Found {} registers.", registers.len());
-    Ok(registers)
+    parse_svd_into_registers(
+        &PathBuf::from(svd_path),
+        &reg_filter,
+        &periph_filter,
+        &syms_filter,
+    )
 }
