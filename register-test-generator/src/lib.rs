@@ -16,42 +16,37 @@ use regex::Regex;
 
 use std::{
     env,
-    fs::{self, File},
-    path::{self, PathBuf},
+    fs::{self},
+    path::{self, Path, PathBuf},
 };
 
-/// Check that path to a file exists.
+/// Returns contents of a file at `path`, panicking on any failure
 ///
 /// # Panics
 ///
-/// This function panics if the path does not exist.
-pub fn validate_path_existence(path_str: &str) -> PathBuf {
-    match PathBuf::from(path_str).canonicalize() {
-        Ok(path) => match path.try_exists() {
-            Ok(exists) => {
-                assert!(exists, "Path {} does not exist.", path.display());
-                path
-            }
-            Err(error) => panic!("Path {} does not exist. {}", path.display(), error),
-        },
-        Err(error) => panic!("Path {path_str} does not exist. {error}"),
-    }
+/// This function panics if the path does not exist, or if the file cannot be
+/// read.
+pub fn read_file_or_panic(path: &Path) -> String {
+    path.canonicalize()
+        .map(|p| {
+            fs::read_to_string(p)
+                .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
+        })
+        .unwrap_or_else(|err| panic!("path {} does not exist: {err}", path.display()))
 }
 
 /// Try to extract path to excludes-file from environment variable.
-fn read_excludes_path_from_env() -> Option<PathBuf> {
-    env::var("PATH_EXCLUDES")
+fn read_file_from_env_or_panic(var: &str) -> Option<String> {
+    env::var(var)
         .ok()
-        .map(|p| validate_path_existence(&p))
+        .map(|p| read_file_or_panic(&PathBuf::from(p)))
 }
 
 /// Try to get names of excluded registers.
 fn read_excludes_from_env() -> Option<Vec<String>> {
-    read_excludes_path_from_env().map(|path| {
-        let content = fs::read_to_string(path).expect("Failed to read excludes content.");
-        let registers = content.split('\n').map(ToOwned::to_owned).collect_vec();
-        registers
-    })
+    read_file_from_env_or_panic("PATH_EXCLUDES").map(|contents|
+            // One register per line
+            contents.split('\n').map(ToOwned::to_owned).collect_vec())
 }
 
 /// What items of type `T` are allowed or not
