@@ -217,6 +217,23 @@ where
     }
 }
 
+impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.cluster {
+            Some(cluster) => write!(
+                f,
+                "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
+                self.base, cluster, self.offset
+            ),
+            None => write!(
+                f,
+                "{{ base: {:#x}, offset: {:#x} }}",
+                self.base, self.offset
+            ),
+        }
+    }
+}
+
 // Allow conversion from a 32-bit address representation to a 64-bit
 // representation to simplify debug implementations
 impl From<AddrRepr<u32>> for AddrRepr<u64> {

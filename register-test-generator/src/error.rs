@@ -11,7 +11,7 @@ pub enum CommonParseError {
 }
 
 #[derive(Error, Debug)]
-#[error("address for {0} does not fit in architecture pointer {1:?}")]
+#[error("address for {0} does not fit in architecture pointer {1}")]
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
 impl<T: num::CheckedAdd> AddrOverflowError<T> {
@@ -137,9 +137,9 @@ pub enum SvdParseError {
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
-    #[error("parsed 32-bit address overflows")]
+    #[error("parsed 32-bit address overflows\n{0}")]
     AddrOverflow32(#[from] AddrOverflowError<u32>),
-    #[error("parsed 64-bit address overflows")]
+    #[error("parsed 64-bit address overflows\n{0}")]
     AddrOverflow64(#[from] AddrOverflowError<u64>),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
