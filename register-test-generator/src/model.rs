@@ -124,6 +124,15 @@ impl PtrSize {
             PtrSize::U64 => RegValue::U64(u64::MAX),
         }
     }
+
+    pub(crate) fn zero_value(&self) -> RegValue {
+        match self {
+            PtrSize::U8 => RegValue::U8(0),
+            PtrSize::U16 => RegValue::U16(0),
+            PtrSize::U32 => RegValue::U32(0),
+            PtrSize::U64 => RegValue::U64(0),
+        }
+    }
 }
 
 impl fmt::Display for PtrSize {

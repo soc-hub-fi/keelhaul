@@ -265,21 +265,11 @@ impl RegPropGroupBuilder {
         let reset_value = {
             let reset_value = self.reset_value.unwrap_or_else(|| {
                 warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = 0");
-                match value_size {
-                    PtrSize::U8 => RegValue::U8(0),
-                    PtrSize::U16 => RegValue::U16(0),
-                    PtrSize::U32 => RegValue::U32(0),
-                    PtrSize::U64 => RegValue::U64(0),
-                }
+                value_size.zero_value()
             });
             let reset_mask = self.reset_mask.unwrap_or_else(|| {
                 warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", value_size);
-                match value_size {
-                    PtrSize::U8 => RegValue::U8(u8::MAX),
-                    PtrSize::U16 => RegValue::U16(u16::MAX),
-                    PtrSize::U32 => RegValue::U32(u32::MAX),
-                    PtrSize::U64 => RegValue::U64(u64::MAX),
-                }
+                value_size.max_value()
             });
             ResetValue::with_mask(reset_value, reset_mask)?
         };
