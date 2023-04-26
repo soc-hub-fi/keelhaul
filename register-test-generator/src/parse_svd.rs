@@ -41,33 +41,46 @@ fn maybe_find_text_in_node_by_tag_name<'a>(
         .map(|n| (n.text().expect("Node does not have text."), n))
 }
 
-fn binary_size_mult_from_char<P: ArchiPtr + From<u64>>(c: char) -> Result<P, SvdParseError> {
+/// Returns the appropriate multiplier for given character, represented by type parameter `P`
+fn binary_size_mult_from_char<P: TryFrom<u64>>(c: char) -> Result<P, SvdParseError>
+where
+    SvdParseError: From<<P as TryFrom<u64>>::Error>,
+{
     match c {
-        'k' | 'K' => Ok(1024.into()),
-        'm' | 'M' => Ok((1024 * 1024).into()),
-        'g' | 'G' => Ok((1024 * 1024 * 1024).into()),
-        't' | 'T' => Ok((1024 * 1024 * 1024 * 1024).into()),
+        'k' | 'K' => Ok(1024u64.try_into()?),
+        'm' | 'M' => Ok((1024 * 1024u64).try_into()?),
+        'g' | 'G' => Ok((1024 * 1024 * 1024u64).try_into()?),
+        't' | 'T' => Ok((1024 * 1024 * 1024 * 1024u64).try_into()?),
         _ => Err(SvdParseError::InvalidSizeMultiplierSuffix(c)),
     }
 }
 
 #[test]
-fn parse_nonneg_int_works() {
-    assert_eq!(parse_nonneg_int("0xFFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int("+0xFFB00000").unwrap(), 0xFFB00000);
-    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
-    assert_eq!(parse_nonneg_int("#FFB00000").unwrap(), 0xFFB00000);
-    assert_eq!(parse_nonneg_int("42").unwrap(), 42);
-    assert_eq!(parse_nonneg_int("1 k").unwrap(), 1024);
-    assert_eq!(parse_nonneg_int("437260288").unwrap(), 437260288);
+fn binary_size_mult_from_char_works() {
+    // 32-bit
+    assert_eq!(binary_size_mult_from_char('k'), Ok(1024u32));
+    assert_eq!(binary_size_mult_from_char('m'), Ok(1024 * 1024u32));
+    assert_eq!(binary_size_mult_from_char('g'), Ok(1024 * 1024 * 1024u32));
+    assert!(binary_size_mult_from_char::<u32>('t').is_err());
+
+    // 64-bit
+    assert_eq!(binary_size_mult_from_char('k'), Ok(1024u64));
+    assert_eq!(binary_size_mult_from_char('m'), Ok(1024 * 1024u64));
+    assert_eq!(binary_size_mult_from_char('g'), Ok(1024 * 1024 * 1024u64));
+    assert_eq!(
+        binary_size_mult_from_char('t'),
+        Ok(1024 * 1024 * 1024 * 1024u64)
+    );
 }
 
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int<P: ArchiPtr + From<u64>>(text: &str) -> Result<P, SvdParseError>
+fn parse_nonneg_int<P: ArchiPtr>(text: &str) -> Result<P, SvdParseError>
 where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr> + From<<P as FromStr>::Err>,
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
 {
     // Compile Regexes only once as recommended by the documentation of the Regex crate
     use lazy_static::lazy_static;
@@ -128,6 +141,23 @@ where
         Some(mult) => number_part * mult,
         None => number_part,
     })
+}
+
+#[test]
+fn parse_nonneg_int_works() {
+    assert_eq!(
+        parse_nonneg_int::<u32>("0xFFB00000").unwrap(),
+        0xFFB00000u32
+    );
+    assert_eq!(
+        parse_nonneg_int::<u32>("+0xFFB00000").unwrap(),
+        0xFFB00000u32
+    );
+    // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
+    assert_eq!(parse_nonneg_int::<u32>("#FFB00000").unwrap(), 0xFFB00000u32);
+    assert_eq!(parse_nonneg_int::<u32>("42").unwrap(), 42u32);
+    assert_eq!(parse_nonneg_int::<u32>("1 k").unwrap(), 1024u32);
+    assert_eq!(parse_nonneg_int::<u32>("437260288").unwrap(), 437260288u32);
 }
 
 #[derive(Clone, Default)]
@@ -229,9 +259,9 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            Protection::from_str(s).map_err(|e| e.into())
-        })? {
+        if let Some(protection) =
+            process_prop_from_node_if_present("protection", node, |s| Protection::from_str(s))?
+        {
             self.protection = Some(protection);
         };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {

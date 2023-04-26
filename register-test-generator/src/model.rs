@@ -86,7 +86,9 @@ pub trait ArchiPtr:
     // num::Num for from_str_radix
     num::Num +
     // str::FromStr for converting strings into values
-    str::FromStr {
+    str::FromStr +
+    // Allow creating new values from 64-bit integers at runtime (if they fit)
+    TryFrom<u64> {
     fn ptr_size() -> PtrSize;
 }
 

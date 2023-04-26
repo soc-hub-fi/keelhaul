@@ -1,4 +1,4 @@
-use std::{fmt, ops};
+use std::{convert, fmt, ops};
 
 use crate::{AddrRepr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
@@ -150,6 +150,10 @@ pub enum SvdParseError {
     InvalidProtectionType(String),
     #[error("register reset value and mask are of different types")]
     ResetValueMaskTypeMismatch(#[from] IncompatibleTypesError),
+    #[error("internal error: infallible error should not be constructible")]
+    Infallible(#[from] convert::Infallible),
+    #[error("could not convert from int: {0}")]
+    TryFromInt(#[from] std::num::TryFromIntError),
 }
 
 impl SvdParseError {
