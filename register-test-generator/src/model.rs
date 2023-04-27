@@ -87,6 +87,10 @@ pub trait ArchiPtr:
     Eq +
     hash::Hash +
     fmt::Debug +
+    Send +
+    Sync +
+    // Allow converting into hexadecimal representation
+    fmt::LowerHex +
     // num::Num for from_str_radix
     num::Num +
     // num::CheckedAdd for pointer arithmetic / composable pointers
