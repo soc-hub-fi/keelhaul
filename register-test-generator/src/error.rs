@@ -140,10 +140,6 @@ pub enum SvdParseError {
     BitCountToPtrWidth(u64),
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
-    #[error("parsed 32-bit address overflows\n{0}")]
-    AddrOverflow32(#[from] AddrOverflowError<u32>),
-    #[error("parsed 64-bit address overflows\n{0}")]
-    AddrOverflow64(#[from] AddrOverflowError<u64>),
     #[error("generic parse error")]
     GenericParse(#[from] CommonParseError),
     #[error("invalid CMSIS-SVD protection type: {0}")]

@@ -1,10 +1,10 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrOverflowError,
-    AddrRepr, ArchiPtr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError,
-    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
+    Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError, Protection,
+    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
+    Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -405,8 +405,7 @@ fn process_register<P: ArchiPtr>(
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let name = find_text_in_node_by_tag_name(&register_node, "name")?
         .0
@@ -482,8 +481,7 @@ fn process_cluster<P: ArchiPtr>(
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
 
@@ -510,8 +508,7 @@ fn process_peripheral<P: ArchiPtr>(
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
@@ -563,8 +560,7 @@ fn find_registers<P: ArchiPtr>(
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let device_nodes = parsed
         .root()
@@ -637,8 +633,7 @@ fn parse_svd_into_registers<P: ArchiPtr>(
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let svd_content = read_file_or_panic(svd_path);
 
@@ -662,8 +657,7 @@ pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>
-        + From<AddrOverflowError<P>>,
+        + From<<P as TryFrom<u64>>::Error>,
 {
     let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
         env::var("PATH_SVD")
