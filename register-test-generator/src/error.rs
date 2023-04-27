@@ -1,6 +1,6 @@
 use std::{convert, fmt, ops};
 
-use crate::{AddrRepr, IncompatibleTypesError, TestConfig};
+use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
@@ -188,10 +188,20 @@ pub enum NotImplementedError {
 /// Error that happened during test case generation.
 #[derive(Error, Debug)]
 pub enum GenerateError {
-    #[error("generated 32-bit address overflows")]
-    AddrOverflow32(#[from] AddrOverflowError<u32>),
-    #[error("generated 64-bit address overflows")]
-    AddrOverflow64(#[from] AddrOverflowError<u64>),
+    #[error("generated address overflows {archi_bits}-bit architecture pointer\n{err}")]
+    AddrOverflow {
+        err: Box<dyn std::error::Error + Send + Sync>,
+        archi_bits: u8,
+    },
     #[error("invalid configuration: {cause}, {c:#?}")]
     InvalidConfig { c: TestConfig, cause: String },
+}
+
+impl<P: ArchiPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
+    fn from(value: AddrOverflowError<P>) -> Self {
+        GenerateError::AddrOverflow {
+            err: Box::new(value),
+            archi_bits: P::ptr_size().bits(),
+        }
+    }
 }

@@ -1,12 +1,12 @@
 //! Generate test cases from model::* types
-use crate::{AddrOverflowError, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{
     collections::{HashMap, HashSet},
-    convert, fmt, iter, str,
+    iter, str,
 };
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
@@ -353,16 +353,12 @@ fn reset_value_bitands_generate() {
 ///
 /// Test cases are represented by [TokenStream] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+struct RegTestGenerator<'r, 'c, P: ArchiPtr + quote::IdentFragment + 'static>(
     &'r Register<P>,
     &'c TestConfig,
 );
 
-impl<'r, 'c, P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>
-    RegTestGenerator<'r, 'c, P>
-where
-    GenerateError: convert::From<AddrOverflowError<P>>,
-{
+impl<'r, 'c, P: ArchiPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
@@ -537,13 +533,10 @@ pub struct TestCases {
 
 impl TestCases {
     /// Generate test cases for each register.
-    pub fn from_registers<P: num::CheckedAdd + Clone + fmt::LowerHex + quote::IdentFragment>(
+    pub fn from_registers<P: ArchiPtr + quote::IdentFragment + 'static>(
         registers: &Registers<P>,
         config: &TestConfig,
-    ) -> Result<TestCases, GenerateError>
-    where
-        GenerateError: convert::From<AddrOverflowError<P>>,
-    {
+    ) -> Result<TestCases, GenerateError> {
         let preamble = gen_preamble(config).to_string();
 
         let mut test_fns_and_defs_by_periph = HashMap::new();

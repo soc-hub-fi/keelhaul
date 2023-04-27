@@ -165,6 +165,15 @@ impl PtrSize {
             PtrSize::U64 => RegValue::U64(0),
         }
     }
+
+    pub(crate) fn bits(&self) -> u8 {
+        match self {
+            PtrSize::U8 => 8,
+            PtrSize::U16 => 16,
+            PtrSize::U32 => 32,
+            PtrSize::U64 => 64,
+        }
+    }
 }
 
 impl fmt::Display for PtrSize {
