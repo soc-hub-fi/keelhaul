@@ -4,7 +4,7 @@ mod logger;
 
 use fs_err::{self as fs, File};
 use log::{info, LevelFilter};
-use register_test_generator::{ParseTestKindError, RegTestKind, TestCases, TestConfig};
+use register_test_generator::{ParseTestKindError, PtrSize, RegTestKind, TestCases, TestConfig};
 use std::{
     collections::HashSet,
     env,
@@ -84,7 +84,7 @@ pub fn main() -> anyhow::Result<()> {
     let mut file_output = get_output_file();
     let registers = register_test_generator::parse::<u32>()?;
 
-    let mut test_cfg = TestConfig::default();
+    let mut test_cfg = TestConfig::new(PtrSize::U32);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }

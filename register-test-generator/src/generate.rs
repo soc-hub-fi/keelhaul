@@ -49,7 +49,7 @@ fn gen_preamble(config: &TestConfig) -> TokenStream {
 
     // Generate an error variant for all test case kinds
     let error_variant_defs: TokenStream = RegTestKind::iter()
-        .filter_map(|test_kind| test_kind.error_variant_def(PtrSize::U32, PtrSize::U64))
+        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size.clone()))
         .collect();
 
     quote! {
@@ -129,12 +129,7 @@ impl RegTestKind {
     /// - `arch_ptr_width` - The architecture pointer size.
     /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
     ///   Error variant.
-    fn error_variant_def(
-        &self,
-        arch_ptr_width: PtrSize,
-        max_value_width: PtrSize,
-    ) -> Option<TokenStream> {
-        let arch_ptr_ty = format_ident!("{}", arch_ptr_width.to_rust_type_str());
+    fn error_variant_def(&self, max_value_width: PtrSize) -> Option<TokenStream> {
         let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());
         match self {
             RegTestKind::Read => None,
@@ -154,7 +149,7 @@ impl RegTestKind {
                         /// Register identifier or "full path"
                         reg_uid: &'static str,
                         /// Register address
-                        reg_addr: #arch_ptr_ty,
+                        reg_addr: usize,
                     },
                 },
             ),
@@ -200,16 +195,18 @@ pub struct TestConfig {
     /// This is useful because sometimes the people who make SVDs make all the
     /// reset masks zeros and we need to ignore them.
     force_ignore_reset_mask: bool,
+    archi_ptr_size: PtrSize,
 }
 
 impl TestConfig {
-    pub fn new() -> Self {
+    pub fn new(archi_ptr_size: PtrSize) -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
             on_fail: FailureImplKind::ReturnError,
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
             force_ignore_reset_mask: true,
+            archi_ptr_size,
         }
     }
 
@@ -232,12 +229,6 @@ impl TestConfig {
     pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
-    }
-}
-
-impl Default for TestConfig {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
