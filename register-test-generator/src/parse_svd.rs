@@ -247,10 +247,8 @@ impl RegPropGroupBuilder {
     /// * resetMask
     fn update_from_node(&mut self, node: &Node) -> Result<(), PositionalError<SvdParseError>> {
         if let Some(size) = process_prop_from_node_if_present("size", node, |s| {
-            let bit_count = s.parse().map_err(SvdParseError::from);
-            bit_count.map(|bc| {
-                PtrSize::from_bit_count(bc).ok_or(SvdParseError::BitCountToPtrWidth(bc))
-            })?
+            let bit_count = s.parse()?;
+            PtrSize::from_bit_count(bit_count).ok_or(SvdParseError::BitCountToPtrWidth(bit_count))
         })? {
             self.size = Some(size);
         }
