@@ -127,13 +127,13 @@ pub fn main() -> anyhow::Result<()> {
         PtrSize::U16 => unimplemented!(),
         PtrSize::U32 => {
             let registers = parse_registers_u32()?;
-            TestCases::from_registers(&registers, &test_cfg).unwrap()
+            TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U64 => {
             let registers = parse_registers_u64()?;
-            TestCases::from_registers(&registers, &test_cfg).unwrap()
+            TestCases::from_registers(&registers, &test_cfg)
         }
-    };
+    }?;
 
     file_output.write_all(test_cases.to_module_string().as_bytes())?;
     let path = get_path_to_output();
