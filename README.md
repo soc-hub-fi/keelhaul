@@ -6,7 +6,7 @@ Memory-mapped I/O register test case generator.
 
 Set following environment variables.
 
-- `SVD_PATH`
+- `SVD_PATH` xor `IPXACT_PATH`
 - (optional) `INCLUDE_PERIPHERALS`
     - You must give peripheral name in lowercase.
     - You must separate peripheral names using comma `,`.

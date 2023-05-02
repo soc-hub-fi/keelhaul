@@ -1,25 +1,24 @@
 //! Common types and functions for register test generator.
 
-// TODO: leave error handling to customer crate
-
 mod error;
 mod generate;
 mod model;
+mod parse_ipxact;
 mod parse_svd;
 mod xml;
 
 pub use error::*;
+use fs_err as fs;
 pub use generate::*;
 use itertools::Itertools;
 pub use model::*;
-pub use parse_svd::*;
 use regex::Regex;
-
-use fs_err as fs;
 use std::{
     env,
     path::{Path, PathBuf},
+    str::FromStr,
 };
+use thiserror::Error;
 
 /// Returns contents of a file at `path`, panicking on any failure
 ///
@@ -136,4 +135,29 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
             peripherals
         })
         .ok()
+}
+
+/// Parse SVD- or IP-XACT-file.
+pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+    IpxactParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
+    use parse_ipxact::parse as parse_ipxact;
+    use parse_svd::parse as parse_svd;
+    use std::env::var;
+
+    if var("SVD_PATH").is_ok() {
+        parse_svd()
+    } else if var("IPXACT_PATH").is_ok() {
+        parse_ipxact()
+    } else {
+        Err(Error::ProgramArgument(
+            ProgramArgumentError::NoInputFileGiven,
+        ))
+    }
 }
