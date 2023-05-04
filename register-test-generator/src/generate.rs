@@ -428,7 +428,7 @@ impl<'r, 'c, P: ArchiPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         let reg = self.0;
         let full_addr: Result<P, _> = reg.full_addr();
-        Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
+        Ok(format_ident!("test_{}_{:#x}", reg.path.reg(), full_addr?))
     }
 
     /// Generates a test function
@@ -499,7 +499,7 @@ impl<'r, 'c, P: ArchiPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// ```
     pub fn gen_test_def(&self) -> Result<TokenStream, GenerateError> {
         let fn_name = self.gen_test_fn_ident()?;
-        let periph_name_lc: TokenStream = self.0.path.periph.to_lowercase().parse().unwrap();
+        let periph_name_lc: TokenStream = self.0.path.periph().to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
         let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
         let uid = self.0.uid();
@@ -541,7 +541,7 @@ impl TestCases {
             let test_def_str = format!("{test_def}");
 
             test_fns_and_defs_by_periph
-                .entry(register.path.periph.clone())
+                .entry(register.path.periph())
                 .or_insert(vec![])
                 .push((test_fn_str, test_def_str));
         }

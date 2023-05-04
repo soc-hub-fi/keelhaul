@@ -31,14 +31,102 @@ fn find_text_in_node_by_tag_name<'a>(
     )
 }
 
-/// Try to find a child node with given name.
-fn maybe_find_text_in_node_by_tag_name<'a>(
-    node: &'a Node,
-    tag: &str,
-) -> Option<(&'a str, Node<'a, 'a>)> {
-    node.children()
-        .find(|n| n.has_tag_name(tag))
-        .map(|n| (n.text().expect("Node does not have text."), n))
+/// Address representation
+///
+/// Addresses can be represented as full addresses, such as 0xdead_beef or as
+/// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
+/// type allows converting between the two.
+///
+/// # Type arguments
+///
+/// * `P` - type representing the architecture pointer size
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddrReprSvd<P: num::CheckedAdd> {
+    base: P,
+    cluster: Option<P>,
+    offset: P,
+}
+
+impl<P> AddrReprSvd<P>
+where
+    P: num::CheckedAdd + Clone,
+{
+    pub fn new(base: P, cluster: Option<P>, offset: P) -> Self {
+        Self {
+            base,
+            cluster,
+            offset,
+        }
+    }
+
+    /// Get register's absolute memory address
+    ///
+    /// Returns None on address overflow.
+    pub fn full(&self) -> Option<P> {
+        let Self {
+            base,
+            cluster,
+            offset,
+        } = self;
+
+        let mut addr = Some(base.clone());
+        if let Some(cl) = cluster {
+            addr = addr.and_then(|x| x.checked_add(cl));
+        }
+        addr.and_then(|x| x.checked_add(offset))
+    }
+}
+
+impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrReprSvd<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.cluster {
+            Some(cluster) => write!(
+                f,
+                "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
+                self.base, cluster, self.offset
+            ),
+            None => write!(
+                f,
+                "{{ base: {:#x}, offset: {:#x} }}",
+                self.base, self.offset
+            ),
+        }
+    }
+}
+
+// Allow conversion from a 32-bit address representation to a 64-bit
+// representation to simplify debug implementations
+impl From<AddrReprSvd<u32>> for AddrReprSvd<u64> {
+    fn from(value: AddrReprSvd<u32>) -> Self {
+        Self {
+            base: value.base.into(),
+            cluster: value.cluster.map(|x| x.into()),
+            offset: value.offset.into(),
+        }
+    }
+}
+
+// 64-bit address can be fallibly converted to a 32-bit address. Returns Err on
+// overflow.
+impl TryFrom<AddrReprSvd<u64>> for AddrReprSvd<u32> {
+    type Error = <u64 as TryInto<u32>>::Error;
+
+    fn try_from(value: AddrReprSvd<u64>) -> Result<Self, Self::Error> {
+        let AddrReprSvd {
+            base,
+            cluster,
+            offset,
+        } = value;
+
+        let base: u32 = base.try_into()?;
+        let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
+        let offset: u32 = offset.try_into()?;
+        Ok(Self {
+            base,
+            cluster,
+            offset,
+        })
+    }
 }
 
 /// Returns the appropriate multiplier for given character, represented by type parameter `P`
@@ -405,23 +493,31 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    let name = find_text_in_node_by_tag_name(&register_node, "name")?
-        .0
-        .to_owned();
+    let name = match find_text_in_node_by_tag_name(&register_node, "name") {
+        Ok(result) => result.0.to_owned(),
+        Err(error) => {
+            return Err(error.into());
+        }
+    };
     let (addr_offset_str, addr_offset_node) =
-        find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
+        match find_text_in_node_by_tag_name(&register_node, "addressOffset") {
+            Ok(result) => result,
+            Err(error) => {
+                return Err(error.into());
+            }
+        };
     let addr_offset =
         parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
 
     //let reg_name = remove_illegal_characters(reg_name);
-    let path = RegPath::from_components(
+    let path = RegPath::Svd(RegPathSvd::from_components(
         parent.periph_name.clone(),
         match &parent.kind {
             RegisterParentKind::Periph => None,
             RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
         },
         name.clone(),
-    );
+    ));
     let reg_path = path.join("-");
 
     if syms_regex.is_blocked(&reg_path) {
@@ -448,14 +544,14 @@ where
         .build(&reg_path)
         .map_err(|e| err_with_pos(e, &register_node))?;
 
-    let addr = AddrRepr::<P>::new(
+    let addr = AddrRepr::<P>::Svd(AddrReprSvd::new(
         parent.periph_base.clone(),
         match &parent.kind {
             RegisterParentKind::Periph => None,
             RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
         },
         addr_offset,
-    );
+    ));
     let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
         Ok(dimensions) => Some(dimensions),
         Err(_) => None,
@@ -596,7 +692,12 @@ where
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
-        peripherals.insert(register.path.periph.clone());
+        let periph = match &register.path {
+            RegPath::Svd(path) => path.periph.clone(),
+            // TODO: error message, this branch should never execute
+            _ => panic!(""),
+        };
+        peripherals.insert(periph);
         if let Entry::Vacant(entry) = addresses.entry(register.full_addr().unwrap()) {
             entry.insert(register.path.join("-"));
         } else {

@@ -1,12 +1,15 @@
 //! Encodes information about memory mapped registers. This information can be
 //! used to generate test cases.
+
+use crate::{
+    parse_ipxact::{AddrReprIpxact, RegPathIpxact},
+    parse_svd::{AddrReprSvd, RegPathSvd},
+    AddrOverflowError, CommonParseError, SvdParseError,
+};
 use core::fmt;
-use itertools::Itertools;
 use log::warn;
 use std::{hash, ops, str};
 use thiserror::Error;
-
-use crate::{AddrOverflowError, CommonParseError, SvdParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -183,32 +186,32 @@ impl fmt::Display for PtrSize {
 }
 
 /// Hierarchical representation of a register's path
-///
-/// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
-pub struct RegPath {
-    pub periph: String,
-    pub cluster: Option<String>,
-    pub reg: String,
+pub enum RegPath {
+    Svd(RegPathSvd),
+    Ipxact(RegPathIpxact),
 }
 
 impl RegPath {
-    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
-        Self {
-            periph,
-            cluster,
-            reg,
+    /// Joins the path elements into one string
+    pub fn join(&self, sep: &str) -> String {
+        match self {
+            Self::Svd(p) => p.join(sep),
+            Self::Ipxact(p) => p.join(sep),
         }
     }
 
-    /// Joins the path elements into one string
-    pub fn join(&self, sep: &str) -> String {
-        let mut v = vec![&self.periph];
-        if let Some(cl) = self.cluster.as_ref() {
-            v.push(cl);
+    pub fn reg(&self) -> String {
+        match self {
+            Self::Svd(svd) => svd.reg.clone(),
+            Self::Ipxact(ipxact) => ipxact.register.clone(),
         }
-        v.push(&self.reg);
+    }
 
-        v.into_iter().join(sep)
+    pub fn periph(&self) -> String {
+        match self {
+            Self::Svd(svd) => svd.periph.clone(),
+            Self::Ipxact(ipxact) => ipxact.periph(),
+        }
     }
 }
 
@@ -222,91 +225,19 @@ impl RegPath {
 ///
 /// * `P` - type representing the architecture pointer size
 #[derive(Clone, Debug, PartialEq)]
-pub struct AddrRepr<P: num::CheckedAdd> {
-    base: P,
-    cluster: Option<P>,
-    offset: P,
+pub enum AddrRepr<P: num::CheckedAdd> {
+    Svd(AddrReprSvd<P>),
+    Ipxact(AddrReprIpxact<P>),
 }
 
-impl<P> AddrRepr<P>
-where
-    P: num::CheckedAdd + Clone,
-{
-    pub fn new(base: P, cluster: Option<P>, offset: P) -> Self {
-        Self {
-            base,
-            cluster,
-            offset,
-        }
-    }
-
-    /// Get register's absolute memory address
-    ///
-    /// Returns None on address overflow.
-    pub fn full(&self) -> Option<P> {
-        let AddrRepr {
-            base,
-            cluster,
-            offset,
-        } = self;
-
-        let mut addr = Some(base.clone());
-        if let Some(cl) = cluster {
-            addr = addr.and_then(|x| x.checked_add(cl));
-        }
-        addr.and_then(|x| x.checked_add(offset))
-    }
-}
+impl<P> AddrRepr<P> where P: num::CheckedAdd {}
 
 impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.cluster {
-            Some(cluster) => write!(
-                f,
-                "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
-                self.base, cluster, self.offset
-            ),
-            None => write!(
-                f,
-                "{{ base: {:#x}, offset: {:#x} }}",
-                self.base, self.offset
-            ),
+        match self {
+            Self::Svd(svd) => svd.fmt(f),
+            Self::Ipxact(ipxact) => ipxact.fmt(f),
         }
-    }
-}
-
-// Allow conversion from a 32-bit address representation to a 64-bit
-// representation to simplify debug implementations
-impl From<AddrRepr<u32>> for AddrRepr<u64> {
-    fn from(value: AddrRepr<u32>) -> Self {
-        AddrRepr {
-            base: value.base.into(),
-            cluster: value.cluster.map(|x| x.into()),
-            offset: value.offset.into(),
-        }
-    }
-}
-
-// 64-bit address can be fallibly converted to a 32-bit address. Returns Err on
-// overflow.
-impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
-    type Error = <u64 as TryInto<u32>>::Error;
-
-    fn try_from(value: AddrRepr<u64>) -> Result<Self, Self::Error> {
-        let AddrRepr {
-            base,
-            cluster,
-            offset,
-        } = value;
-
-        let base: u32 = base.try_into()?;
-        let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
-        let offset: u32 = offset.try_into()?;
-        Ok(AddrRepr {
-            base,
-            cluster,
-            offset,
-        })
     }
 }
 
@@ -333,7 +264,11 @@ where
 {
     /// Get register's absolute memory address
     pub fn full_addr(&self) -> Result<P, AddrOverflowError<P>> {
-        self.addr.full().ok_or(AddrOverflowError::new(
+        match &self.addr {
+            AddrRepr::Svd(svd) => svd.full(),
+            AddrRepr::Ipxact(ipxact) => ipxact.full(),
+        }
+        .ok_or(AddrOverflowError::new(
             self.path.join("-"),
             self.addr.clone(),
         ))
@@ -356,7 +291,7 @@ where
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-pub struct Registers<P: num::CheckedAdd>(Vec<Register<P>>);
+pub struct Registers<P: num::CheckedAdd>(pub Vec<Register<P>>);
 
 impl<P: num::CheckedAdd> From<Vec<Register<P>>> for Registers<P> {
     fn from(value: Vec<Register<P>>) -> Self {
