@@ -23,6 +23,17 @@ doc:
 doc-open:
     cargo doc --no-deps --open
 
+test-svd:
+    SVD_PATH=$PWD/data/svd/test.svd just build
+
+test-ipxact:
+    IPXACT_PATH=$PWD/data/ipxact/test1.xml just build
+    IPXACT_PATH=$PWD/data/ipxact/test2.xml just build
+
+test-svd-and-ipxact:
+    just test-svd
+    just test-ipxact
+
 # Strict clippy.
 clippy:
     cargo clippy --all -- \
