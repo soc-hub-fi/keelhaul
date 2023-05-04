@@ -22,6 +22,13 @@ impl<T: num::CheckedAdd> AddrOverflowError<T> {
     }
 }
 
+/// Error that happened during parsing program arguments
+#[derive(Error, Debug)]
+pub enum ProgramArgumentError {
+    #[error("no input file was given")]
+    NoInputFileGiven,
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("error while parsing SVD")]
@@ -32,6 +39,8 @@ pub enum Error {
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
     ZeroEntries,
+    #[error("error while processing program arguments")]
+    ProgramArgument(#[from] ProgramArgumentError),
 }
 
 #[derive(Error, Debug)]
