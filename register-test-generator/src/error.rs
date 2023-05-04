@@ -168,6 +168,12 @@ impl<T> PositionalError<T> {
 pub enum SvdParseError {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
     ExpectedTagInElement { elem_name: String, tag: String },
+    #[error("expected unique tag {tag:?} in element {elem_name:?}, found {count}")]
+    ExpectedUniqueTagInElement {
+        elem_name: String,
+        tag: String,
+        count: usize,
+    },
     #[error("could not parse int: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
     #[error("could not parse nonneg int from {0}")]
