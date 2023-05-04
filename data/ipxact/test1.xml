@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014" xsi:schemaLocation="http://www.accellera.org/XMLSchema/IPXACT/1685-2014 http://www.accellera.org/XMLSchema/IPXACT/1685-2014/index.xsd">
+    <ipxact:name>component1</ipxact:name>
+    <ipxact:version>1</ipxact:version>
+    <ipxact:memoryMaps>
+        <ipxact:memoryMap>
+            <ipxact:name>memorymap1</ipxact:name>
+            <ipxact:addressBlock>
+                <ipxact:name>addressblock1</ipxact:name>
+                <ipxact:baseAddress>0</ipxact:baseAddress>
+                <ipxact:register>
+                    <ipxact:name>register1</ipxact:name>
+                    <ipxact:addressOffset>0</ipxact:addressOffset>
+                    <ipxact:size>32</ipxact:size>
+                </ipxact:register>
+                <ipxact:register>
+                    <ipxact:name>register2</ipxact:name>
+                    <ipxact:addressOffset>4</ipxact:addressOffset>
+                    <ipxact:size>32</ipxact:size>
+                </ipxact:register>
+            </ipxact:addressBlock>
+            <ipxact:addressBlock>
+                <ipxact:name>addressblock2</ipxact:name>
+                <ipxact:baseAddress>8</ipxact:baseAddress>
+                <ipxact:register>
+                    <ipxact:name>register1</ipxact:name>
+                    <ipxact:addressOffset>0</ipxact:addressOffset>
+                    <ipxact:size>32</ipxact:size>
+                </ipxact:register>
+                <ipxact:register>
+                    <ipxact:name>register2</ipxact:name>
+                    <ipxact:addressOffset>4</ipxact:addressOffset>
+                    <ipxact:size>32</ipxact:size>
+                </ipxact:register>
+            </ipxact:addressBlock>
+        </ipxact:memoryMap>
+    </ipxact:memoryMaps>
+</ipxact:component>

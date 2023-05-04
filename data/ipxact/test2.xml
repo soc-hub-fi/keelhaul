@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014" xsi:schemaLocation="http://www.accellera.org/XMLSchema/IPXACT/1685-2014 http://www.accellera.org/XMLSchema/IPXACT/1685-2014/index.xsd">
+    <ipxact:name>component1</ipxact:name>
+    <ipxact:version>1</ipxact:version>
+    <ipxact:addressSpaces>
+        <ipxact:addressSpace>
+            <ipxact:name>addressspace1</ipxact:name>
+            <ipxact:localMemoryMap>
+                <ipxact:name>localmemorymap1</ipxact:name>
+                <ipxact:addressBlock>
+                    <ipxact:name>addressblock1</ipxact:name>
+                    <ipxact:baseAddress>0</ipxact:baseAddress>
+                    <ipxact:register>
+                        <ipxact:name>register1</ipxact:name>
+                        <ipxact:addressOffset>0</ipxact:addressOffset>
+                        <ipxact:size>32</ipxact:size>
+                    </ipxact:register>
+                </ipxact:addressBlock>
+            </ipxact:localMemoryMap>
+        </ipxact:addressSpace>
+    </ipxact:addressSpaces>
+</ipxact:component>
