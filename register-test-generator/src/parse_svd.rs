@@ -2,10 +2,10 @@
 
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env,
-    xml::find_text_in_node_by_tag_name, Access, AddrRepr, ArchiPtr, Error, IncompatibleTypesError,
-    ItemFilter, NotImplementedError, PositionalError, Protection, PtrSize, RegPath, RegValue,
-    Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
-    SvdParseError,
+    xml::{find_text_in_node_by_tag_name, maybe_find_text_in_node_by_tag_name},
+    Access, AddrRepr, ArchiPtr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError,
+    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -13,7 +13,7 @@ use regex::Regex;
 use roxmltree::{Document, Node};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env, panic,
+    env, fmt, panic,
     path::{Path, PathBuf},
     str::FromStr,
 };
