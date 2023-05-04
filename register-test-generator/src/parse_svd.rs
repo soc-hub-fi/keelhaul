@@ -4,8 +4,8 @@ use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env,
     xml::{find_text_in_node_by_tag_name, maybe_find_text_in_node_by_tag_name},
     Access, AddrRepr, ArchiPtr, Error, IncompatibleTypesError, ItemFilter, NotImplementedError,
-    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    Position, PositionalError, Protection, PtrSize, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -677,20 +677,32 @@ where
         .children()
         .filter(|n| n.has_tag_name("device"))
         .collect_vec();
-    assert!(
-        device_nodes.len() == 1,
-        "SVD file must contain one device node."
-    );
+    if device_nodes.len() != 1 {
+        return Err(err_with_pos(
+            SvdParseError::ExpectedUniqueTagInElement {
+                elem_name: "SVD root".to_owned(),
+                tag: "device".to_owned(),
+                count: device_nodes.len(),
+            },
+            &parsed.root(),
+        ));
+    }
     let device_node = device_nodes.first().unwrap();
 
     let peripherals_nodes = device_node
         .children()
         .filter(|n| n.has_tag_name("peripherals"))
         .collect_vec();
-    assert!(
-        peripherals_nodes.len() == 1,
-        "SVD file must contains one peripherals node."
-    );
+    if peripherals_nodes.len() != 1 {
+        return Err(err_with_pos(
+            SvdParseError::ExpectedUniqueTagInElement {
+                elem_name: "device".to_owned(),
+                tag: "peripherals".to_owned(),
+                count: peripherals_nodes.len(),
+            },
+            device_node,
+        ));
+    }
     let peripherals_node = peripherals_nodes.first().unwrap();
 
     let mut registers = Vec::new();
@@ -710,8 +722,7 @@ where
     for register in &registers {
         let periph = match &register.path {
             RegPath::Svd(path) => path.periph.clone(),
-            // TODO: error message, this branch should never execute
-            _ => panic!(""),
+            _ => panic!("This branch should never run"),
         };
         peripherals.insert(periph);
         if let Entry::Vacant(entry) = addresses.entry(register.full_addr().unwrap()) {
@@ -752,7 +763,7 @@ where
 {
     let svd_content = read_file_or_panic(svd_path);
 
-    let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
+    let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content");
     let registers = find_registers(&parsed, reg_filter, periph_filter, syms_filter)
         .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
 
