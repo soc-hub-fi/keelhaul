@@ -6,6 +6,7 @@ mod error;
 mod generate;
 mod model;
 mod parse_svd;
+mod xml;
 
 pub use error::*;
 pub use generate::*;
