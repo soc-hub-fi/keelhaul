@@ -157,7 +157,7 @@ impl SvdParseError {
     pub(crate) fn with_text_pos_range(
         self,
         pos: ops::Range<roxmltree::TextPos>,
-    ) -> PositionalError<SvdParseError> {
+    ) -> PositionalError<Self> {
         PositionalError {
             pos: pos.into(),
             err: self,
@@ -167,7 +167,7 @@ impl SvdParseError {
         self,
         byte_pos: ops::Range<usize>,
         doc: &roxmltree::Document,
-    ) -> PositionalError<SvdParseError> {
+    ) -> PositionalError<Self> {
         let text_pos = ops::Range {
             start: doc.text_pos_at(byte_pos.start),
             end: doc.text_pos_at(byte_pos.end),
