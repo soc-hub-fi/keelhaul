@@ -114,8 +114,8 @@ impl fmt::Display for Position {
 #[derive(Error, Debug)]
 #[error("{pos}\n{err}")]
 pub struct PositionalError<T> {
-    pos: Position,
-    err: T,
+    pub(crate) pos: Position,
+    pub(crate) err: T,
 }
 
 impl<T> PositionalError<T> {
