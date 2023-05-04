@@ -1,10 +1,11 @@
 //! SVD-file parser for register test generator.
 
 use crate::{
-    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
-    Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError, Protection,
-    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
-    Registers, ResetValue, SvdParseError,
+    read_excludes_from_env, read_file_or_panic, read_vec_from_env,
+    xml::find_text_in_node_by_tag_name, Access, AddrRepr, ArchiPtr, Error, IncompatibleTypesError,
+    ItemFilter, NotImplementedError, PositionalError, Protection, PtrSize, RegPath, RegValue,
+    Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+    SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -17,18 +18,33 @@ use std::{
     str::FromStr,
 };
 
-/// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(
-    node: &'a Node,
-    tag: &str,
-) -> Result<(&'a str, Node<'a, 'a>), PositionalError<SvdParseError>> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(
-        SvdParseError::ExpectedTagInElement {
-            elem_name: node.tag_name().name().to_owned(),
-            tag: tag.to_owned(),
+/// Hierarchical representation of a register's path
+///
+/// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
+pub struct RegPathSvd {
+    pub periph: String,
+    pub cluster: Option<String>,
+    pub reg: String,
+}
+
+impl RegPathSvd {
+    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
+        Self {
+            periph,
+            cluster,
+            reg,
         }
-        .with_byte_pos_range(node.range(), node.document()),
-    )
+    }
+
+    /// Joins the path elements into one string
+    pub fn join(&self, sep: &str) -> String {
+        let mut v = vec![&self.periph];
+        if let Some(cl) = self.cluster.as_ref() {
+            v.push(cl);
+        }
+        v.push(&self.reg);
+        v.into_iter().join(sep)
+    }
 }
 
 /// Address representation
