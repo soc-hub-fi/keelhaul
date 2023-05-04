@@ -26,6 +26,8 @@ impl<T: num::CheckedAdd> AddrOverflowError<T> {
 pub enum Error {
     #[error("error while parsing SVD")]
     SvdParse(#[from] ParseFileError<SvdParseError>),
+    #[error("error while parsing IP-XACT")]
+    IpxactParse(#[from] ParseFileError<IpxactParseError>),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
@@ -173,6 +175,65 @@ impl SvdParseError {
             end: doc.text_pos_at(byte_pos.end),
         };
         self.with_text_pos_range(text_pos)
+    }
+}
+
+/// Error that happened during parsing 'IP-XACT'
+#[derive(Error, Debug)]
+pub enum IpxactParseError {
+    #[error("expected tag {tag:?} in element {elem_name:?}")]
+    ExpectedTagInElement { elem_name: String, tag: String },
+    #[error("internal error: infallible error should not be constructible")]
+    Infallible(#[from] convert::Infallible),
+    #[error("could not convert from int: {0}")]
+    TryFromInt(#[from] std::num::TryFromIntError),
+    #[error("could not parse int: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
+    #[error("invalid size multiplier suffix: {0}")]
+    InvalidSizeMultiplierSuffix(char),
+    #[error("could not parse nonneg int from {0}")]
+    InvalidNonnegInt(String),
+    #[error("generic parse error")]
+    GenericParse(#[from] CommonParseError),
+}
+
+impl IpxactParseError {
+    /// Convert into positional error, adding row and column information
+    pub(crate) fn with_text_pos_range(
+        self,
+        pos: ops::Range<roxmltree::TextPos>,
+    ) -> PositionalError<Self> {
+        PositionalError {
+            pos: pos.into(),
+            err: self,
+        }
+    }
+
+    pub(crate) fn with_byte_pos_range(
+        self,
+        byte_pos: ops::Range<usize>,
+        doc: &roxmltree::Document,
+    ) -> PositionalError<Self> {
+        let text_pos = ops::Range {
+            start: doc.text_pos_at(byte_pos.start),
+            end: doc.text_pos_at(byte_pos.end),
+        };
+        self.with_text_pos_range(text_pos)
+    }
+}
+
+impl From<PositionalError<CommonParseError>> for PositionalError<IpxactParseError> {
+    fn from(value: PositionalError<CommonParseError>) -> Self {
+        let pos = value.pos;
+        let (elem_name, tag) = match value.err {
+            CommonParseError::ExpectedTagInElement { elem_name, tag } => (elem_name, tag),
+            _other => {
+                // FIXME
+                panic!("");
+            }
+        };
+        let err = IpxactParseError::ExpectedTagInElement { elem_name, tag };
+        PositionalError { pos, err }
     }
 }
 
