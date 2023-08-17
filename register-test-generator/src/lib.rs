@@ -65,6 +65,7 @@ enum ItemFilter<T: PartialEq> {
 }
 
 impl<T: PartialEq> ItemFilter<T> {
+    #[allow(clippy::use_self)]
     fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
         Self::List {
             white_list,
@@ -72,6 +73,7 @@ impl<T: PartialEq> ItemFilter<T> {
         }
     }
 
+    #[allow(clippy::use_self)]
     fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
     }
@@ -81,7 +83,7 @@ impl<T: PartialEq> ItemFilter<T> {
         T: AsRef<str>,
     {
         match self {
-            ItemFilter::List {
+            Self::List {
                 white_list,
                 block_list,
             } => {
@@ -95,7 +97,7 @@ impl<T: PartialEq> ItemFilter<T> {
                     None => true,
                 }
             }
-            ItemFilter::Regex { allow, block } => {
+            Self::Regex { allow, block } => {
                 // Items matched by block regex are always blocked
                 if let Some(block) = block {
                     if block.is_match(value.as_ref()) {
