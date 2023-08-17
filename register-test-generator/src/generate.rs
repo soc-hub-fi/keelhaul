@@ -1,7 +1,7 @@
-//! Generate test cases from model::* types
+//! Generate test cases from [`model::*`] types
+
 use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
-use log::warn;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{
@@ -11,6 +11,8 @@ use std::{
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
+// TODO: REMOVE
+/*
 /// Remove illegal characters from register name.
 ///
 /// These characters will be put into test case names, and thus need to be removed.
@@ -38,6 +40,7 @@ fn _remove_illegal_characters(name: &str) -> String {
     }
     name_new
 }
+*/
 
 fn gen_preamble(config: &TestConfig) -> TokenStream {
     // It costs a lot of code size to `#[derive(Debug)]` so we only do it if required
@@ -49,7 +52,7 @@ fn gen_preamble(config: &TestConfig) -> TokenStream {
 
     // Generate an error variant for all test case kinds
     let error_variant_defs: TokenStream = RegTestKind::iter()
-        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size.clone()))
+        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size))
         .collect();
 
     quote! {
@@ -202,7 +205,7 @@ impl TestConfig {
     #[must_use]
     pub fn new(archi_ptr_size: PtrSize) -> Self {
         Self {
-            reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
+            reg_test_kinds: iter::once(RegTestKind::Read).collect(),
             on_fail: FailureImplKind::ReturnError,
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
@@ -211,6 +214,11 @@ impl TestConfig {
         }
     }
 
+    /// Get test kinds
+    ///
+    /// # Errors
+    ///
+    /// - Read test was not enabled while reset test was
     pub fn reg_test_kinds(
         mut self,
         reg_test_kinds: HashSet<RegTestKind>,
@@ -227,6 +235,11 @@ impl TestConfig {
         Ok(self)
     }
 
+    /// TODO
+    ///
+    /// # Errors
+    ///
+    /// - TODO
     pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
@@ -262,10 +275,10 @@ impl ResetValue {
 impl RegValue {
     fn gen_literal_hex(&self) -> TokenStream {
         match self {
-            Self::U8(u) => format!("{:#x}u8", u),
-            Self::U16(u) => format!("{:#x}u16", u),
-            Self::U32(u) => format!("{:#x}u32", u),
-            Self::U64(u) => format!("{:#x}u64", u),
+            Self::U8(u) => format!("{u:#x}u8"),
+            Self::U16(u) => format!("{u:#x}u16"),
+            Self::U32(u) => format!("{u:#x}u32"),
+            Self::U64(u) => format!("{u:#x}u64"),
         }
         .parse()
         .unwrap()
@@ -273,10 +286,10 @@ impl RegValue {
 
     fn gen_literal_bin(&self) -> TokenStream {
         match self {
-            Self::U8(u) => format!("{:#b}u8", u),
-            Self::U16(u) => format!("{:#b}u16", u),
-            Self::U32(u) => format!("{:#b}u32", u),
-            Self::U64(u) => format!("{:#b}u64", u),
+            Self::U8(u) => format!("{u:#b}u8"),
+            Self::U16(u) => format!("{u:#b}u16"),
+            Self::U32(u) => format!("{u:#b}u32"),
+            Self::U64(u) => format!("{u:#b}u64"),
         }
         .parse()
         .unwrap()
@@ -314,7 +327,7 @@ fn reset_value_bitands_generate() {
     );
     assert_eq!(
         &ResetValue::U32 {
-            val: 0xdeadbeef,
+            val: 0xdead_beef,
             mask: 0b0101_0101,
         }
         .gen_bitand()
@@ -323,7 +336,7 @@ fn reset_value_bitands_generate() {
     );
     assert_eq!(
         &ResetValue::U32 {
-            val: 0xdeadbeef,
+            val: 0xdead_beef,
             mask: u32::MAX,
         }
         .gen_bitand()
@@ -341,9 +354,9 @@ fn reset_value_bitands_generate() {
     );
 }
 
-/// Generates test cases based on a [Register] definition and [TestConfig]
+/// Generates test cases based on a [`Register`] definition and [`TestConfig`]
 ///
-/// Test cases are represented by [TokenStream] which can be rendered to text.
+/// Test cases are represented by [`TokenStream`] which can be rendered to text.
 /// This text is then compiled as Rust source code.
 struct RegTestGenerator<'r, 'c, P: ArchiPtr + quote::IdentFragment + 'static>(
     &'r Register<P>,
@@ -365,8 +378,8 @@ impl<'r, 'c, P: ArchiPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         quote!(_read_value)
     }
 
-    /// Create a [RegTestGenerator] from a register definition
-    pub fn from_register(reg: &'r Register<P>, config: &'c TestConfig) -> Self {
+    /// Create a [`RegTestGenerator`] from a register definition
+    pub const fn from_register(reg: &'r Register<P>, config: &'c TestConfig) -> Self {
         Self(reg, config)
     }
 
@@ -525,26 +538,30 @@ pub struct TestCases {
 
 impl TestCases {
     /// Generate test cases for each register.
+    ///
+    /// # Panics
+    ///
+    /// - Failed to parse token stream
+    ///
+    /// # Errors
+    ///
+    /// - Failed to generate test case for a register
     pub fn from_registers<P: ArchiPtr + quote::IdentFragment + 'static>(
         registers: &Registers<P>,
         config: &TestConfig,
     ) -> Result<Self, GenerateError> {
         let preamble = gen_preamble(config).to_string();
 
-        let mut test_fns_and_defs_by_periph = HashMap::new();
+        let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
+            HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
-
-            let test_fn = test_gen.gen_test_fn()?;
-            let test_fn_str = format!("{test_fn}");
-
-            let test_def = test_gen.gen_test_def()?;
-            let test_def_str = format!("{test_def}");
-
+            let test_fn = test_gen.gen_test_fn()?.to_string();
+            let test_def = test_gen.gen_test_def()?.to_string();
             test_fns_and_defs_by_periph
                 .entry(register.path.periph.clone())
-                .or_insert(vec![])
-                .push((test_fn_str, test_def_str));
+                .or_default()
+                .push((test_fn, test_def));
         }
 
         // Duplicate all test definitions into one big list
