@@ -199,6 +199,7 @@ pub struct TestConfig {
 }
 
 impl TestConfig {
+    #[must_use]
     pub fn new(archi_ptr_size: PtrSize) -> Self {
         Self {
             reg_test_kinds: HashSet::from_iter(iter::once(RegTestKind::Read)),
@@ -571,6 +572,7 @@ impl TestCases {
         })
     }
 
+    #[must_use]
     pub fn to_module_string(&self) -> String {
         self.preamble.clone() + "\n" + &self.test_cases.join("\n")
     }

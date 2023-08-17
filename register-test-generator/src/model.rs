@@ -26,6 +26,7 @@ pub enum Access {
 
 impl Access {
     /// Whether this register is software readable or not
+    #[must_use]
     pub fn is_read(&self) -> bool {
         match self {
             Self::ReadOnly | Self::ReadWrite => true,
@@ -42,6 +43,7 @@ impl Access {
     }
 
     /// Whether this register is software writable or not
+    #[must_use]
     pub fn is_write(&self) -> bool {
         match self {
             Self::ReadOnly => false,
@@ -122,6 +124,7 @@ pub enum PtrSize {
 
 impl PtrSize {
     /// E.g., u8, u16, u32, u64
+    #[must_use]
     pub fn to_rust_type_str(&self) -> &str {
         match self {
             Self::U8 => "u8",
@@ -190,6 +193,7 @@ pub struct RegPath {
 }
 
 impl RegPath {
+    #[must_use]
     pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
         Self {
             periph,
@@ -199,6 +203,7 @@ impl RegPath {
     }
 
     /// Joins the path elements into one string
+    #[must_use]
     pub fn join(&self, sep: &str) -> String {
         let mut v = vec![&self.periph];
         if let Some(cl) = self.cluster.as_ref() {

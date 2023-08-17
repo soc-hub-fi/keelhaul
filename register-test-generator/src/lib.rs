@@ -26,6 +26,7 @@ use std::{
 ///
 /// This function panics if the path does not exist, or if the file cannot be
 /// read.
+#[must_use]
 pub fn read_file_or_panic(path: &Path) -> String {
     path.canonicalize()
         .map(|p| {
