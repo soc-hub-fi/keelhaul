@@ -44,7 +44,7 @@ impl Access {
 
     /// Whether this register is software writable or not
     #[must_use]
-    pub fn is_write(&self) -> bool {
+    pub const fn is_write(&self) -> bool {
         match self {
             Self::ReadOnly => false,
             Self::WriteOnly | Self::ReadWrite | Self::WriteOnce | Self::ReadWriteOnce => true,
@@ -114,7 +114,7 @@ impl ArchiPtr for u64 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PtrSize {
     U8,
     U16,
@@ -125,7 +125,7 @@ pub enum PtrSize {
 impl PtrSize {
     /// E.g., u8, u16, u32, u64
     #[must_use]
-    pub fn to_rust_type_str(&self) -> &str {
+    pub const fn to_rust_type_str(&self) -> &str {
         match self {
             Self::U8 => "u8",
             Self::U16 => "u16",
@@ -134,11 +134,11 @@ impl PtrSize {
         }
     }
 
-    /// Convert a bit count to [PtrWidth]
+    /// Convert a bit count to [`PtrSize`]
     ///
     /// Returns None if the conversion cannot be done.
     #[must_use]
-    pub fn from_bit_count(bc: u64) -> Option<Self> {
+    pub const fn from_bit_count(bc: u64) -> Option<Self> {
         match bc {
             8 => Some(Self::U8),
             16 => Some(Self::U16),
@@ -148,8 +148,8 @@ impl PtrSize {
         }
     }
 
-    /// Maximum value representable by a binding of type [PtrWidth]
-    pub(crate) fn max_value(&self) -> RegValue {
+    /// Maximum value representable by a binding of type [`PtrSize`]
+    pub(crate) const fn max_value(&self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(u8::MAX),
             Self::U16 => RegValue::U16(u16::MAX),
@@ -158,7 +158,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) fn zero_value(&self) -> RegValue {
+    pub(crate) const fn zero_value(&self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(0),
             Self::U16 => RegValue::U16(0),
@@ -167,7 +167,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) fn bits(&self) -> u8 {
+    pub(crate) const fn bits(&self) -> u8 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -194,7 +194,7 @@ pub struct RegPath {
 
 impl RegPath {
     #[must_use]
-    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
+    pub const fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
         Self {
             periph,
             cluster,
@@ -217,14 +217,14 @@ impl RegPath {
 
 /// Address representation
 ///
-/// Addresses can be represented as full addresses, such as 0xdead_beef or as
+/// Addresses can be represented as full addresses, such as `0xdead_beef` or as
 /// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
 /// type allows converting between the two.
 ///
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddrRepr<P: num::CheckedAdd> {
     base: P,
     cluster: Option<P>,
@@ -235,7 +235,7 @@ impl<P> AddrRepr<P>
 where
     P: num::CheckedAdd + Clone,
 {
-    pub fn new(base: P, cluster: Option<P>, offset: P) -> Self {
+    pub const fn new(base: P, cluster: Option<P>, offset: P) -> Self {
         Self {
             base,
             cluster,
@@ -335,11 +335,14 @@ where
     P: num::CheckedAdd + Clone,
 {
     /// Get register's absolute memory address
+    ///
+    /// # Errors
+    ///
+    /// Address overflows
     pub fn full_addr(&self) -> Result<P, AddrOverflowError<P>> {
-        self.addr.full().ok_or(AddrOverflowError::new(
-            self.path.join("-"),
-            self.addr.clone(),
-        ))
+        self.addr
+            .full()
+            .ok_or_else(|| AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
     }
 
     /// Get register's unique identifier
@@ -349,7 +352,7 @@ where
         self.path.join("-")
     }
 
-    pub(crate) fn masked_reset(&self) -> &ResetValue {
+    pub(crate) const fn masked_reset(&self) -> &ResetValue {
         &self.properties.reset_value
     }
 }
@@ -413,8 +416,8 @@ impl ToString for Protection {
 }
 
 /// Variable-length register value
-#[derive(Clone, PartialEq)]
-pub(crate) enum RegValue {
+#[derive(Clone, PartialEq, Eq)]
+pub enum RegValue {
     U8(u8),
     U16(u16),
     U32(u32),
@@ -422,7 +425,7 @@ pub(crate) enum RegValue {
 }
 
 impl RegValue {
-    pub(crate) fn width(&self) -> PtrSize {
+    pub(crate) const fn width(&self) -> PtrSize {
         match self {
             Self::U8(_) => PtrSize::U8,
             Self::U16(_) => PtrSize::U16,
@@ -470,9 +473,9 @@ impl From<u8> for RegValue {
 impl From<RegValue> for u64 {
     fn from(value: RegValue) -> Self {
         match value {
-            RegValue::U8(v) => v as Self,
-            RegValue::U16(v) => v as Self,
-            RegValue::U32(v) => v as Self,
+            RegValue::U8(v) => Self::from(v),
+            RegValue::U16(v) => Self::from(v),
+            RegValue::U32(v) => Self::from(v),
             RegValue::U64(v) => v,
         }
     }
@@ -492,7 +495,7 @@ impl From<RegValue> for u64 {
 /// `mask`  - Mask for reading from or writing into the register, to assist in
 /// writing into partially protected registers.
 #[derive(Clone)]
-pub(crate) enum ResetValue {
+pub enum ResetValue {
     U8 { val: u8, mask: u8 },
     U16 { val: u16, mask: u16 },
     U32 { val: u32, mask: u32 },
@@ -500,12 +503,12 @@ pub(crate) enum ResetValue {
 }
 
 #[derive(Debug, Error)]
-#[cfg_attr(test, derive(PartialEq))]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("types are incompatible: {0} != {1}")]
 pub struct IncompatibleTypesError(PtrSize, PtrSize);
 
 impl ResetValue {
-    pub(crate) fn with_mask(
+    pub(crate) const fn with_mask(
         value: RegValue,
         mask: RegValue,
     ) -> Result<Self, IncompatibleTypesError> {
@@ -518,7 +521,7 @@ impl ResetValue {
         }
     }
 
-    pub(crate) fn value(&self) -> RegValue {
+    pub(crate) const fn value(&self) -> RegValue {
         match self {
             Self::U8 { val, .. } => RegValue::U8(*val),
             Self::U16 { val, .. } => RegValue::U16(*val),
@@ -527,7 +530,7 @@ impl ResetValue {
         }
     }
 
-    pub(crate) fn mask(&self) -> RegValue {
+    pub(crate) const fn mask(&self) -> RegValue {
         match self {
             Self::U8 { mask, .. } => RegValue::U8(*mask),
             Self::U16 { mask, .. } => RegValue::U16(*mask),
@@ -554,7 +557,7 @@ pub struct RegisterPropertiesGroup {
 }
 
 impl RegisterPropertiesGroup {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         value_size: PtrSize,
         access: Access,
         protection: Protection,
@@ -568,7 +571,7 @@ impl RegisterPropertiesGroup {
         }
     }
 
-    pub(crate) fn reset(&self) -> &ResetValue {
+    pub(crate) const fn reset(&self) -> &ResetValue {
         &self.reset_value
     }
 }
