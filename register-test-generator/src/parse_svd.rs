@@ -9,7 +9,7 @@ use crate::{
 use itertools::Itertools;
 use log::{debug, info, warn};
 use regex::Regex;
-use roxmltree::{Document, Node};
+use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     env, panic,
@@ -17,28 +17,34 @@ use std::{
     str::FromStr,
 };
 
-/// Find a child node with given tag name.
-fn find_text_in_node_by_tag_name<'a>(
-    node: &'a Node,
-    tag: &str,
-) -> Result<(&'a str, Node<'a, 'a>), PositionalError<SvdParseError>> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or_else(|| {
-        SvdParseError::ExpectedTagInElement {
-            elem_name: node.tag_name().name().to_owned(),
-            tag: tag.to_owned(),
-        }
-        .with_byte_pos_range(node.range(), node.document())
-    })
+struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
+
+impl<'a, 'input> From<roxmltree::Node<'a, 'input>> for XmlNode<'a, 'input> {
+    fn from(value: roxmltree::Node<'a, 'input>) -> Self {
+        Self(value)
+    }
 }
 
-/// Try to find a child node with given name.
-fn maybe_find_text_in_node_by_tag_name<'a>(
-    node: &'a Node,
-    tag: &str,
-) -> Option<(&'a str, Node<'a, 'a>)> {
-    node.children()
-        .find(|n| n.has_tag_name(tag))
-        .map(|n| (n.text().expect("Node does not have text."), n))
+impl<'a, 'input> XmlNode<'a, 'input> {
+    fn find_text_by_tag_name(
+        &self,
+        tag: &str,
+    ) -> Result<(&'a str, XmlNode<'a, 'a>), PositionalError<SvdParseError>> {
+        self.maybe_find_text_by_tag_name(tag).ok_or_else(|| {
+            SvdParseError::ExpectedTagInElement {
+                elem_name: self.0.tag_name().name().to_owned(),
+                tag: tag.to_owned(),
+            }
+            .with_byte_pos_range(self.0.range(), self.0.document())
+        })
+    }
+
+    fn maybe_find_text_by_tag_name(&self, tag: &str) -> Option<(&'a str, XmlNode<'a, 'a>)> {
+        self.0
+            .children()
+            .find(|n| n.has_tag_name(tag))
+            .map(|n| (n.text().expect("node does not have text"), n.into()))
+    }
 }
 
 /// Returns the appropriate multiplier for given character, represented by type parameter `P`
@@ -182,8 +188,9 @@ struct RegPropGroupBuilder {
 }
 
 /// Add text position information to an [`SvdParseError`] converting it into a [`PositionalError`]
-fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<SvdParseError> {
-    e.into().with_byte_pos_range(node.range(), node.document())
+fn err_with_pos(e: impl Into<SvdParseError>, node: &XmlNode) -> PositionalError<SvdParseError> {
+    e.into()
+        .with_byte_pos_range(node.0.range(), node.0.document())
 }
 
 /// Finds a property from `node` by `tag`, calling `process` for its contents if present
@@ -197,13 +204,14 @@ fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<Svd
 /// * `process` - The function to call for the found property
 fn process_prop_from_node_if_present<T, F>(
     tag: &str,
-    node: &Node,
+    node: &XmlNode,
     process: F,
 ) -> Result<Option<T>, PositionalError<SvdParseError>>
 where
     F: Fn(&str) -> Result<T, SvdParseError>,
 {
-    maybe_find_text_in_node_by_tag_name(node, tag)
+    node.maybe_find_text_by_tag_name(tag)
+        //maybe_find_text_in_node_by_tag_name(node, tag)
         .map(|(s, prop_node)| process(s).map_err(|e| err_with_pos(e, &prop_node)))
         .transpose()
 }
@@ -219,7 +227,7 @@ impl RegPropGroupBuilder {
     /// * resetMask
     ///
     /// If a value was not available, the respective field is set to None.
-    fn try_from_node(node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
+    fn try_from_node(node: &XmlNode) -> Result<Self, PositionalError<SvdParseError>> {
         let mut properties = Self::default();
         properties.update_from_node(node)?;
         Ok(properties)
@@ -232,7 +240,7 @@ impl RegPropGroupBuilder {
     /// * `node` - can be either cluster or register node
     fn clone_and_update_from_node(
         &self,
-        node: &Node,
+        node: &XmlNode,
     ) -> Result<Self, PositionalError<SvdParseError>> {
         let mut properties = self.clone();
         properties.update_from_node(node)?;
@@ -251,7 +259,7 @@ impl RegPropGroupBuilder {
     /// * access
     /// * resetValue
     /// * resetMask
-    fn update_from_node(&mut self, node: &Node) -> Result<(), PositionalError<SvdParseError>> {
+    fn update_from_node(&mut self, node: &XmlNode) -> Result<(), PositionalError<SvdParseError>> {
         if let Some(size) = process_prop_from_node_if_present("size", node, |s| {
             let bit_count = s.parse()?;
             PtrSize::from_bit_count(bit_count).ok_or(SvdParseError::BitCountToPtrWidth(bit_count))
@@ -348,12 +356,13 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    fn from_periph_node(periph_node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
-        let (base_addr_str, base_addr_node) =
-            find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
+    fn from_periph_node(periph_node: &XmlNode) -> Result<Self, PositionalError<SvdParseError>> {
+        let (base_addr_str, base_addr_node) = periph_node.find_text_by_tag_name("baseAddress")?;
+        //find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
         let base_addr =
             parse_nonneg_int(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
-        let (periph_name, _) = find_text_in_node_by_tag_name(periph_node, "name")?;
+        let (periph_name, _) = periph_node.find_text_by_tag_name("name")?;
+        //let (periph_name, _) = find_text_in_node_by_tag_name(periph_node, "name")?;
 
         Ok(Self {
             periph_name: periph_name.to_string(),
@@ -365,13 +374,16 @@ where
 
     fn clone_and_update_from_cluster(
         &self,
-        cluster_node: &Node,
+        cluster_node: &XmlNode,
     ) -> Result<Self, PositionalError<SvdParseError>> {
-        let cluster_name = find_text_in_node_by_tag_name(cluster_node, "name")?
+        let cluster_name = cluster_node
+            .find_text_by_tag_name("name")?
+            //find_text_in_node_by_tag_name(cluster_node, "name")?
             .0
             .to_owned();
         let (cluster_offset_str, cluster_offset_node) =
-            find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
+            cluster_node.find_text_by_tag_name("addressOffset")?;
+        //find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
         let cluster_offset = parse_nonneg_int(cluster_offset_str)
             .map_err(|e| err_with_pos(e, &cluster_offset_node))?;
 
@@ -387,13 +399,15 @@ where
     }
 }
 
-impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
+impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
     type Error = PositionalError<SvdParseError>;
 
-    fn try_from(value: &Node) -> Result<Self, Self::Error> {
-        let (dim, dim_node) = find_text_in_node_by_tag_name(value, "dim")?;
+    fn try_from(value: &XmlNode) -> Result<Self, Self::Error> {
+        let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
+        //find_text_in_node_by_tag_name(value, "dim")?;
         let dim = parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?;
-        let (dim_inc, dim_inc_node) = find_text_in_node_by_tag_name(value, "dimIncrement")?;
+        let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
+        //find_text_in_node_by_tag_name(value, "dimIncrement")?;
         let dim_increment =
             parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
         Ok(Self { dim, dim_increment })
@@ -402,7 +416,7 @@ impl TryFrom<&Node<'_, '_>> for RegisterDimElementGroup {
 
 fn process_register<P: ArchiPtr>(
     parent: &RegisterParent<P>,
-    register_node: Node,
+    register_node: XmlNode,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Register<P>>, PositionalError<SvdParseError>>
@@ -411,11 +425,14 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    let name = find_text_in_node_by_tag_name(&register_node, "name")?
+    let name = register_node
+        .find_text_by_tag_name("name")?
+        //find_text_in_node_by_tag_name(&register_node, "name")?
         .0
         .to_owned();
     let (addr_offset_str, addr_offset_node) =
-        find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
+        register_node.find_text_by_tag_name("addressOffset")?;
+    //find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
     let addr_offset =
         parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
 
@@ -475,7 +492,7 @@ where
 
 fn process_cluster<P: ArchiPtr>(
     parent: &RegisterParent<P>,
-    cluster_node: Node,
+    cluster_node: XmlNode,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
@@ -488,12 +505,16 @@ where
 
     let mut registers = Vec::new();
     for register_node in cluster_node
+        .0
         .children()
         .filter(|n| n.has_tag_name("register"))
     {
-        if let Some(register) =
-            process_register(&current_parent, register_node, reg_filter, syms_regex)?
-        {
+        if let Some(register) = process_register(
+            &current_parent,
+            register_node.into(),
+            reg_filter,
+            syms_regex,
+        )? {
             registers.push(register);
         }
     }
@@ -501,7 +522,7 @@ where
 }
 
 fn process_peripheral<P: ArchiPtr>(
-    periph_node: Node,
+    periph_node: XmlNode,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
     syms_regex: &ItemFilter<String>,
@@ -520,6 +541,7 @@ where
     }
 
     let registers_nodes = periph_node
+        .0
         .children()
         .filter(|n| n.has_tag_name("registers"))
         .collect_vec();
@@ -535,7 +557,7 @@ where
         .filter(|n| n.has_tag_name("cluster"))
     {
         if let Some(cluster_registers) =
-            process_cluster(&periph, cluster_node, reg_filter, syms_regex)?
+            process_cluster(&periph, cluster_node.into(), reg_filter, syms_regex)?
         {
             registers.extend(cluster_registers);
         }
@@ -544,7 +566,9 @@ where
         .children()
         .filter(|n| n.has_tag_name("register"))
     {
-        if let Some(register) = process_register(&periph, register_node, reg_filter, syms_regex)? {
+        if let Some(register) =
+            process_register(&periph, register_node.into(), reg_filter, syms_regex)?
+        {
             registers.push(register);
         }
     }
@@ -589,9 +613,12 @@ where
         .children()
         .filter(|n| n.has_tag_name("peripheral"))
     {
-        if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
-        {
+        if let Some(peripheral_registers) = process_peripheral(
+            peripheral_node.into(),
+            periph_filter,
+            reg_filter,
+            syms_regex,
+        )? {
             registers.extend(peripheral_registers);
         }
     }
