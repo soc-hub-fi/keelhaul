@@ -1,4 +1,4 @@
-# register-selftest-generator
+# MMIO-Register Test Case Generator
 
 Memory-mapped I/O register test case generator.
 
