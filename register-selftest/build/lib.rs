@@ -19,14 +19,14 @@ use std::{
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
-    let out_dir = match env::var("OUTPUT_PATH") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => {
+    let out_dir = env::var("OUTPUT_PATH").map_or_else(
+        |_err| {
             // Safety: OUT_DIR always exists at build time
             let out_dir = env::var("OUT_DIR").unwrap();
             PathBuf::from(out_dir)
-        }
-    };
+        },
+        PathBuf::from,
+    );
     out_dir.join("register_selftest.rs")
 }
 
@@ -58,37 +58,33 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindError> {
-    match env::var("INCLUDE_TEST_KINDS") {
-        Ok(inc_tests_var) => Some(
-            inc_tests_var
-                .split(',')
-                .map(RegTestKind::from_str)
-                .collect(),
-        ),
-        Err(_) => None,
-    }
-    .transpose()
+    env::var("INCLUDE_TEST_KINDS")
+        .map_or_else(
+            |_err| None,
+            |included_tests| {
+                Some(
+                    included_tests
+                        .split(',')
+                        .map(RegTestKind::from_str)
+                        .collect(),
+                )
+            },
+        )
+        .transpose()
 }
 
 fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
-    match env::var("ARCH_PTR_BYTES") {
-        Ok(arch_ptr_bytes_str) => {
-            let ptr_size = match arch_ptr_bytes_str
-                .parse::<u8>()
-                .with_context(|| "ARCH_PTR_BYTES")
-                .unwrap()
-            {
-                4 => Ok(PtrSize::U32),
-                8 => Ok(PtrSize::U64),
-                bytes => Err(NotImplementedError::PtrSize(bytes)),
-            }?;
-            info!("Selected ptr size: {:?}", ptr_size);
-            Ok(ptr_size)
-        }
-        Err(_) => {
-            warn!("ARCH_PTR_BYTES not specified, assuming 4-byte addressable platform (32-bit)");
-            Ok(PtrSize::U32)
-        }
+    if let Ok(bytes_str) = env::var("ARCH_PTR_BYTES") {
+        let ptr_size = bytes_str
+            .parse::<u8>()
+            .with_context(|| "ARCH_PTR_BYTES")
+            .unwrap()
+            .try_into()?;
+        info!("Selected ptr size: {:?}", ptr_size);
+        Ok(ptr_size)
+    } else {
+        warn!("ARCH_PTR_BYTES not specified, assuming 4-byte addressable platform (32-bit)");
+        Ok(PtrSize::U32)
     }
 }
 
@@ -106,8 +102,10 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=EXCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=INCLUDE_TEST_KINDS");
+    // TODO: deprecate PATH_SVD
     println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-env-changed=SVD_PATH");
+    // TODO: this info can be found from SVD-file, providing it via CLI is redundant, or is it?
     println!("cargo:rerun-if-env-changed=ARCH_PTR_BYTES");
     println!("cargo:rerun-if-env-changed=OUTPUT_PATH");
     println!("cargo:rerun-if-changed=build.rs");

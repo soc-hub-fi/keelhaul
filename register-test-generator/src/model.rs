@@ -6,7 +6,7 @@ use log::warn;
 use std::{hash, ops, str};
 use thiserror::Error;
 
-use crate::{AddrOverflowError, CommonParseError, SvdParseError};
+use crate::{AddrOverflowError, CommonParseError, NotImplementedError, SvdParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
@@ -180,6 +180,19 @@ impl PtrSize {
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_rust_type_str())
+    }
+}
+
+impl std::convert::TryFrom<u8> for PtrSize {
+    type Error = NotImplementedError;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::U8),
+            2 => Ok(Self::U16),
+            4 => Ok(Self::U32),
+            8 => Ok(Self::U64),
+            other => Err(NotImplementedError::PtrSize(other)),
+        }
     }
 }
 
