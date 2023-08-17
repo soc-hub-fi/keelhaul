@@ -28,12 +28,13 @@ use std::{
 /// read.
 #[must_use]
 pub fn read_file_or_panic(path: &Path) -> String {
-    path.canonicalize()
-        .map(|p| {
+    path.canonicalize().map_or_else(
+        |err| panic!("path {} does not exist: {err}", path.display()),
+        |p| {
             fs::read_to_string(p)
                 .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
-        })
-        .unwrap_or_else(|err| panic!("path {} does not exist: {err}", path.display()))
+        },
+    )
 }
 
 /// Try to extract path to excludes-file from environment variable.
@@ -75,7 +76,7 @@ impl<T: PartialEq> ItemFilter<T> {
     }
 
     #[allow(clippy::use_self)]
-    fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
+    const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
     }
 
@@ -92,11 +93,7 @@ impl<T: PartialEq> ItemFilter<T> {
                 if block_list.contains(value) {
                     return false;
                 }
-
-                match &white_list {
-                    Some(white_list) => white_list.contains(value),
-                    None => true,
-                }
+                white_list.as_ref().map_or(true, |wl| wl.contains(value))
             }
             Self::Regex { allow, block } => {
                 // Items matched by block regex are always blocked
@@ -105,12 +102,9 @@ impl<T: PartialEq> ItemFilter<T> {
                         return false;
                     }
                 }
-
-                if let Some(allow) = allow {
-                    allow.is_match(value.as_ref())
-                } else {
-                    true
-                }
+                allow
+                    .as_ref()
+                    .map_or(true, |allow| allow.is_match(value.as_ref()))
             }
         }
     }
