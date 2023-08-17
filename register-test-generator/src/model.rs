@@ -10,7 +10,7 @@ use crate::{AddrOverflowError, CommonParseError, SvdParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Access {
     /// read-only
     ReadOnly,
@@ -114,7 +114,7 @@ impl ArchiPtr for u64 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PtrSize {
     U8,
     U16,
@@ -149,7 +149,7 @@ impl PtrSize {
     }
 
     /// Maximum value representable by a binding of type [`PtrSize`]
-    pub(crate) const fn max_value(&self) -> RegValue {
+    pub(crate) const fn max_value(self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(u8::MAX),
             Self::U16 => RegValue::U16(u16::MAX),
@@ -158,7 +158,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn zero_value(&self) -> RegValue {
+    pub(crate) const fn zero_value(self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(0),
             Self::U16 => RegValue::U16(0),
@@ -167,7 +167,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn bits(&self) -> u8 {
+    pub(crate) const fn bits(self) -> u8 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -224,7 +224,7 @@ impl RegPath {
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AddrRepr<P: num::CheckedAdd> {
     base: P,
     cluster: Option<P>,
@@ -379,7 +379,7 @@ impl<P: num::CheckedAdd> ops::Deref for Registers<P> {
 }
 
 /// Specify the security privilege to access an address region
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Protection {
     /// Secure permission required for access
     Secure,
@@ -416,7 +416,7 @@ impl ToString for Protection {
 }
 
 /// Variable-length register value
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RegValue {
     U8(u8),
     U16(u16),
@@ -494,7 +494,7 @@ impl From<RegValue> for u64 {
 /// `val`   - The reset value
 /// `mask`  - Mask for reading from or writing into the register, to assist in
 /// writing into partially protected registers.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum ResetValue {
     U8 { val: u8, mask: u8 },
     U16 { val: u16, mask: u16 },
@@ -540,7 +540,7 @@ impl ResetValue {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct RegisterPropertiesGroup {
     /// Register value bit-width.
     pub value_size: PtrSize,
@@ -576,7 +576,7 @@ impl RegisterPropertiesGroup {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct RegisterDimElementGroup {
     pub dim: u64,
     pub dim_increment: u64,
