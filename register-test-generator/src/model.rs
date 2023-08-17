@@ -28,13 +28,13 @@ impl Access {
     /// Whether this register is software readable or not
     pub fn is_read(&self) -> bool {
         match self {
-            Access::ReadOnly | Access::ReadWrite => true,
-            Access::WriteOnly => false,
-            Access::WriteOnce => {
+            Self::ReadOnly | Self::ReadWrite => true,
+            Self::WriteOnly => false,
+            Self::WriteOnce => {
                 warn!("a field uses write-once, assuming not readable");
                 false
             }
-            Access::ReadWriteOnce => {
+            Self::ReadWriteOnce => {
                 warn!("a field uses read-write-once, assuming readable");
                 true
             }
@@ -44,10 +44,8 @@ impl Access {
     /// Whether this register is software writable or not
     pub fn is_write(&self) -> bool {
         match self {
-            Access::ReadOnly => false,
-            Access::WriteOnly | Access::ReadWrite | Access::WriteOnce | Access::ReadWriteOnce => {
-                true
-            }
+            Self::ReadOnly => false,
+            Self::WriteOnly | Self::ReadWrite | Self::WriteOnce | Self::ReadWriteOnce => true,
         }
     }
 }
@@ -58,11 +56,11 @@ impl str::FromStr for Access {
     /// Convert from CMSIS-SVD / IP-XACT `accessType` string
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "read-only" => Ok(Access::ReadOnly),
-            "write-only" => Ok(Access::WriteOnly),
-            "read-write" => Ok(Access::ReadWrite),
-            "writeOnce" => Ok(Access::WriteOnce),
-            "read-writeOnce" => Ok(Access::ReadWriteOnce),
+            "read-only" => Ok(Self::ReadOnly),
+            "write-only" => Ok(Self::WriteOnly),
+            "read-write" => Ok(Self::ReadWrite),
+            "writeOnce" => Ok(Self::WriteOnce),
+            "read-writeOnce" => Ok(Self::ReadWriteOnce),
             s => Err(CommonParseError::InvalidAccessType(s.to_owned())),
         }
     }
@@ -72,11 +70,11 @@ impl ToString for Access {
     /// Convert into CMSIS-SVD / IP-XACT `accessType` string
     fn to_string(&self) -> String {
         match self {
-            Access::ReadOnly => "read-only",
-            Access::WriteOnly => "write-only",
-            Access::ReadWrite => "read-write",
-            Access::WriteOnce => "writeOnce",
-            Access::ReadWriteOnce => "read-writeOnce",
+            Self::ReadOnly => "read-only",
+            Self::WriteOnly => "write-only",
+            Self::ReadWrite => "read-write",
+            Self::WriteOnce => "writeOnce",
+            Self::ReadWriteOnce => "read-writeOnce",
         }
         .to_string()
     }
@@ -126,10 +124,10 @@ impl PtrSize {
     /// E.g., u8, u16, u32, u64
     pub fn to_rust_type_str(&self) -> &str {
         match self {
-            PtrSize::U8 => "u8",
-            PtrSize::U16 => "u16",
-            PtrSize::U32 => "u32",
-            PtrSize::U64 => "u64",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
         }
     }
 
@@ -139,10 +137,10 @@ impl PtrSize {
     #[must_use]
     pub fn from_bit_count(bc: u64) -> Option<Self> {
         match bc {
-            8 => Some(PtrSize::U8),
-            16 => Some(PtrSize::U16),
-            32 => Some(PtrSize::U32),
-            64 => Some(PtrSize::U64),
+            8 => Some(Self::U8),
+            16 => Some(Self::U16),
+            32 => Some(Self::U32),
+            64 => Some(Self::U64),
             _bc => None,
         }
     }
@@ -150,28 +148,28 @@ impl PtrSize {
     /// Maximum value representable by a binding of type [PtrWidth]
     pub(crate) fn max_value(&self) -> RegValue {
         match self {
-            PtrSize::U8 => RegValue::U8(u8::MAX),
-            PtrSize::U16 => RegValue::U16(u16::MAX),
-            PtrSize::U32 => RegValue::U32(u32::MAX),
-            PtrSize::U64 => RegValue::U64(u64::MAX),
+            Self::U8 => RegValue::U8(u8::MAX),
+            Self::U16 => RegValue::U16(u16::MAX),
+            Self::U32 => RegValue::U32(u32::MAX),
+            Self::U64 => RegValue::U64(u64::MAX),
         }
     }
 
     pub(crate) fn zero_value(&self) -> RegValue {
         match self {
-            PtrSize::U8 => RegValue::U8(0),
-            PtrSize::U16 => RegValue::U16(0),
-            PtrSize::U32 => RegValue::U32(0),
-            PtrSize::U64 => RegValue::U64(0),
+            Self::U8 => RegValue::U8(0),
+            Self::U16 => RegValue::U16(0),
+            Self::U32 => RegValue::U32(0),
+            Self::U64 => RegValue::U64(0),
         }
     }
 
     pub(crate) fn bits(&self) -> u8 {
         match self {
-            PtrSize::U8 => 8,
-            PtrSize::U16 => 16,
-            PtrSize::U32 => 32,
-            PtrSize::U64 => 64,
+            Self::U8 => 8,
+            Self::U16 => 16,
+            Self::U32 => 32,
+            Self::U64 => 64,
         }
     }
 }
@@ -244,7 +242,7 @@ where
     ///
     /// Returns None on address overflow.
     pub fn full(&self) -> Option<P> {
-        let AddrRepr {
+        let Self {
             base,
             cluster,
             offset,
@@ -279,7 +277,7 @@ impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
 // representation to simplify debug implementations
 impl From<AddrRepr<u32>> for AddrRepr<u64> {
     fn from(value: AddrRepr<u32>) -> Self {
-        AddrRepr {
+        Self {
             base: value.base.into(),
             cluster: value.cluster.map(|x| x.into()),
             offset: value.offset.into(),
@@ -302,7 +300,7 @@ impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
         let base: u32 = base.try_into()?;
         let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
         let offset: u32 = offset.try_into()?;
-        Ok(AddrRepr {
+        Ok(Self {
             base,
             cluster,
             offset,
@@ -421,10 +419,10 @@ pub(crate) enum RegValue {
 impl RegValue {
     pub(crate) fn width(&self) -> PtrSize {
         match self {
-            RegValue::U8(_) => PtrSize::U8,
-            RegValue::U16(_) => PtrSize::U16,
-            RegValue::U32(_) => PtrSize::U32,
-            RegValue::U64(_) => PtrSize::U64,
+            Self::U8(_) => PtrSize::U8,
+            Self::U16(_) => PtrSize::U16,
+            Self::U32(_) => PtrSize::U32,
+            Self::U64(_) => PtrSize::U64,
         }
     }
 }
@@ -432,44 +430,44 @@ impl RegValue {
 impl fmt::LowerHex for RegValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RegValue::U8(u) => u.fmt(f),
-            RegValue::U16(u) => u.fmt(f),
-            RegValue::U32(u) => u.fmt(f),
-            RegValue::U64(u) => u.fmt(f),
+            Self::U8(u) => u.fmt(f),
+            Self::U16(u) => u.fmt(f),
+            Self::U32(u) => u.fmt(f),
+            Self::U64(u) => u.fmt(f),
         }
     }
 }
 
 impl From<u64> for RegValue {
     fn from(value: u64) -> Self {
-        RegValue::U64(value)
+        Self::U64(value)
     }
 }
 
 impl From<u32> for RegValue {
     fn from(value: u32) -> Self {
-        RegValue::U32(value)
+        Self::U32(value)
     }
 }
 
 impl From<u16> for RegValue {
     fn from(value: u16) -> Self {
-        RegValue::U16(value)
+        Self::U16(value)
     }
 }
 
 impl From<u8> for RegValue {
     fn from(value: u8) -> Self {
-        RegValue::U8(value)
+        Self::U8(value)
     }
 }
 
 impl From<RegValue> for u64 {
     fn from(value: RegValue) -> Self {
         match value {
-            RegValue::U8(v) => v as u64,
-            RegValue::U16(v) => v as u64,
-            RegValue::U32(v) => v as u64,
+            RegValue::U8(v) => v as Self,
+            RegValue::U16(v) => v as Self,
+            RegValue::U32(v) => v as Self,
             RegValue::U64(v) => v,
         }
     }
@@ -507,29 +505,29 @@ impl ResetValue {
         mask: RegValue,
     ) -> Result<Self, IncompatibleTypesError> {
         match (value, mask) {
-            (RegValue::U8(val), RegValue::U8(mask)) => Ok(ResetValue::U8 { val, mask }),
-            (RegValue::U16(val), RegValue::U16(mask)) => Ok(ResetValue::U16 { val, mask }),
-            (RegValue::U32(val), RegValue::U32(mask)) => Ok(ResetValue::U32 { val, mask }),
-            (RegValue::U64(val), RegValue::U64(mask)) => Ok(ResetValue::U64 { val, mask }),
+            (RegValue::U8(val), RegValue::U8(mask)) => Ok(Self::U8 { val, mask }),
+            (RegValue::U16(val), RegValue::U16(mask)) => Ok(Self::U16 { val, mask }),
+            (RegValue::U32(val), RegValue::U32(mask)) => Ok(Self::U32 { val, mask }),
+            (RegValue::U64(val), RegValue::U64(mask)) => Ok(Self::U64 { val, mask }),
             (val, mask) => Err(IncompatibleTypesError(val.width(), mask.width())),
         }
     }
 
     pub(crate) fn value(&self) -> RegValue {
         match self {
-            ResetValue::U8 { val, .. } => RegValue::U8(*val),
-            ResetValue::U16 { val, .. } => RegValue::U16(*val),
-            ResetValue::U32 { val, .. } => RegValue::U32(*val),
-            ResetValue::U64 { val, .. } => RegValue::U64(*val),
+            Self::U8 { val, .. } => RegValue::U8(*val),
+            Self::U16 { val, .. } => RegValue::U16(*val),
+            Self::U32 { val, .. } => RegValue::U32(*val),
+            Self::U64 { val, .. } => RegValue::U64(*val),
         }
     }
 
     pub(crate) fn mask(&self) -> RegValue {
         match self {
-            ResetValue::U8 { mask, .. } => RegValue::U8(*mask),
-            ResetValue::U16 { mask, .. } => RegValue::U16(*mask),
-            ResetValue::U32 { mask, .. } => RegValue::U32(*mask),
-            ResetValue::U64 { mask, .. } => RegValue::U64(*mask),
+            Self::U8 { mask, .. } => RegValue::U8(*mask),
+            Self::U16 { mask, .. } => RegValue::U16(*mask),
+            Self::U32 { mask, .. } => RegValue::U32(*mask),
+            Self::U64 { mask, .. } => RegValue::U64(*mask),
         }
     }
 }
