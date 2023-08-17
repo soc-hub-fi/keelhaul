@@ -116,7 +116,7 @@ pub fn main() -> anyhow::Result<()> {
     logger::init(LevelFilter::Info);
 
     let arch_ptr_size = arch_ptr_size_from_env()?;
-    let mut test_cfg = TestConfig::new(arch_ptr_size.clone());
+    let mut test_cfg = TestConfig::new(arch_ptr_size);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
