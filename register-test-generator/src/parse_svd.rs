@@ -214,7 +214,7 @@ impl RegPropGroupBuilder {
     ///
     /// If a value was not available, the respective field is set to None.
     fn try_from_node(node: &Node) -> Result<Self, PositionalError<SvdParseError>> {
-        let mut properties = RegPropGroupBuilder::default();
+        let mut properties = Self::default();
         properties.update_from_node(node)?;
         Ok(properties)
     }
@@ -227,7 +227,7 @@ impl RegPropGroupBuilder {
     fn clone_and_update_from_node(
         &self,
         node: &Node,
-    ) -> Result<RegPropGroupBuilder, PositionalError<SvdParseError>> {
+    ) -> Result<Self, PositionalError<SvdParseError>> {
         let mut properties = self.clone();
         properties.update_from_node(node)?;
         Ok(properties)
