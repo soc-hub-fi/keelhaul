@@ -6,7 +6,7 @@ use anyhow::Context;
 use fs_err::{self as fs, File};
 use log::{info, warn, LevelFilter};
 use register_test_generator::{
-    NotImplementedError, ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases, TestConfig,
+    ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases, TestConfig,
 };
 use std::{
     collections::HashSet,
@@ -88,6 +88,14 @@ fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
     }
 }
 
+fn parse_registers_u8() -> anyhow::Result<Registers<u8>> {
+    Ok(register_test_generator::parse::<u8>()?)
+}
+
+fn parse_registers_u16() -> anyhow::Result<Registers<u16>> {
+    Ok(register_test_generator::parse::<u16>()?)
+}
+
 fn parse_registers_u32() -> anyhow::Result<Registers<u32>> {
     Ok(register_test_generator::parse::<u32>()?)
 }
@@ -121,8 +129,14 @@ pub fn main() -> anyhow::Result<()> {
 
     let mut file_output = get_output_file();
     let test_cases = match arch_ptr_size {
-        PtrSize::U8 => unimplemented!(),
-        PtrSize::U16 => unimplemented!(),
+        PtrSize::U8 => {
+            let registers = parse_registers_u8()?;
+            TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U16 => {
+            let registers = parse_registers_u16()?;
+            TestCases::from_registers(&registers, &test_cfg)
+        }
         PtrSize::U32 => {
             let registers = parse_registers_u32()?;
             TestCases::from_registers(&registers, &test_cfg)

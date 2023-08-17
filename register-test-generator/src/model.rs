@@ -102,6 +102,18 @@ pub trait ArchiPtr:
     fn ptr_size() -> PtrSize;
 }
 
+impl ArchiPtr for u8 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U8
+    }
+}
+
+impl ArchiPtr for u16 {
+    fn ptr_size() -> PtrSize {
+        PtrSize::U16
+    }
+}
+
 impl ArchiPtr for u32 {
     fn ptr_size() -> PtrSize {
         PtrSize::U32
