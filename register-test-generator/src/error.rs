@@ -5,7 +5,7 @@ use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
 #[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum CommonParseError {
     #[error("invalid access type in input: {0}")]
     InvalidAccessType(String),
@@ -17,7 +17,7 @@ pub enum CommonParseError {
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
 impl<T: num::CheckedAdd> AddrOverflowError<T> {
-    pub fn new(id: String, addr: AddrRepr<T>) -> Self {
+    pub const fn new(id: String, addr: AddrRepr<T>) -> Self {
         Self(id, addr)
     }
 }
@@ -43,7 +43,7 @@ pub struct ParseFileError<T> {
 ///
 /// Indexes start from 1:1.
 #[derive(Debug)]
-pub(crate) enum Position {
+pub enum Position {
     Point {
         line: u32,
         col: u32,
@@ -119,7 +119,7 @@ pub struct PositionalError<T> {
 }
 
 impl<T> PositionalError<T> {
-    pub(crate) fn with_fname(self, fname: String) -> ParseFileError<T> {
+    pub(crate) const fn with_fname(self, fname: String) -> ParseFileError<T> {
         ParseFileError { fname, err: self }
     }
 }
@@ -177,7 +177,7 @@ impl SvdParseError {
 }
 
 #[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum NotImplementedError {
     #[error(
         "detected SVD register array: '{0}' but arrays are not yet implemented by test generator"
