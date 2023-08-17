@@ -132,8 +132,8 @@ impl RegTestKind {
     fn error_variant_def(&self, max_value_width: PtrSize) -> Option<TokenStream> {
         let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());
         match self {
-            RegTestKind::Read => None,
-            RegTestKind::ReadIsResetVal => Some(
+            Self::Read => None,
+            Self::ReadIsResetVal => Some(
                 // We try to avoid generating extra code as much as possible. Therefore we only
                 // reference existing static symbols or integers here.
                 quote! {
@@ -162,8 +162,8 @@ impl str::FromStr for RegTestKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "read" => Ok(RegTestKind::Read),
-            "reset" | "read_is_reset_val" => Ok(RegTestKind::ReadIsResetVal),
+            "read" => Ok(Self::Read),
+            "reset" | "read_is_reset_val" => Ok(Self::ReadIsResetVal),
             s => Err(ParseTestKindError(s.to_owned())),
         }
     }
@@ -213,7 +213,7 @@ impl TestConfig {
     pub fn reg_test_kinds(
         mut self,
         reg_test_kinds: HashSet<RegTestKind>,
-    ) -> Result<TestConfig, GenerateError> {
+    ) -> Result<Self, GenerateError> {
         if reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
             && !reg_test_kinds.contains(&RegTestKind::Read)
         {
@@ -261,10 +261,10 @@ impl ResetValue {
 impl RegValue {
     fn gen_literal_hex(&self) -> TokenStream {
         match self {
-            RegValue::U8(u) => format!("{:#x}u8", u),
-            RegValue::U16(u) => format!("{:#x}u16", u),
-            RegValue::U32(u) => format!("{:#x}u32", u),
-            RegValue::U64(u) => format!("{:#x}u64", u),
+            Self::U8(u) => format!("{:#x}u8", u),
+            Self::U16(u) => format!("{:#x}u16", u),
+            Self::U32(u) => format!("{:#x}u32", u),
+            Self::U64(u) => format!("{:#x}u64", u),
         }
         .parse()
         .unwrap()
@@ -272,10 +272,10 @@ impl RegValue {
 
     fn gen_literal_bin(&self) -> TokenStream {
         match self {
-            RegValue::U8(u) => format!("{:#b}u8", u),
-            RegValue::U16(u) => format!("{:#b}u16", u),
-            RegValue::U32(u) => format!("{:#b}u32", u),
-            RegValue::U64(u) => format!("{:#b}u64", u),
+            Self::U8(u) => format!("{:#b}u8", u),
+            Self::U16(u) => format!("{:#b}u16", u),
+            Self::U32(u) => format!("{:#b}u32", u),
+            Self::U64(u) => format!("{:#b}u64", u),
         }
         .parse()
         .unwrap()
@@ -527,7 +527,7 @@ impl TestCases {
     pub fn from_registers<P: ArchiPtr + quote::IdentFragment + 'static>(
         registers: &Registers<P>,
         config: &TestConfig,
-    ) -> Result<TestCases, GenerateError> {
+    ) -> Result<Self, GenerateError> {
         let preamble = gen_preamble(config).to_string();
 
         let mut test_fns_and_defs_by_periph = HashMap::new();
@@ -564,7 +564,7 @@ impl TestCases {
             .map(|ts| ts.to_string())
             .collect::<String>();
 
-        Ok(TestCases {
+        Ok(Self {
             preamble,
             test_cases: vec![mod_strings, format!("{test_case_array}")],
             test_case_count,
