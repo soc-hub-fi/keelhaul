@@ -12,7 +12,7 @@ pub enum CommonParseError {
 }
 
 #[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("address for {0} does not fit in architecture pointer {1}")]
 pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
 
@@ -126,7 +126,7 @@ impl<T> PositionalError<T> {
 
 /// Error that happened during parsing 'CMSIS-SVD'
 #[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum SvdParseError {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
     ExpectedTagInElement { elem_name: String, tag: String },
