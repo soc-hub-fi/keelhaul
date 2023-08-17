@@ -66,14 +66,14 @@ impl From<ops::Range<roxmltree::TextPos>> for Position {
         if value.start.row == value.end.row {
             // Same line, same column --> Point
             if value.start.col == value.end.col {
-                Position::Point {
+                Self::Point {
                     line: value.start.row,
                     col: value.start.col,
                 }
             }
             // Same line but different column --> Line
             else {
-                Position::Line {
+                Self::Line {
                     line: value.start.row,
                     start_col: value.start.col,
                     end_col: value.end.col,
@@ -82,7 +82,7 @@ impl From<ops::Range<roxmltree::TextPos>> for Position {
         }
         // Starts and ends on different lines --> MultiLine
         else {
-            Position::MultiLine {
+            Self::MultiLine {
                 start_line: value.start.row,
                 start_col: value.start.col,
                 end_line: value.end.row,
@@ -95,13 +95,13 @@ impl From<ops::Range<roxmltree::TextPos>> for Position {
 impl fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Position::Point { line, col } => write!(f, "{line}:{col}"),
-            Position::Line {
+            Self::Point { line, col } => write!(f, "{line}:{col}"),
+            Self::Line {
                 line,
                 start_col,
                 end_col,
             } => write!(f, "{line}:{start_col}-{end_col}"),
-            Position::MultiLine {
+            Self::MultiLine {
                 start_line,
                 start_col,
                 end_line,
@@ -157,7 +157,7 @@ impl SvdParseError {
     pub(crate) fn with_text_pos_range(
         self,
         pos: ops::Range<roxmltree::TextPos>,
-    ) -> PositionalError<SvdParseError> {
+    ) -> PositionalError<Self> {
         PositionalError {
             pos: pos.into(),
             err: self,
@@ -167,7 +167,7 @@ impl SvdParseError {
         self,
         byte_pos: ops::Range<usize>,
         doc: &roxmltree::Document,
-    ) -> PositionalError<SvdParseError> {
+    ) -> PositionalError<Self> {
         let text_pos = ops::Range {
             start: doc.text_pos_at(byte_pos.start),
             end: doc.text_pos_at(byte_pos.end),
@@ -201,7 +201,7 @@ pub enum GenerateError {
 
 impl<P: ArchiPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
     fn from(value: AddrOverflowError<P>) -> Self {
-        GenerateError::AddrOverflow {
+        Self::AddrOverflow {
             err: Box::new(value),
             archi_bits: P::ptr_size().bits(),
         }
