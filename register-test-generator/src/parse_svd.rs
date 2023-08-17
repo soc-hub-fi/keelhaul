@@ -22,13 +22,13 @@ fn find_text_in_node_by_tag_name<'a>(
     node: &'a Node,
     tag: &str,
 ) -> Result<(&'a str, Node<'a, 'a>), PositionalError<SvdParseError>> {
-    maybe_find_text_in_node_by_tag_name(node, tag).ok_or(
+    maybe_find_text_in_node_by_tag_name(node, tag).ok_or_else(|| {
         SvdParseError::ExpectedTagInElement {
             elem_name: node.tag_name().name().to_owned(),
             tag: tag.to_owned(),
         }
-        .with_byte_pos_range(node.range(), node.document()),
-    )
+        .with_byte_pos_range(node.range(), node.document())
+    })
 }
 
 /// Try to find a child node with given name.
@@ -147,17 +147,23 @@ where
 fn parse_nonneg_int_works() {
     assert_eq!(
         parse_nonneg_int::<u32>("0xFFB00000").unwrap(),
-        0xFFB00000u32
+        0xFFB0_0000u32
     );
     assert_eq!(
         parse_nonneg_int::<u32>("+0xFFB00000").unwrap(),
-        0xFFB00000u32
+        0xFFB0_0000u32
     );
     // TODO: this test case is invalid. # means binary not hex, and the parser is faulty
-    assert_eq!(parse_nonneg_int::<u32>("#FFB00000").unwrap(), 0xFFB00000u32);
+    assert_eq!(
+        parse_nonneg_int::<u32>("#FFB00000").unwrap(),
+        0xFFB0_0000u32
+    );
     assert_eq!(parse_nonneg_int::<u32>("42").unwrap(), 42u32);
     assert_eq!(parse_nonneg_int::<u32>("1 k").unwrap(), 1024u32);
-    assert_eq!(parse_nonneg_int::<u32>("437260288").unwrap(), 437260288u32);
+    assert_eq!(
+        parse_nonneg_int::<u32>("437260288").unwrap(),
+        437_260_288u32
+    );
 }
 
 #[derive(Clone, Default)]
@@ -175,7 +181,7 @@ struct RegPropGroupBuilder {
     pub(crate) reset_mask: Option<RegValue>,
 }
 
-/// Add text position information to an [SvdParseError] converting it into a [PositionalError]
+/// Add text position information to an [`SvdParseError`] converting it into a [`PositionalError`]
 fn err_with_pos(e: impl Into<SvdParseError>, node: &Node) -> PositionalError<SvdParseError> {
     e.into().with_byte_pos_range(node.range(), node.document())
 }
@@ -203,7 +209,7 @@ where
 }
 
 impl RegPropGroupBuilder {
-    /// Returns a new RegPropGroupBuilder with applicable attributes from `node`
+    /// Returns a new [`RegPropGroupBuilder`] with applicable attributes from `node`
     ///
     /// Reads the following attributes from `node`:
     ///
@@ -233,7 +239,7 @@ impl RegPropGroupBuilder {
         Ok(properties)
     }
 
-    /// Update properties for this RegPropGroupBuilder where present
+    /// Update properties for this [`RegPropGroupBuilder`] where present
     ///
     /// # Arguments
     ///
@@ -456,10 +462,7 @@ where
         },
         addr_offset,
     );
-    let dimensions = match RegisterDimElementGroup::try_from(&register_node) {
-        Ok(dimensions) => Some(dimensions),
-        Err(_) => None,
-    };
+    let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
 
     let register = Register {
         path,
@@ -651,25 +654,36 @@ where
 }
 
 /// Parse SVD-file.
+///
+/// # Panics
+///
+/// - Missing path to SVD-file
+///
+/// # Errors
+///
+/// - Failed to interpret given options
+/// - Failed to parse given SVD file
 pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
+    // TODO: remove panic, use error
+    // TODO: remove path_svd
     let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
-        env::var("PATH_SVD")
-            .map(|p| {
+        env::var("PATH_SVD").map_or_else(
+            |err| panic!("PATH_SVD or SVD_PATH must be set: {err}"),
+            |p| {
                 warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
                 p
-            })
-            .unwrap_or_else(|err| panic!("PATH_SVD or SVD_PATH must be set: {err}"))
+            },
+        )
     });
-
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or(vec![]));
+        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
     let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
         .ok()
         .map(|s| Regex::new(&s))
@@ -679,9 +693,7 @@ where
         .map(|s| Regex::new(&s))
         .transpose()?;
     let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
-
-    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or(vec![]));
-
+    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
     parse_svd_into_registers(
         &PathBuf::from(svd_path),
         &reg_filter,
