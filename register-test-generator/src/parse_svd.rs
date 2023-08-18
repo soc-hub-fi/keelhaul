@@ -12,16 +12,20 @@ use regex::Regex;
 use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env, panic,
+    env,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
 struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
 
-impl<'a, 'input> From<roxmltree::Node<'a, 'input>> for XmlNode<'a, 'input> {
-    fn from(value: roxmltree::Node<'a, 'input>) -> Self {
-        Self(value)
+trait IntoXmlNode<'a, 'input> {
+    fn into_xml_node(self) -> XmlNode<'a, 'input>;
+}
+
+impl<'a, 'input> IntoXmlNode<'a, 'input> for roxmltree::Node<'a, 'input> {
+    fn into_xml_node(self) -> XmlNode<'a, 'input> {
+        XmlNode(self)
     }
 }
 
@@ -40,10 +44,12 @@ impl<'a, 'input> XmlNode<'a, 'input> {
     }
 
     fn maybe_find_text_by_tag_name(&self, tag: &str) -> Option<(&'a str, XmlNode<'a, 'a>)> {
-        self.0
-            .children()
-            .find(|n| n.has_tag_name(tag))
-            .map(|n| (n.text().expect("node does not have text"), n.into()))
+        self.0.children().find(|n| n.has_tag_name(tag)).map(|n| {
+            (
+                n.text().expect("node does not have text"),
+                n.into_xml_node(),
+            )
+        })
     }
 }
 
@@ -511,7 +517,7 @@ where
     {
         if let Some(register) = process_register(
             &current_parent,
-            register_node.into(),
+            register_node.into_xml_node(),
             reg_filter,
             syms_regex,
         )? {
@@ -556,9 +562,12 @@ where
         .children()
         .filter(|n| n.has_tag_name("cluster"))
     {
-        if let Some(cluster_registers) =
-            process_cluster(&periph, cluster_node.into(), reg_filter, syms_regex)?
-        {
+        if let Some(cluster_registers) = process_cluster(
+            &periph,
+            cluster_node.into_xml_node(),
+            reg_filter,
+            syms_regex,
+        )? {
             registers.extend(cluster_registers);
         }
     }
@@ -566,13 +575,67 @@ where
         .children()
         .filter(|n| n.has_tag_name("register"))
     {
-        if let Some(register) =
-            process_register(&periph, register_node.into(), reg_filter, syms_regex)?
-        {
+        if let Some(register) = process_register(
+            &periph,
+            register_node.into_xml_node(),
+            reg_filter,
+            syms_regex,
+        )? {
             registers.push(register);
         }
     }
     Ok(Some(registers))
+}
+
+struct ArchitectureSize {
+    /// How many bits one address contains
+    pub address_bits: usize,
+    /// How many bits one bus transaction contains
+    pub bus_bits: usize,
+}
+
+#[must_use]
+fn find_architecture_size(device_node: &XmlNode) -> ArchitectureSize {
+    // How many bits one address contains?
+    let address_bits = device_node
+        .0
+        .children()
+        .filter(|n| n.has_tag_name("addressUnitBits"))
+        .collect_vec();
+    assert!(
+        address_bits.len() == 1,
+        "device-node must define address width in bits once",
+    );
+    let address_bits: usize = address_bits
+        .first()
+        .unwrap()
+        .text()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(
+        address_bits == 8,
+        "{address_bits}-bit addressable architectures are not yet supported",
+    );
+    // How many bits one bus transaction contains?
+    let bus_bits = device_node
+        .0
+        .children()
+        .filter(|n| n.has_tag_name("width"))
+        .collect_vec();
+    assert!(
+        bus_bits.len() == 1,
+        "device-node must define address width in bits once",
+    );
+    let bus_bits: usize = bus_bits.first().unwrap().text().unwrap().parse().unwrap();
+    assert!(
+        bus_bits == 8 || bus_bits == 16 || bus_bits == 32 || bus_bits == 64,
+        "{bus_bits}-bit bus width architectures are not yet supported"
+    );
+    ArchitectureSize {
+        address_bits,
+        bus_bits,
+    }
 }
 
 /// Find registers from SVD XML-document.
@@ -597,6 +660,7 @@ where
         "SVD file must contain one device node."
     );
     let device_node = device_nodes.first().unwrap();
+    let architecture_size = find_architecture_size(&device_node.into_xml_node());
 
     let peripherals_nodes = device_node
         .children()
@@ -614,7 +678,7 @@ where
         .filter(|n| n.has_tag_name("peripheral"))
     {
         if let Some(peripheral_registers) = process_peripheral(
-            peripheral_node.into(),
+            peripheral_node.into_xml_node(),
             periph_filter,
             reg_filter,
             syms_regex,
@@ -664,7 +728,6 @@ where
         + From<<P as TryFrom<u64>>::Error>,
 {
     let svd_content = read_file_or_panic(svd_path);
-
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, reg_filter, periph_filter, syms_filter)
         .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
