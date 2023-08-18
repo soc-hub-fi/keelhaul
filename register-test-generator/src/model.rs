@@ -601,11 +601,11 @@ impl RegisterPropertiesGroup {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RegisterDimElementGroup {
     pub dim: u64,
     pub dim_increment: u64,
-    //pub dim_index: Option<>,
-    //pub dim_name: Option<String>,
-    //pub dim_array_index: Option<>,
+    pub dim_index: Option<usize>,
+    pub dim_name: Option<String>,
+    pub dim_array_index: Option<usize>,
 }

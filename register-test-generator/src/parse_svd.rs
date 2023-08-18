@@ -417,7 +417,31 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
         let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
         let dim_increment =
             parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
-        Ok(Self { dim, dim_increment })
+        let dim_index = match value.maybe_find_text_by_tag_name("dimIndex") {
+            Some(index) => {
+                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
+                Some(a as usize)
+            }
+            None => None,
+        };
+        let dim_name = match value.maybe_find_text_by_tag_name("dimName") {
+            Some(name) => Some(name.0).map(str::to_string),
+            None => None,
+        };
+        let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
+            Some(index) => {
+                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
+                Some(a as usize)
+            }
+            None => None,
+        };
+        Ok(Self {
+            dim,
+            dim_increment,
+            dim_index,
+            dim_name,
+            dim_array_index,
+        })
     }
 }
 
