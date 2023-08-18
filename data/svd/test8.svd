@@ -40,17 +40,17 @@
                 </cluster>
                 <register>
                     <name>register1</name>
-                    <addressOffset>0x10</addressOffset>
+                    <addressOffset>0x20</addressOffset>
                 </register>
                 <register>
                     <name>register2</name>
-                    <addressOffset>0x20</addressOffset>
+                    <addressOffset>0x30</addressOffset>
                 </register>
             </registers>
         </peripheral>
         <peripheral>
             <name>peripheral3</name>
-            <baseAddress>0x10</baseAddress>
+            <baseAddress>0x20</baseAddress>
             <registers>
                 <register>
                     <!-- This register is actually an array of registers. -->
