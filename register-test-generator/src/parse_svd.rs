@@ -1,5 +1,7 @@
 //! SVD-file parser for register test generator.
 
+// TODO: support deriving fields via <register derivedFrom="register1">
+
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
     Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, NotImplementedError,
@@ -480,6 +482,15 @@ where
         addr_offset,
     );
     let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
+    if let Some(dimensions) = dimensions {
+        // TODO: add support for register arrays
+        warn!(
+            "array has {} registers with increment of {}",
+            dimensions.dim, dimensions.dim_increment
+        );
+        warn!("arrays are not supported");
+        return Ok(None);
+    }
 
     let register = Register {
         path,

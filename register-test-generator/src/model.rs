@@ -601,7 +601,7 @@ impl RegisterPropertiesGroup {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct RegisterDimElementGroup {
     pub dim: u64,
     pub dim_increment: u64,
