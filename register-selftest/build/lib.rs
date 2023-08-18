@@ -2,11 +2,12 @@
 
 mod logger;
 
-use anyhow::Context;
+use anyhow::{Context, Error};
 use fs_err::{self as fs, File};
-use log::{info, warn, LevelFilter};
+use log::{info, LevelFilter};
 use register_test_generator::{
-    ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases, TestConfig,
+    parse_architecture_size, ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases,
+    TestConfig,
 };
 use std::{
     collections::HashSet,
@@ -88,19 +89,29 @@ fn arch_ptr_size_from_env() -> anyhow::Result<Option<PtrSize>> {
 }
 
 fn parse_registers_u8() -> anyhow::Result<Registers<u8>> {
-    Ok(register_test_generator::parse_with_pointer_size::<u8>()?)
+    Ok(register_test_generator::parse::<u8>()?)
 }
 
 fn parse_registers_u16() -> anyhow::Result<Registers<u16>> {
-    Ok(register_test_generator::parse_with_pointer_size::<u16>()?)
+    Ok(register_test_generator::parse::<u16>()?)
 }
 
 fn parse_registers_u32() -> anyhow::Result<Registers<u32>> {
-    Ok(register_test_generator::parse_with_pointer_size::<u32>()?)
+    Ok(register_test_generator::parse::<u32>()?)
 }
 
 fn parse_registers_u64() -> anyhow::Result<Registers<u64>> {
-    Ok(register_test_generator::parse_with_pointer_size::<u64>()?)
+    Ok(register_test_generator::parse::<u64>()?)
+}
+
+fn solve_architecture_size() -> Result<PtrSize, Error> {
+    match arch_ptr_size_from_env()? {
+        Some(size) => Ok(size),
+        None => {
+            // Parse size from SVD-file.
+            Ok(parse_architecture_size()?)
+        }
+    }
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -118,37 +129,28 @@ pub fn main() -> anyhow::Result<()> {
     // Install a logger to print useful messages into `cargo:warning={}`
     logger::init(LevelFilter::Info);
 
-    let arch_ptr_size = arch_ptr_size_from_env()?;
+    let arch_ptr_size = solve_architecture_size()?;
     let mut test_cfg = TestConfig::new(arch_ptr_size);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
-
     let mut file_output = get_output_file();
-    let test_cases = match arch_ptr_size {
-        Some(ptr_size) => match ptr_size {
-            PtrSize::U8 => {
-                let registers = parse_registers_u8()?;
-                TestCases::from_registers(&registers, &test_cfg)
-            }
-            PtrSize::U16 => {
-                let registers = parse_registers_u16()?;
-                TestCases::from_registers(&registers, &test_cfg)
-            }
-            PtrSize::U32 => {
-                let registers = parse_registers_u32()?;
-                TestCases::from_registers(&registers, &test_cfg)
-            }
-            PtrSize::U64 => {
-                let registers = parse_registers_u64()?;
-                TestCases::from_registers(&registers, &test_cfg)
-            }
-        },
-        None => {
-            //
-            //let registers = register_test_generator::parse()?;
-            unimplemented!()
-            //TestCases::from_registers(&registers, &test_cfg)
+    let test_cases: TestCases = match arch_ptr_size {
+        PtrSize::U8 => {
+            let registers = parse_registers_u8()?;
+            TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U16 => {
+            let registers = parse_registers_u16()?;
+            TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U32 => {
+            let registers = parse_registers_u32()?;
+            TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U64 => {
+            let registers = parse_registers_u64()?;
+            TestCases::from_registers(&registers, &test_cfg)
         }
     }?;
 
