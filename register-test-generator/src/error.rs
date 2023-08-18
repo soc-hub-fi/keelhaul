@@ -1,4 +1,9 @@
-use std::{convert, env::VarError, fmt, ops};
+use std::{
+    convert,
+    env::VarError,
+    fmt,
+    ops::{self, RangeInclusive},
+};
 
 use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
@@ -32,6 +37,16 @@ pub enum Error {
     ZeroEntries,
     #[error("missing environment variable: {0}")]
     MissingEnvironmentVariable(String),
+    #[error("pointer size of {0} bits is not supported")]
+    PointerSizeNotSupported(usize),
+    #[error(
+        "SVD-file must contain {}..={} {}-nodes, contained {}", expected_count.start(), expected_count.end(), node_name, actual_count
+    )]
+    InvalidNodeCount {
+        node_name: String,
+        expected_count: RangeInclusive<usize>,
+        actual_count: usize,
+    },
 }
 
 #[derive(Error, Debug)]
