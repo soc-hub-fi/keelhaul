@@ -533,10 +533,14 @@ where
     }
 
     let registers_nodes = periph_node.children_with_tag_name("registers");
-    assert!(
-        registers_nodes.len() == 1,
-        "SVD file peripheral node must contains one registers node."
-    );
+    if registers_nodes.len() != 1 {
+        let error = SvdParseError::InvalidNodeCount {
+            node_name: "".to_owned(),
+            expected_count: 1..=1,
+            actual_count: registers_nodes.len(),
+        };
+        return Err(err_with_pos(error, &periph_node));
+    }
     let registers_node = registers_nodes.first().unwrap();
 
     let mut registers = Vec::new();
@@ -562,7 +566,6 @@ struct ArchitectureSize {
     pub bus_bits: usize,
 }
 
-#[must_use]
 fn find_architecture_size(
     device_node: &XmlNode,
 ) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
