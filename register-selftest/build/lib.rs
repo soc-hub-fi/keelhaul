@@ -110,8 +110,6 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=EXCLUDE_SYMS_REGEX");
     println!("cargo:rerun-if-env-changed=INCLUDE_TEST_KINDS");
-    // TODO: deprecate PATH_SVD
-    println!("cargo:rerun-if-env-changed=PATH_SVD");
     println!("cargo:rerun-if-env-changed=SVD_PATH");
     // TODO: this info can be found from SVD-file, providing it via CLI is redundant, or is it?
     println!("cargo:rerun-if-env-changed=ARCH_PTR_BYTES");
