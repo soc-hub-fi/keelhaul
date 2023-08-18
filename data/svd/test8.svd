@@ -10,13 +10,6 @@
         <peripheral>
             <name>peripheral1</name>
             <baseAddress>0x0</baseAddress>
-            <!-- Currently addressBlock is not used by the test generator.
-            <addressBlock>
-                <offset>0x0</offset>
-                <size>???</size>
-                <usage>registers</usage>
-            </addressBlock>
-            -->
             <registers>
                 <register>
                     <name>register1</name>
@@ -26,7 +19,7 @@
         </peripheral>
         <peripheral>
             <name>peripheral2</name>
-            <baseAddress>0x1000</baseAddress>
+            <baseAddress>0x8</baseAddress>
             <registers>
                 <cluster>
                     <!-- This cluster has no registers. -->
@@ -35,36 +28,36 @@
                 </cluster>
                 <cluster>
                     <name>cluster2</name>
-                    <addressOffset>0x100</addressOffset>
+                    <addressOffset>0x8</addressOffset>
                     <register>
                         <name>register1</name>
                         <addressOffset>0x0</addressOffset>
                     </register>
                     <register>
                         <name>register2</name>
-                        <addressOffset>0x40</addressOffset>
+                        <addressOffset>0x8</addressOffset>
                     </register>
                 </cluster>
                 <register>
                     <name>register1</name>
-                    <addressOffset>0x200</addressOffset>
+                    <addressOffset>0x10</addressOffset>
                 </register>
                 <register>
                     <name>register2</name>
-                    <addressOffset>0x300</addressOffset>
+                    <addressOffset>0x20</addressOffset>
                 </register>
             </registers>
         </peripheral>
         <peripheral>
             <name>peripheral3</name>
-            <baseAddress>0x2000</baseAddress>
+            <baseAddress>0x10</baseAddress>
             <registers>
                 <register>
                     <!-- This register is actually an array of registers. -->
                     <name>register1</name>
                     <addressOffset>0x0</addressOffset>
                     <dim>2</dim>
-                    <dimIncrement>0x40</dimIncrement>
+                    <dimIncrement>0x8</dimIncrement>
                 </register>
             </registers>
         </peripheral>
