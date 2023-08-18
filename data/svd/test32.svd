@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device schemaVersion="1.1"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd">
+    <name>test</name>
+    <version>1.0</version>
+    <description></description>
+    <addressUnitBits>8</addressUnitBits>
+    <width>32</width>
+    <peripherals>
+        <peripheral>
+            <name>peripheral1</name>
+            <baseAddress>0x0</baseAddress>
+            <!-- Currently addressBlock is not used by the test generator.
+            <addressBlock>
+                <offset>0x0</offset>
+                <size>???</size>
+                <usage>registers</usage>
+            </addressBlock>
+            -->
+            <registers>
+                <register>
+                    <name>register1</name>
+                    <addressOffset>0x0</addressOffset>
+                </register>
+            </registers>
+        </peripheral>
+        <peripheral>
+            <name>peripheral2</name>
+            <baseAddress>0x1000</baseAddress>
+            <registers>
+                <cluster>
+                    <!-- This cluster has no registers. -->
+                    <name>cluster1</name>
+                    <addressOffset>0x0</addressOffset>
+                </cluster>
+                <cluster>
+                    <name>cluster2</name>
+                    <addressOffset>0x100</addressOffset>
+                    <register>
+                        <name>register1</name>
+                        <addressOffset>0x0</addressOffset>
+                    </register>
+                    <register>
+                        <name>register2</name>
+                        <addressOffset>0x40</addressOffset>
+                    </register>
+                </cluster>
+                <register>
+                    <name>register1</name>
+                    <addressOffset>0x200</addressOffset>
+                </register>
+                <register>
+                    <name>register2</name>
+                    <addressOffset>0x300</addressOffset>
+                </register>
+            </registers>
+        </peripheral>
+        <peripheral>
+            <name>peripheral3</name>
+            <baseAddress>0x2000</baseAddress>
+            <registers>
+                <register>
+                    <!-- This register is actually an array of registers. -->
+                    <name>register1</name>
+                    <addressOffset>0x0</addressOffset>
+                    <dim>2</dim>
+                    <dimIncrement>0x40</dimIncrement>
+                </register>
+            </registers>
+        </peripheral>
+    </peripherals>
+</device>
