@@ -51,6 +51,14 @@ impl<'a, 'input> XmlNode<'a, 'input> {
             )
         })
     }
+
+    fn children_with_tag_name(&self, tag: &str) -> Vec<XmlNode> {
+        self.0
+            .children()
+            .filter(|n| n.has_tag_name(tag))
+            .map(|n| n.into_xml_node())
+            .collect_vec()
+    }
 }
 
 /// Returns the appropriate multiplier for given character, represented by type parameter `P`
@@ -753,7 +761,7 @@ where
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
+pub fn parse_with_pointer_size<P: ArchiPtr>() -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>

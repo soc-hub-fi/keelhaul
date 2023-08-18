@@ -73,35 +73,34 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
         .transpose()
 }
 
-fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
+fn arch_ptr_size_from_env() -> anyhow::Result<Option<PtrSize>> {
     if let Ok(bytes_str) = env::var("ARCH_PTR_BYTES") {
         let ptr_size = bytes_str
             .parse::<u8>()
             .with_context(|| "ARCH_PTR_BYTES")
             .unwrap()
             .try_into()?;
-        info!("Selected ptr size: {:?}", ptr_size);
-        Ok(ptr_size)
+        info!("Pointer size is overriden with: {:?}", ptr_size);
+        Ok(Some(ptr_size))
     } else {
-        warn!("ARCH_PTR_BYTES not specified, assuming 4-byte addressable platform (32-bit)");
-        Ok(PtrSize::U32)
+        Ok(None)
     }
 }
 
 fn parse_registers_u8() -> anyhow::Result<Registers<u8>> {
-    Ok(register_test_generator::parse::<u8>()?)
+    Ok(register_test_generator::parse_with_pointer_size::<u8>()?)
 }
 
 fn parse_registers_u16() -> anyhow::Result<Registers<u16>> {
-    Ok(register_test_generator::parse::<u16>()?)
+    Ok(register_test_generator::parse_with_pointer_size::<u16>()?)
 }
 
 fn parse_registers_u32() -> anyhow::Result<Registers<u32>> {
-    Ok(register_test_generator::parse::<u32>()?)
+    Ok(register_test_generator::parse_with_pointer_size::<u32>()?)
 }
 
 fn parse_registers_u64() -> anyhow::Result<Registers<u64>> {
-    Ok(register_test_generator::parse::<u64>()?)
+    Ok(register_test_generator::parse_with_pointer_size::<u64>()?)
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -127,21 +126,29 @@ pub fn main() -> anyhow::Result<()> {
 
     let mut file_output = get_output_file();
     let test_cases = match arch_ptr_size {
-        PtrSize::U8 => {
-            let registers = parse_registers_u8()?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U16 => {
-            let registers = parse_registers_u16()?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U32 => {
-            let registers = parse_registers_u32()?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U64 => {
-            let registers = parse_registers_u64()?;
-            TestCases::from_registers(&registers, &test_cfg)
+        Some(ptr_size) => match ptr_size {
+            PtrSize::U8 => {
+                let registers = parse_registers_u8()?;
+                TestCases::from_registers(&registers, &test_cfg)
+            }
+            PtrSize::U16 => {
+                let registers = parse_registers_u16()?;
+                TestCases::from_registers(&registers, &test_cfg)
+            }
+            PtrSize::U32 => {
+                let registers = parse_registers_u32()?;
+                TestCases::from_registers(&registers, &test_cfg)
+            }
+            PtrSize::U64 => {
+                let registers = parse_registers_u64()?;
+                TestCases::from_registers(&registers, &test_cfg)
+            }
+        },
+        None => {
+            //
+            //let registers = register_test_generator::parse()?;
+            unimplemented!()
+            //TestCases::from_registers(&registers, &test_cfg)
         }
     }?;
 
