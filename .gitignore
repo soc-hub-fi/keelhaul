@@ -7,3 +7,4 @@ target/**
 !test16.svd
 !test32.svd
 !test64.svd
+temp/*

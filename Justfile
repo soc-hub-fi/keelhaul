@@ -2,6 +2,17 @@
 default:
     @just --list --unsorted
 
+test-generator:
+    # TODO: allow override of output file name
+    -SVD_PATH=$PWD/data/svd/test64.svd OUTPUT_PATH=$PWD/temp/ cargo build --release
+    mv $PWD/temp/register_selftest.rs $PWD/temp/tests64.rs
+    -SVD_PATH=$PWD/data/svd/test32.svd OUTPUT_PATH=$PWD/temp/ cargo build --release
+    mv $PWD/temp/register_selftest.rs $PWD/temp/tests32.rs
+    -SVD_PATH=$PWD/data/svd/test16.svd OUTPUT_PATH=$PWD/temp/ cargo build --release
+    mv $PWD/temp/register_selftest.rs $PWD/temp/tests16.rs
+    -SVD_PATH=$PWD/data/svd/test8.svd OUTPUT_PATH=$PWD/temp/ cargo build --release
+    mv $PWD/temp/register_selftest.rs $PWD/temp/tests8.rs
+
 build:
     cargo build --example=run_every_test
 
