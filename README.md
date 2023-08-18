@@ -25,8 +25,10 @@ Set following environment variables.
     - You must separate multiple options using comma `,`.
 - (optional) `OUTPUT_PATH`
     - Absolute path where test case source file is written to.
+- (optional) `ARCHI_PTR_SIZE`
+    - Override pointer size that is normally parsed from the SVD-file.
 
-Build testcases.
+Build test cases.
 
 `just build`
 
