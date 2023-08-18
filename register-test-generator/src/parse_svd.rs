@@ -225,7 +225,6 @@ where
     F: Fn(&str) -> Result<T, SvdParseError>,
 {
     node.maybe_find_text_by_tag_name(tag)
-        //maybe_find_text_in_node_by_tag_name(node, tag)
         .map(|(s, prop_node)| process(s).map_err(|e| err_with_pos(e, &prop_node)))
         .transpose()
 }
@@ -388,14 +387,9 @@ where
         &self,
         cluster_node: &XmlNode,
     ) -> Result<Self, PositionalError<SvdParseError>> {
-        let cluster_name = cluster_node
-            .find_text_by_tag_name("name")?
-            //find_text_in_node_by_tag_name(cluster_node, "name")?
-            .0
-            .to_owned();
+        let cluster_name = cluster_node.find_text_by_tag_name("name")?.0.to_owned();
         let (cluster_offset_str, cluster_offset_node) =
             cluster_node.find_text_by_tag_name("addressOffset")?;
-        //find_text_in_node_by_tag_name(cluster_node, "addressOffset")?;
         let cluster_offset = parse_nonneg_int(cluster_offset_str)
             .map_err(|e| err_with_pos(e, &cluster_offset_node))?;
 
