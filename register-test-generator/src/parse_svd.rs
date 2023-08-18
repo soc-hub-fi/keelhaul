@@ -306,10 +306,11 @@ impl RegPropGroupBuilder {
     pub(crate) fn build(
         self,
         reg_path: &str,
+        arch_ptr_size: PtrSize,
     ) -> Result<RegisterPropertiesGroup, IncompatibleTypesError> {
         let value_size = self.size.unwrap_or_else(|| {
-            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = u32");
-            PtrSize::U32
+            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {arch_ptr_size}");
+            arch_ptr_size
         });
         let access = self.access.unwrap_or_else(|| {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
@@ -477,7 +478,7 @@ where
         .properties
         .clone_and_update_from_node(&register_node)?;
     let properties = properties
-        .build(&reg_path)
+        .build(&reg_path, P::ptr_size())
         .map_err(|e| err_with_pos(e, &register_node))?;
 
     let addr = AddrRepr::<P>::new(
