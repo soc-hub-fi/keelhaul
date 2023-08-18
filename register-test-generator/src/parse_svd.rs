@@ -696,17 +696,8 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    // TODO: remove panic, use error
-    // TODO: remove path_svd
-    let svd_path = env::var("SVD_PATH").unwrap_or_else(|_| {
-        env::var("PATH_SVD").map_or_else(
-            |err| panic!("PATH_SVD or SVD_PATH must be set: {err}"),
-            |p| {
-                warn!("PATH_SVD is under threat of deprecation, use SVD_PATH instead");
-                p
-            },
-        )
-    });
+    let svd_path = env::var("SVD_PATH")
+        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?;
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =

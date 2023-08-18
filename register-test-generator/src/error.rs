@@ -1,4 +1,4 @@
-use std::{convert, fmt, ops};
+use std::{convert, env::VarError, fmt, ops};
 
 use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
@@ -30,6 +30,8 @@ pub enum Error {
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
     ZeroEntries,
+    #[error("missing environment variable: {0}")]
+    MissingEnvironmentVariable(String),
 }
 
 #[derive(Error, Debug)]
