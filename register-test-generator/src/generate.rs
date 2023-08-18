@@ -1,8 +1,6 @@
 //! Generate test cases from [`model::*`] types
 
-use crate::{
-    ArchiPtr, GenerateError, PtrSize, RegValue, Register, RegisterInterface, Registers, ResetValue,
-};
+use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};

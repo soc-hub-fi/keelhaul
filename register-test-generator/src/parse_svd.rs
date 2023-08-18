@@ -4,7 +4,7 @@ use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
     Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, NotImplementedError,
     PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterInterface, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
