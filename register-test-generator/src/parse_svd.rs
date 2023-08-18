@@ -2,9 +2,9 @@
 
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
-    Error, IncompatibleTypesError, ItemFilter, NotImplementedError, PositionalError, Protection,
-    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
-    Registers, ResetValue, SvdParseError,
+    Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, NotImplementedError,
+    PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    RegisterInterface, RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -439,25 +439,20 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    let name = register_node
-        .find_text_by_tag_name("name")?
-        //find_text_in_node_by_tag_name(&register_node, "name")?
-        .0
-        .to_owned();
+    let (name, _) = register_node.find_text_by_tag_name("name")?;
     let (addr_offset_str, addr_offset_node) =
         register_node.find_text_by_tag_name("addressOffset")?;
-    //find_text_in_node_by_tag_name(&register_node, "addressOffset")?;
+
     let addr_offset =
         parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
 
-    //let reg_name = remove_illegal_characters(reg_name);
     let path = RegPath::from_components(
         parent.periph_name.clone(),
         match &parent.kind {
             RegisterParentKind::Periph => None,
             RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
         },
-        name.clone(),
+        name.to_owned(),
     );
     let reg_path = path.join("-");
 
@@ -468,7 +463,7 @@ where
 
     // FIXME: we match against only the register's name, not the path. This is not a
     // great way to exclude registers. We should match against the entire path.
-    if reg_filter.is_blocked(&name) {
+    if reg_filter.is_blocked(name) {
         info!("register {name} is was not included due to values set in PATH_EXCLUDES");
         return Ok(None);
     }
@@ -761,7 +756,7 @@ where
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-pub fn parse_with_pointer_size<P: ArchiPtr>() -> Result<Registers<P>, Error>
+pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -789,4 +784,110 @@ where
         &periph_filter,
         &syms_filter,
     )
+}
+
+fn process_peripherals(
+    peripherals_node: &XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) {
+    //let mut registers = Vec::new();
+    for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
+        /*if let Some(peripheral_registers) = process_peripheral(
+            peripheral_node.into_xml_node(),
+            periph_filter,
+            reg_filter,
+            syms_regex,
+        )? {
+            registers.extend(peripheral_registers);
+        }*/
+    }
+    unimplemented!()
+}
+
+fn process_device(
+    device_node: &XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) {
+    let architecture_size = find_architecture_size(device_node);
+    let peripherals_nodes = device_node.children_with_tag_name("peripherals");
+    assert!(
+        peripherals_nodes.len() == 1,
+        "SVD file must contains one peripherals node."
+    );
+    let peripherals_node = peripherals_nodes.first().unwrap();
+    process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex);
+}
+
+fn process_root(
+    root_node: XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) {
+    let device_nodes = root_node.children_with_tag_name("device");
+    assert!(
+        device_nodes.len() == 1,
+        "SVD file must contain one device node."
+    );
+    let device_node = device_nodes.first().unwrap();
+    process_device(device_node, periph_filter, reg_filter, syms_regex);
+}
+
+/*
+pub fn parse() -> Result<Registers<P>, Error> {
+    let svd_path: PathBuf = env::var("SVD_PATH")
+        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
+        .into();
+    let svd_content = read_file_or_panic(&svd_path);
+    let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
+    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
+    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
+    let periph_filter =
+        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
+    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
+    let syms_regex = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
+    process_root(
+        parsed.root().into_xml_node(),
+        &periph_filter,
+        &reg_filter,
+        &syms_regex,
+    );
+    unimplemented!()
+}
+*/
+
+pub fn parse_architecture_size() -> Result<PtrSize, Error> {
+    let svd_path: PathBuf = env::var("SVD_PATH")
+        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
+        .into();
+    let svd_content = read_file_or_panic(&svd_path);
+    let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
+    let root = parsed.root().into_xml_node();
+
+    let device_nodes = root.children_with_tag_name("device");
+    if device_nodes.len() != 1 {
+        return Err(Error::InvalidNodeCount {
+            node_name: "device".to_owned(),
+            expected_count: 1..=1,
+            actual_count: device_nodes.len(),
+        });
+    }
+    let device_node = device_nodes.first().unwrap();
+    let architecture_size = find_architecture_size(device_node);
+    match PtrSize::from_bit_count(architecture_size.bus_bits as u64) {
+        Some(size) => Ok(size),
+        None => Err(Error::PointerSizeNotSupported(architecture_size.bus_bits)),
+    }
 }
