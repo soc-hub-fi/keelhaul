@@ -66,6 +66,49 @@ enum ItemFilter<T: PartialEq> {
     },
 }
 
+pub(crate) trait IsAllowedOrBlocked<V> {
+    fn is_allowed(&self, value: V) -> bool;
+    fn is_blocked(&self, value: V) -> bool;
+}
+
+impl<T, V> IsAllowedOrBlocked<V> for ItemFilter<T>
+where
+    T: PartialEq + From<V>,
+    V: Into<T> + ToString + Clone,
+{
+    fn is_allowed(&self, value: V) -> bool {
+        match self {
+            Self::List {
+                white_list,
+                block_list,
+            } => {
+                // Items in block list are always blocked
+                if block_list.contains(&value.clone().into()) {
+                    return false;
+                }
+                white_list
+                    .as_ref()
+                    .map_or(true, |wl| wl.contains(&value.into()))
+            }
+            Self::Regex { allow, block } => {
+                let value_string = value.to_string();
+                let value = value_string.as_ref();
+                // Items matched by block regex are always blocked
+                if let Some(block) = block {
+                    if block.is_match(value) {
+                        return false;
+                    }
+                }
+                allow.as_ref().map_or(true, |allow| allow.is_match(value))
+            }
+        }
+    }
+
+    fn is_blocked(&self, value: V) -> bool {
+        !self.is_allowed(value)
+    }
+}
+
 impl<T: PartialEq> ItemFilter<T> {
     #[allow(clippy::use_self)]
     fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
@@ -78,42 +121,6 @@ impl<T: PartialEq> ItemFilter<T> {
     #[allow(clippy::use_self)]
     const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
-    }
-
-    fn is_allowed(&self, value: &T) -> bool
-    where
-        T: AsRef<str>,
-    {
-        match self {
-            Self::List {
-                white_list,
-                block_list,
-            } => {
-                // Items in block list are always blocked
-                if block_list.contains(value) {
-                    return false;
-                }
-                white_list.as_ref().map_or(true, |wl| wl.contains(value))
-            }
-            Self::Regex { allow, block } => {
-                // Items matched by block regex are always blocked
-                if let Some(block) = block {
-                    if block.is_match(value.as_ref()) {
-                        return false;
-                    }
-                }
-                allow
-                    .as_ref()
-                    .map_or(true, |allow| allow.is_match(value.as_ref()))
-            }
-        }
-    }
-
-    fn is_blocked(&self, value: &T) -> bool
-    where
-        T: AsRef<str>,
-    {
-        !self.is_allowed(value)
     }
 }
 
