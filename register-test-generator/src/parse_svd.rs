@@ -373,12 +373,9 @@ where
 {
     fn from_periph_node(periph_node: &XmlNode) -> Result<Self, PositionalError<SvdParseError>> {
         let (base_addr_str, base_addr_node) = periph_node.find_text_by_tag_name("baseAddress")?;
-        //find_text_in_node_by_tag_name(periph_node, "baseAddress")?;
         let base_addr =
             parse_nonneg_int(base_addr_str).map_err(|e| err_with_pos(e, &base_addr_node))?;
         let (periph_name, _) = periph_node.find_text_by_tag_name("name")?;
-        //let (periph_name, _) = find_text_in_node_by_tag_name(periph_node, "name")?;
-
         Ok(Self {
             periph_name: periph_name.to_string(),
             periph_base: base_addr,
@@ -419,10 +416,8 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
 
     fn try_from(value: &XmlNode) -> Result<Self, Self::Error> {
         let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
-        //find_text_in_node_by_tag_name(value, "dim")?;
         let dim = parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?;
         let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
-        //find_text_in_node_by_tag_name(value, "dimIncrement")?;
         let dim_increment =
             parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
         Ok(Self { dim, dim_increment })
