@@ -9,7 +9,7 @@ use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum CommonParseError {
     #[error("invalid access type in input: {0}")]
@@ -51,7 +51,10 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 #[error("CMSIS-SVD parse error --> {fname}:{err}")]
-pub struct ParseFileError<T> {
+pub struct ParseFileError<T>
+where
+    T: Clone,
+{
     fname: String,
     err: PositionalError<T>,
 }
@@ -130,19 +133,29 @@ impl fmt::Display for Position {
 
 #[derive(Error, Debug)]
 #[error("{pos}\n{err}")]
-pub struct PositionalError<T> {
+pub struct PositionalError<T>
+where
+    T: Clone,
+{
     pos: Position,
     err: T,
 }
 
-impl<T> PositionalError<T> {
+impl<T> PositionalError<T>
+where
+    T: Clone,
+{
     pub(crate) const fn with_fname(self, fname: String) -> ParseFileError<T> {
         ParseFileError { fname, err: self }
+    }
+
+    pub(crate) fn error(&self) -> T {
+        self.err.clone()
     }
 }
 
 /// Error that happened during parsing 'CMSIS-SVD'
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum SvdParseError {
     #[error("expected tag {tag:?} in element {elem_name:?}")]
@@ -167,6 +180,18 @@ pub enum SvdParseError {
     Infallible(#[from] convert::Infallible),
     #[error("could not convert from int: {0}")]
     TryFromInt(#[from] std::num::TryFromIntError),
+    #[error(
+        "SVD-file must contain {}..={} {}-nodes, contained {}", expected_count.start(), expected_count.end(), node_name, actual_count
+    )]
+    InvalidNodeCount {
+        node_name: String,
+        expected_count: RangeInclusive<usize>,
+        actual_count: usize,
+    },
+    #[error("missing environment variable: {0}")]
+    MissingEnvironmentVariable(String),
+    #[error("pointer size of {0} bits is not supported")]
+    PointerSizeNotSupported(usize),
 }
 
 impl SvdParseError {
@@ -193,7 +218,7 @@ impl SvdParseError {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum NotImplementedError {
     #[error(

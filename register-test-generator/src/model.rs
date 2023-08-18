@@ -527,7 +527,7 @@ pub enum ResetValue {
     U64 { val: u64, mask: u64 },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("types are incompatible: {0} != {1}")]
 pub struct IncompatibleTypesError(PtrSize, PtrSize);

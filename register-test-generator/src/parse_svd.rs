@@ -503,17 +503,10 @@ where
     let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
 
     let mut registers = Vec::new();
-    for register_node in cluster_node
-        .0
-        .children()
-        .filter(|n| n.has_tag_name("register"))
-    {
-        if let Some(register) = process_register(
-            &current_parent,
-            register_node.into_xml_node(),
-            reg_filter,
-            syms_regex,
-        )? {
+    for register_node in cluster_node.children_with_tag_name("register") {
+        if let Some(register) =
+            process_register(&current_parent, register_node, reg_filter, syms_regex)?
+        {
             registers.push(register);
         }
     }
@@ -539,11 +532,7 @@ where
         return Ok(None);
     }
 
-    let registers_nodes = periph_node
-        .0
-        .children()
-        .filter(|n| n.has_tag_name("registers"))
-        .collect_vec();
+    let registers_nodes = periph_node.children_with_tag_name("registers");
     assert!(
         registers_nodes.len() == 1,
         "SVD file peripheral node must contains one registers node."
@@ -551,29 +540,15 @@ where
     let registers_node = registers_nodes.first().unwrap();
 
     let mut registers = Vec::new();
-    for cluster_node in registers_node
-        .children()
-        .filter(|n| n.has_tag_name("cluster"))
-    {
-        if let Some(cluster_registers) = process_cluster(
-            &periph,
-            cluster_node.into_xml_node(),
-            reg_filter,
-            syms_regex,
-        )? {
+    for cluster_node in registers_node.children_with_tag_name("cluster") {
+        if let Some(cluster_registers) =
+            process_cluster(&periph, cluster_node, reg_filter, syms_regex)?
+        {
             registers.extend(cluster_registers);
         }
     }
-    for register_node in registers_node
-        .children()
-        .filter(|n| n.has_tag_name("register"))
-    {
-        if let Some(register) = process_register(
-            &periph,
-            register_node.into_xml_node(),
-            reg_filter,
-            syms_regex,
-        )? {
+    for register_node in registers_node.children_with_tag_name("register") {
+        if let Some(register) = process_register(&periph, register_node, reg_filter, syms_regex)? {
             registers.push(register);
         }
     }
@@ -588,13 +563,21 @@ struct ArchitectureSize {
 }
 
 #[must_use]
-fn find_architecture_size(device_node: &XmlNode) -> ArchitectureSize {
+fn find_architecture_size(
+    device_node: &XmlNode,
+) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
     // How many bits one address contains?
-    let address_bits = device_node
-        .0
-        .children()
-        .filter(|n| n.has_tag_name("addressUnitBits"))
-        .collect_vec();
+    let address_bits = device_node.children_with_tag_name("addressUnitBits");
+    // TODO: maybe use range "allowed_range" which can also be used with the error
+    if address_bits.len() != 1 {
+        let error = SvdParseError::InvalidNodeCount {
+            node_name: "addressUnitBits".to_owned(),
+            expected_count: 1..=1,
+            actual_count: address_bits.len(),
+        };
+        return Err(err_with_pos(error, device_node));
+    }
+
     assert!(
         address_bits.len() == 1,
         "device-node must define address width in bits once",
@@ -602,33 +585,32 @@ fn find_architecture_size(device_node: &XmlNode) -> ArchitectureSize {
     let address_bits: usize = address_bits
         .first()
         .unwrap()
+        .0
         .text()
         .unwrap()
         .parse()
         .unwrap();
+    // TODO: add error
     assert!(
         address_bits == 8,
         "{address_bits}-bit addressable architectures are not yet supported",
     );
     // How many bits one bus transaction contains?
-    let bus_bits = device_node
-        .0
-        .children()
-        .filter(|n| n.has_tag_name("width"))
-        .collect_vec();
+    let bus_bits = device_node.children_with_tag_name("width");
     assert!(
         bus_bits.len() == 1,
         "device-node must define address width in bits once",
     );
-    let bus_bits: usize = bus_bits.first().unwrap().text().unwrap().parse().unwrap();
+    let bus_bits: usize = bus_bits.first().unwrap().0.text().unwrap().parse().unwrap();
+    // TODO: add error
     assert!(
         bus_bits == 8 || bus_bits == 16 || bus_bits == 32 || bus_bits == 64,
         "{bus_bits}-bit bus width architectures are not yet supported"
     );
-    ArchitectureSize {
+    Ok(ArchitectureSize {
         address_bits,
         bus_bits,
-    }
+    })
 }
 
 /// Find registers from SVD XML-document.
@@ -643,39 +625,34 @@ where
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
 {
-    let device_nodes = parsed
-        .root()
-        .children()
-        .filter(|n| n.has_tag_name("device"))
-        .collect_vec();
-    assert!(
-        device_nodes.len() == 1,
-        "SVD file must contain one device node."
-    );
+    let root = parsed.root().into_xml_node();
+    let device_nodes = root.children_with_tag_name("device");
+    if device_nodes.len() != 1 {
+        let error = SvdParseError::InvalidNodeCount {
+            node_name: "device".to_owned(),
+            expected_count: 1..=1,
+            actual_count: device_nodes.len(),
+        };
+        return Err(err_with_pos(error, &root));
+    }
     let device_node = device_nodes.first().unwrap();
-    let architecture_size = find_architecture_size(&device_node.into_xml_node());
-
-    let peripherals_nodes = device_node
-        .children()
-        .filter(|n| n.has_tag_name("peripherals"))
-        .collect_vec();
-    assert!(
-        peripherals_nodes.len() == 1,
-        "SVD file must contains one peripherals node."
-    );
+    let architecture_size = find_architecture_size(device_node);
+    let peripherals_nodes = device_node.children_with_tag_name("peripherals");
+    if peripherals_nodes.len() != 1 {
+        let error = SvdParseError::InvalidNodeCount {
+            node_name: "peripherals".to_owned(),
+            expected_count: 1..=1,
+            actual_count: peripherals_nodes.len(),
+        };
+        return Err(err_with_pos(error, device_node));
+    }
     let peripherals_node = peripherals_nodes.first().unwrap();
 
     let mut registers = Vec::new();
-    for peripheral_node in peripherals_node
-        .children()
-        .filter(|n| n.has_tag_name("peripheral"))
-    {
-        if let Some(peripheral_registers) = process_peripheral(
-            peripheral_node.into_xml_node(),
-            periph_filter,
-            reg_filter,
-            syms_regex,
-        )? {
+    for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
+        if let Some(peripheral_registers) =
+            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
+        {
             registers.extend(peripheral_registers);
         }
     }
@@ -858,9 +835,9 @@ pub fn parse() -> Result<Registers<P>, Error> {
 }
 */
 
-pub fn parse_architecture_size() -> Result<PtrSize, Error> {
+pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
     let svd_path: PathBuf = env::var("SVD_PATH")
-        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
+        .map_err(|_err| SvdParseError::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
         .into();
     let svd_content = read_file_or_panic(&svd_path);
     let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
@@ -868,16 +845,21 @@ pub fn parse_architecture_size() -> Result<PtrSize, Error> {
 
     let device_nodes = root.children_with_tag_name("device");
     if device_nodes.len() != 1 {
-        return Err(Error::InvalidNodeCount {
+        return Err(SvdParseError::InvalidNodeCount {
             node_name: "device".to_owned(),
             expected_count: 1..=1,
             actual_count: device_nodes.len(),
         });
     }
     let device_node = device_nodes.first().unwrap();
-    let architecture_size = find_architecture_size(device_node);
+    let architecture_size = find_architecture_size(device_node).map_err(|err| {
+        // TODO: fix this
+        err.error()
+    })?;
     match PtrSize::from_bit_count(architecture_size.bus_bits as u64) {
         Some(size) => Ok(size),
-        None => Err(Error::PointerSizeNotSupported(architecture_size.bus_bits)),
+        None => Err(SvdParseError::PointerSizeNotSupported(
+            architecture_size.bus_bits,
+        )),
     }
 }
