@@ -345,13 +345,6 @@ impl RegPropGroupBuilder {
     }
 }
 
-// The presence of this pattern in the register name likely indicates that this
-// is an array register
-//
-// TODO: should use a more robust way of detecting arrays, i.e., checking the
-// fields for the reg in question
-const SVD_ARRAY_REPETITION_PATTERN: &str = "%s";
-
 enum RegisterParentKind<P: ArchiPtr> {
     Periph,
     Cluster {
@@ -482,11 +475,6 @@ where
     // great way to exclude registers. We should match against the entire path.
     if reg_filter.is_blocked(name) {
         info!("register {name} is was not included due to values set in PATH_EXCLUDES");
-        return Ok(None);
-    }
-
-    if name.contains(SVD_ARRAY_REPETITION_PATTERN) {
-        warn!("{}, skipping", NotImplementedError::SvdArray(reg_path));
         return Ok(None);
     }
 
