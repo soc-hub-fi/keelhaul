@@ -13,6 +13,7 @@ use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     env,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -513,6 +514,25 @@ where
     Ok(Some(registers))
 }
 
+fn check_node_count(
+    node: &XmlNode,
+    node_name: &str,
+    vector: &Vec<XmlNode>,
+    expected_count: RangeInclusive<usize>,
+) -> Result<(), PositionalError<SvdParseError>> {
+    let actual_count = vector.len();
+    if expected_count.contains(&actual_count) {
+        Ok(())
+    } else {
+        let error = SvdParseError::InvalidNodeCount {
+            node_name: node_name.to_owned(),
+            expected_count,
+            actual_count,
+        };
+        Err(err_with_pos(error, node))
+    }
+}
+
 fn process_peripheral<P: ArchiPtr>(
     periph_node: XmlNode,
     periph_filter: &ItemFilter<String>,
@@ -533,14 +553,7 @@ where
     }
 
     let registers_nodes = periph_node.children_with_tag_name("registers");
-    if registers_nodes.len() != 1 {
-        let error = SvdParseError::InvalidNodeCount {
-            node_name: "".to_owned(),
-            expected_count: 1..=1,
-            actual_count: registers_nodes.len(),
-        };
-        return Err(err_with_pos(error, &periph_node));
-    }
+    check_node_count(&periph_node, "registers", &registers_nodes, 1..=1)?;
     let registers_node = registers_nodes.first().unwrap();
 
     let mut registers = Vec::new();
@@ -572,14 +585,7 @@ fn find_architecture_size(
     // How many bits one address contains?
     let address_bits = device_node.children_with_tag_name("addressUnitBits");
     // TODO: maybe use range "allowed_range" which can also be used with the error
-    if address_bits.len() != 1 {
-        let error = SvdParseError::InvalidNodeCount {
-            node_name: "addressUnitBits".to_owned(),
-            expected_count: 1..=1,
-            actual_count: address_bits.len(),
-        };
-        return Err(err_with_pos(error, device_node));
-    }
+    check_node_count(device_node, "addressUnitBits", &address_bits, 1..=1)?;
 
     assert!(
         address_bits.len() == 1,
@@ -600,10 +606,7 @@ fn find_architecture_size(
     );
     // How many bits one bus transaction contains?
     let bus_bits = device_node.children_with_tag_name("width");
-    assert!(
-        bus_bits.len() == 1,
-        "device-node must define address width in bits once",
-    );
+    check_node_count(device_node, "width", &bus_bits, 1..=1)?;
     let bus_bits: usize = bus_bits.first().unwrap().0.text().unwrap().parse().unwrap();
     // TODO: add error
     assert!(
@@ -630,25 +633,11 @@ where
 {
     let root = parsed.root().into_xml_node();
     let device_nodes = root.children_with_tag_name("device");
-    if device_nodes.len() != 1 {
-        let error = SvdParseError::InvalidNodeCount {
-            node_name: "device".to_owned(),
-            expected_count: 1..=1,
-            actual_count: device_nodes.len(),
-        };
-        return Err(err_with_pos(error, &root));
-    }
+    check_node_count(&root, "device", &device_nodes, 1..=1)?;
     let device_node = device_nodes.first().unwrap();
     let architecture_size = find_architecture_size(device_node);
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
-    if peripherals_nodes.len() != 1 {
-        let error = SvdParseError::InvalidNodeCount {
-            node_name: "peripherals".to_owned(),
-            expected_count: 1..=1,
-            actual_count: peripherals_nodes.len(),
-        };
-        return Err(err_with_pos(error, device_node));
-    }
+    check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
 
     let mut registers = Vec::new();
@@ -847,6 +836,7 @@ pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
     let root = parsed.root().into_xml_node();
 
     let device_nodes = root.children_with_tag_name("device");
+    // TODO: use check_node_count
     if device_nodes.len() != 1 {
         return Err(SvdParseError::InvalidNodeCount {
             node_name: "device".to_owned(),
