@@ -619,6 +619,64 @@ fn find_architecture_size(
     })
 }
 
+fn process_peripherals<P: ArchiPtr>(
+    peripherals_node: &XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
+    let mut registers = Vec::new();
+    for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
+        if let Some(peripheral_registers) =
+            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
+        {
+            registers.extend(peripheral_registers);
+        }
+    }
+    Ok(registers)
+}
+
+fn process_device<P: ArchiPtr>(
+    device_node: &XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
+    // TODO: allow parsing here -> avoid parsing twice! -> massive refactor because of the generic P
+    // let architecture_size = find_architecture_size(device_node);
+    let peripherals_nodes = device_node.children_with_tag_name("peripherals");
+    check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
+    let peripherals_node = peripherals_nodes.first().unwrap();
+    process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex)
+}
+
+fn process_root<P: ArchiPtr>(
+    root_node: XmlNode,
+    periph_filter: &ItemFilter<String>,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+{
+    let device_nodes = root_node.children_with_tag_name("device");
+    check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
+    let device_node = device_nodes.first().unwrap();
+    process_device(device_node, periph_filter, reg_filter, syms_regex)
+}
+
 /// Find registers from SVD XML-document.
 fn find_registers<P: ArchiPtr>(
     parsed: &Document,
@@ -632,23 +690,7 @@ where
         + From<<P as TryFrom<u64>>::Error>,
 {
     let root = parsed.root().into_xml_node();
-    let device_nodes = root.children_with_tag_name("device");
-    check_node_count(&root, "device", &device_nodes, 1..=1)?;
-    let device_node = device_nodes.first().unwrap();
-    let architecture_size = find_architecture_size(device_node);
-    let peripherals_nodes = device_node.children_with_tag_name("peripherals");
-    check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
-    let peripherals_node = peripherals_nodes.first().unwrap();
-
-    let mut registers = Vec::new();
-    for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
-        if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
-        {
-            registers.extend(peripheral_registers);
-        }
-    }
-
+    let registers = process_root(root, reg_filter, periph_filter, syms_regex)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
@@ -744,88 +786,6 @@ where
         &syms_filter,
     )
 }
-
-fn process_peripherals(
-    peripherals_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
-) {
-    //let mut registers = Vec::new();
-    for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
-        /*if let Some(peripheral_registers) = process_peripheral(
-            peripheral_node.into_xml_node(),
-            periph_filter,
-            reg_filter,
-            syms_regex,
-        )? {
-            registers.extend(peripheral_registers);
-        }*/
-    }
-    unimplemented!()
-}
-
-fn process_device(
-    device_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
-) {
-    let architecture_size = find_architecture_size(device_node);
-    let peripherals_nodes = device_node.children_with_tag_name("peripherals");
-    assert!(
-        peripherals_nodes.len() == 1,
-        "SVD file must contains one peripherals node."
-    );
-    let peripherals_node = peripherals_nodes.first().unwrap();
-    process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex);
-}
-
-fn process_root(
-    root_node: XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
-) {
-    let device_nodes = root_node.children_with_tag_name("device");
-    assert!(
-        device_nodes.len() == 1,
-        "SVD file must contain one device node."
-    );
-    let device_node = device_nodes.first().unwrap();
-    process_device(device_node, periph_filter, reg_filter, syms_regex);
-}
-
-/*
-pub fn parse() -> Result<Registers<P>, Error> {
-    let svd_path: PathBuf = env::var("SVD_PATH")
-        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
-        .into();
-    let svd_content = read_file_or_panic(&svd_path);
-    let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
-    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
-    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let periph_filter =
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
-    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
-    let syms_regex = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
-    process_root(
-        parsed.root().into_xml_node(),
-        &periph_filter,
-        &reg_filter,
-        &syms_regex,
-    );
-    unimplemented!()
-}
-*/
 
 pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
     let svd_path: PathBuf = env::var("SVD_PATH")
