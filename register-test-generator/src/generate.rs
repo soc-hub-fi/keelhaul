@@ -1,6 +1,8 @@
 //! Generate test cases from [`model::*`] types
 
-use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{
+    ArchiPtr, GenerateError, PtrSize, RegValue, Register, RegisterInterface, Registers, ResetValue,
+};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
@@ -52,7 +54,7 @@ fn gen_preamble(config: &TestConfig) -> TokenStream {
 
     // Generate an error variant for all test case kinds
     let error_variant_defs: TokenStream = RegTestKind::iter()
-        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size))
+        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size()))
         .collect();
 
     quote! {
@@ -243,6 +245,10 @@ impl TestConfig {
     pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
         self.on_fail = on_fail;
         Ok(self)
+    }
+
+    pub fn archi_ptr_size(&self) -> PtrSize {
+        self.archi_ptr_size
     }
 }
 
