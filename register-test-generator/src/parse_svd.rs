@@ -4,7 +4,7 @@
 
 use crate::{
     read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
-    Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, NotImplementedError,
+    DimIndex, Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, NotImplementedError,
     PositionalError, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
     RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
 };
@@ -403,30 +403,94 @@ where
 
 impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
     type Error = PositionalError<SvdParseError>;
-
     fn try_from(value: &XmlNode) -> Result<Self, Self::Error> {
-        let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
-        let dim = parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?;
-        let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
-        let dim_increment =
-            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?;
-        let dim_index = match value.maybe_find_text_by_tag_name("dimIndex") {
-            Some(index) => {
-                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
-                Some(a as usize)
-            }
-            None => None,
+        let dim = {
+            let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
+            parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?
         };
-        let dim_name = match value.maybe_find_text_by_tag_name("dimName") {
-            Some(name) => Some(name.0).map(str::to_string),
-            None => None,
+        let dim_increment = {
+            let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
+            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
         };
-        let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
-            Some(index) => {
-                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
-                Some(a as usize)
-            }
-            None => None,
+        let dim_index = {
+            let dim_index = match value.maybe_find_text_by_tag_name("dimIndex") {
+                Some((index, _)) => {
+                    let index = index.trim();
+                    let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
+                    let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
+                    let regex_listed = Regex::new(r"^[_0-9a-zA-Z]+(,\s*[_0-9a-zA-Z]+)+$").unwrap();
+                    let dim_index = if regex_numbered.is_match(index) {
+                        let regex = Regex::new(r"^(?P<start>[0-9]+)\-(?P<end>[0-9]+)$").unwrap();
+                        if let Some(captures) = regex.captures(index) {
+                            // TODO: use error
+                            let start: usize = captures
+                                .name("start")
+                                .expect("could not find dimension index range start")
+                                .as_str()
+                                .parse()
+                                .unwrap();
+                            // TODO: use error
+                            let end: usize = captures
+                                .name("end")
+                                .expect("could not find dimension index range end")
+                                .as_str()
+                                .parse()
+                                .unwrap();
+                            DimIndex::NumberRange(start..=end)
+                        } else {
+                            // TODO: use error
+                            panic!("asd");
+                        }
+                    } else if regex_lettered.is_match(index) {
+                        let regex = Regex::new(r"").unwrap();
+                        if let Some(captures) = regex.captures(index) {
+                            // TODO: use error
+                            let start: char =
+                                captures.name("start").expect("").as_str().parse().unwrap();
+                            // TODO: use error
+                            let end: char =
+                                captures.name("end").expect("").as_str().parse().unwrap();
+                            DimIndex::LetterRange(start..=end)
+                        } else {
+                            // TODO: use error
+                            panic!("asd");
+                        }
+                    } else if regex_listed.is_match(index) {
+                        let parts = index
+                            .split(',')
+                            .map(|s| s.trim())
+                            .map(|s| s.to_owned())
+                            .collect_vec();
+                        DimIndex::List(parts)
+                    } else {
+                        // TODO: use error
+                        // error: not supported dimIndex format: {}
+                        panic!("asd");
+                    };
+                    Some(dim_index)
+                }
+                None => None,
+            };
+            dim_index
+        };
+        let dim_name = {
+            value
+                .maybe_find_text_by_tag_name("dimName")
+                .map(|name| name.0.to_owned())
+        };
+        let dim_array_index = {
+            // TODO: this is XML-element
+            None
+            /*
+            let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
+                Some(index) => {
+                    let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
+                    Some(a as usize)
+                }
+                None => None,
+            };
+            dim_array_index
+            */
         };
         Ok(Self {
             dim,
@@ -436,105 +500,6 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
             dim_array_index,
         })
     }
-}
-
-fn process_register<P: ArchiPtr>(
-    parent: &RegisterParent<P>,
-    register_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
-) -> Result<Option<Register<P>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-{
-    let (name, _) = register_node.find_text_by_tag_name("name")?;
-    let (addr_offset_str, addr_offset_node) =
-        register_node.find_text_by_tag_name("addressOffset")?;
-
-    let addr_offset =
-        parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?;
-
-    let path = RegPath::from_components(
-        parent.periph_name.clone(),
-        match &parent.kind {
-            RegisterParentKind::Periph => None,
-            RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
-        },
-        name.to_owned(),
-    );
-    let reg_path = path.join("-");
-
-    if syms_regex.is_blocked(&reg_path) {
-        info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
-        return Ok(None);
-    }
-
-    // FIXME: we match against only the register's name, not the path. This is not a
-    // great way to exclude registers. We should match against the entire path.
-    if reg_filter.is_blocked(name) {
-        info!("register {name} is was not included due to values set in PATH_EXCLUDES");
-        return Ok(None);
-    }
-
-    let properties = parent
-        .properties
-        .clone_and_update_from_node(&register_node)?;
-    let properties = properties
-        .build(&reg_path, P::ptr_size())
-        .map_err(|e| err_with_pos(e, &register_node))?;
-
-    let addr = AddrRepr::<P>::new(
-        parent.periph_base.clone(),
-        match &parent.kind {
-            RegisterParentKind::Periph => None,
-            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
-        },
-        addr_offset,
-    );
-    let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
-    if let Some(dimensions) = dimensions {
-        // TODO: add support for register arrays
-        warn!(
-            "array has {} registers with increment of {}",
-            dimensions.dim, dimensions.dim_increment
-        );
-        warn!("arrays are not supported");
-        return Ok(None);
-    }
-
-    let register = Register {
-        path,
-        addr,
-        properties,
-        dimensions,
-    };
-    Ok(Some(register))
-}
-
-fn process_cluster<P: ArchiPtr>(
-    parent: &RegisterParent<P>,
-    cluster_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
-) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-{
-    let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
-
-    let mut registers = Vec::new();
-    for register_node in cluster_node.children_with_tag_name("register") {
-        if let Some(register) =
-            process_register(&current_parent, register_node, reg_filter, syms_regex)?
-        {
-            registers.push(register);
-        }
-    }
-    Ok(Some(registers))
 }
 
 fn check_node_count(
@@ -547,13 +512,187 @@ fn check_node_count(
     if expected_count.contains(&actual_count) {
         Ok(())
     } else {
+        let node_name = node_name.to_owned();
         let error = SvdParseError::InvalidNodeCount {
-            node_name: node_name.to_owned(),
+            node_name,
             expected_count,
             actual_count,
         };
         Err(err_with_pos(error, node))
     }
+}
+
+fn process_registers<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
+    register_node: XmlNode,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
+{
+    let name = {
+        let (name, _) = register_node.find_text_by_tag_name("name")?;
+        name.to_owned()
+    };
+    let addr = {
+        let address_base = parent.periph_base.clone();
+        let address_cluster = match &parent.kind {
+            RegisterParentKind::Periph => None,
+            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
+        };
+        let address_offset = {
+            let (addr_offset_str, addr_offset_node) =
+                register_node.find_text_by_tag_name("addressOffset")?;
+            parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?
+        };
+        AddrRepr::new(address_base, address_cluster, address_offset)
+    };
+    let mut registers = Vec::new();
+    let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
+    if let Some(dimensions) = dimensions {
+        // Found a list or an array of registers.
+        for i in 0..dimensions.dim {
+            // Solve which string is used to replace the placeholder.
+            let index = {
+                if let Some(dim_index) = dimensions.dim_index.clone() {
+                    // Index format is defined by the user.
+                    dim_index.get(i as usize)
+                } else {
+                    // Index format is not defined by the user. Just use a number.
+                    i.to_string()
+                }
+            };
+            // Solve the name after replacing the placeholder.
+            let subname = {
+                // Choose which string to use as the base name.
+                let dim_name = if let Some(dim_name) = dimensions.dim_name.clone() {
+                    dim_name
+                } else {
+                    name.to_owned()
+                };
+                if dim_name.contains("%s") {
+                    dim_name.replace("%s", &index)
+                } else {
+                    dim_name + &index
+                }
+            };
+            // FIXME: we match against only the register's name, not the path. This is not a
+            // great way to exclude registers. We should match against the entire path.
+            if reg_filter.is_blocked(&subname) {
+                info!("register {subname} is was not included due to values set in PATH_EXCLUDES");
+                return Ok(None);
+            }
+            let path = {
+                let path = RegPath::from_components(
+                    parent.periph_name.clone(),
+                    match &parent.kind {
+                        RegisterParentKind::Periph => None,
+                        RegisterParentKind::Cluster { cluster_name, .. } => {
+                            Some(cluster_name.clone())
+                        }
+                    },
+                    subname.to_owned(),
+                );
+                let reg_path = path.join("-");
+                if syms_regex.is_blocked(&reg_path) {
+                    info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
+                    return Ok(None);
+                }
+                path
+            };
+            let address = {
+                let (address_base, address_cluster, _) = addr.components();
+                // TODO: use error
+                let offset = P::try_from(i * dimensions.dim_increment).expect(
+                    "failed to transform register array's dimension increment to pointer size",
+                );
+                AddrRepr::new(address_base, address_cluster, offset)
+            };
+            let properties = {
+                let reg_path = path.join("-");
+                parent
+                    .properties
+                    .clone_and_update_from_node(&register_node)?
+                    .build(&reg_path, P::ptr_size())
+                    .map_err(|e| err_with_pos(e, &register_node))?
+            };
+            let register = Register {
+                path,
+                addr: address,
+                properties,
+                dimensions: Some(dimensions.clone()),
+            };
+            registers.push(register);
+        }
+    } else {
+        // Found a single register.
+        let path = {
+            let path = RegPath::from_components(
+                parent.periph_name.clone(),
+                match &parent.kind {
+                    RegisterParentKind::Periph => None,
+                    RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
+                },
+                name.to_owned(),
+            );
+            let reg_path = path.join("-");
+            if syms_regex.is_blocked(&reg_path) {
+                info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
+                return Ok(None);
+            }
+            path
+        };
+        // FIXME: we match against only the register's name, not the path. This is not a
+        // great way to exclude registers. We should match against the entire path.
+        if reg_filter.is_blocked(&name) {
+            info!("register {name} is was not included due to values set in PATH_EXCLUDES");
+            return Ok(None);
+        }
+        let properties = {
+            let reg_path = path.join("-");
+            parent
+                .properties
+                .clone_and_update_from_node(&register_node)?
+                .build(&reg_path, P::ptr_size())
+                .map_err(|e| err_with_pos(e, &register_node))?
+        };
+        let register = Register {
+            path,
+            addr,
+            properties,
+            dimensions,
+        };
+        registers.push(register);
+    }
+    Ok(Some(registers))
+}
+
+fn process_cluster<P: ArchiPtr>(
+    parent: &RegisterParent<P>,
+    cluster_node: XmlNode,
+    reg_filter: &ItemFilter<String>,
+    syms_regex: &ItemFilter<String>,
+) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
+{
+    let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
+    let mut cluster_registers = Vec::new();
+    for register_node in cluster_node.children_with_tag_name("register") {
+        if let Some(registers) =
+            process_registers(&current_parent, register_node, reg_filter, syms_regex)?
+        {
+            cluster_registers.extend(registers);
+        }
+    }
+    Ok(Some(cluster_registers))
 }
 
 fn process_peripheral<P: ArchiPtr>(
@@ -566,6 +705,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
@@ -579,20 +719,19 @@ where
     check_node_count(&periph_node, "registers", &registers_nodes, 1..=1)?;
     let registers_node = registers_nodes.first().unwrap();
 
-    let mut registers = Vec::new();
+    let mut peripheral_registers = Vec::new();
     for cluster_node in registers_node.children_with_tag_name("cluster") {
-        if let Some(cluster_registers) =
-            process_cluster(&periph, cluster_node, reg_filter, syms_regex)?
-        {
-            registers.extend(cluster_registers);
+        if let Some(registers) = process_cluster(&periph, cluster_node, reg_filter, syms_regex)? {
+            peripheral_registers.extend(registers);
         }
     }
     for register_node in registers_node.children_with_tag_name("register") {
-        if let Some(register) = process_register(&periph, register_node, reg_filter, syms_regex)? {
-            registers.push(register);
+        if let Some(registers) = process_registers(&periph, register_node, reg_filter, syms_regex)?
+        {
+            peripheral_registers.extend(registers);
         }
     }
-    Ok(Some(registers))
+    Ok(Some(peripheral_registers))
 }
 
 struct ArchitectureSize {
@@ -652,6 +791,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let mut registers = Vec::new();
     for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
@@ -674,6 +814,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     // TODO: allow parsing here -> avoid parsing twice! -> massive refactor because of the generic P
     // let architecture_size = find_architecture_size(device_node);
@@ -693,6 +834,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let device_nodes = root_node.children_with_tag_name("device");
     check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
@@ -711,6 +853,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
     let registers = process_root(root, reg_filter, periph_filter, syms_regex)?;
@@ -753,6 +896,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let svd_content = read_file_or_panic(svd_path);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
@@ -785,6 +929,7 @@ where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let svd_path = env::var("SVD_PATH")
         .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?;

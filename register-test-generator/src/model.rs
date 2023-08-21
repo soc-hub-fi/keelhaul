@@ -3,6 +3,7 @@
 use core::fmt;
 use itertools::Itertools;
 use log::warn;
+use std::ops::RangeInclusive;
 use std::{hash, ops, str};
 use thiserror::Error;
 
@@ -266,6 +267,10 @@ where
             cluster,
             offset,
         }
+    }
+
+    pub fn components(&self) -> (P, Option<P>, P) {
+        (self.base.clone(), self.cluster.clone(), self.offset.clone())
     }
 
     /// Get register's absolute memory address
@@ -602,10 +607,39 @@ impl RegisterPropertiesGroup {
 }
 
 #[derive(Debug, Clone)]
+pub enum DimIndex {
+    NumberRange(RangeInclusive<usize>),
+    LetterRange(RangeInclusive<char>),
+    List(Vec<String>),
+}
+
+impl DimIndex {
+    pub fn get(&self, index: usize) -> String {
+        match self {
+            Self::NumberRange(range) => {
+                let mut range = range.clone();
+                // TODO: use error
+                range.nth(index).expect("").to_string()
+            }
+            Self::LetterRange(range) => {
+                let mut range = range.clone();
+                // TODO: use error
+                range.nth(index).expect("").to_string()
+            }
+            Self::List(list) => {
+                // TODO: use error
+                list.get(index).expect("").to_string()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RegisterDimElementGroup {
     pub dim: u64,
     pub dim_increment: u64,
-    pub dim_index: Option<usize>,
+    pub dim_index: Option<DimIndex>,
     pub dim_name: Option<String>,
+    // TODO: this is not a number
     pub dim_array_index: Option<usize>,
 }

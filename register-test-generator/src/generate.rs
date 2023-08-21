@@ -1,5 +1,7 @@
 //! Generate test cases from [`model::*`] types
 
+// TODO: maybe generate array registers under new module-level
+
 use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
