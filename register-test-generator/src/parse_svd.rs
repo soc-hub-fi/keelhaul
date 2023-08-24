@@ -399,6 +399,26 @@ where
             },
         })
     }
+
+    fn cluster_name(&self) -> Option<String> {
+        match &self.kind {
+            RegisterParentKind::Periph => None,
+            RegisterParentKind::Cluster {
+                cluster_name,
+                cluster_offset: _,
+            } => Some(cluster_name.clone()),
+        }
+    }
+
+    fn cluster_address(&self) -> Option<P> {
+        match &self.kind {
+            RegisterParentKind::Periph => None,
+            RegisterParentKind::Cluster {
+                cluster_name: _,
+                cluster_offset,
+            } => Some(cluster_offset.clone()),
+        }
+    }
 }
 
 impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
@@ -540,10 +560,7 @@ where
     };
     let addr = {
         let address_base = parent.periph_base.clone();
-        let address_cluster = match &parent.kind {
-            RegisterParentKind::Periph => None,
-            RegisterParentKind::Cluster { cluster_offset, .. } => Some(cluster_offset.clone()),
-        };
+        let address_cluster = parent.cluster_address();
         let address_offset = {
             let (addr_offset_str, addr_offset_node) =
                 register_node.find_text_by_tag_name("addressOffset")?;
@@ -589,12 +606,7 @@ where
             let path = {
                 let path = RegPath::from_components(
                     parent.periph_name.clone(),
-                    match &parent.kind {
-                        RegisterParentKind::Periph => None,
-                        RegisterParentKind::Cluster { cluster_name, .. } => {
-                            Some(cluster_name.clone())
-                        }
-                    },
+                    parent.cluster_name(),
                     subname.to_owned(),
                 );
                 let reg_path = path.join("-");
@@ -633,10 +645,7 @@ where
         let path = {
             let path = RegPath::from_components(
                 parent.periph_name.clone(),
-                match &parent.kind {
-                    RegisterParentKind::Periph => None,
-                    RegisterParentKind::Cluster { cluster_name, .. } => Some(cluster_name.clone()),
-                },
+                parent.cluster_name(),
                 name.to_owned(),
             );
             let reg_path = path.join("-");
