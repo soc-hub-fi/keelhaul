@@ -573,6 +573,9 @@ where
     if let Some(dimensions) = dimensions {
         // Found a list or an array of registers.
         for i in 0..dimensions.dim {
+            // FIXME: "test_FC_MASK[0]_0x12a106000" is not a valid Ident
+            // FIXME: array register identifier names must not include brackets.
+            continue;
             // Solve which string is used to replace the placeholder.
             let index = {
                 if let Some(dim_index) = dimensions.dim_index.clone() {
