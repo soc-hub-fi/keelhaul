@@ -573,9 +573,8 @@ where
     if let Some(dimensions) = dimensions {
         // Found a list or an array of registers.
         for i in 0..dimensions.dim {
-            // FIXME: "test_FC_MASK[0]_0x12a106000" is not a valid Ident
-            // FIXME: array register identifier names must not include brackets.
-            continue;
+            // FIXME: verify that the array register's addresses are solved correctly.
+
             // Solve which string is used to replace the placeholder.
             let index = {
                 if let Some(dim_index) = dimensions.dim_index.clone() {
@@ -600,12 +599,15 @@ where
                     dim_name + &index
                 }
             };
+            // FIXME: block WITH brackets or WITOUT brackets? maybe both?
             // FIXME: we match against only the register's name, not the path. This is not a
             // great way to exclude registers. We should match against the entire path.
             if reg_filter.is_blocked(&subname) {
                 info!("register {subname} is was not included due to values set in PATH_EXCLUDES");
                 return Ok(None);
             }
+            // Remove array brackets from the register name.
+            let subname = subname.replace(['[', ']'], "");
             let path = {
                 let path = RegPath::from_components(
                     parent.periph_name.clone(),
