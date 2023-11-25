@@ -1,7 +1,5 @@
 use std::{
-    convert,
-    env::VarError,
-    fmt,
+    convert, fmt,
     ops::{self, RangeInclusive},
 };
 
