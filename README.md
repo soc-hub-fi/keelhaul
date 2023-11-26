@@ -28,29 +28,16 @@ Use these steps to bring up support for Keelhaul in an SoC project:
 
 ## Supported environment variables
 
-Set following environment variables.
-
-- `SVD_PATH`
-- (optional) `INCLUDE_PERIPHERALS`
-  - You must give peripheral name in lowercase.
-  - You must separate peripheral names using comma `,`.
-- (optional) `EXCLUDE_PERIPHERALS`
-  - You must give peripheral name in lowercase.
-  - You must separate peripheral names using comma `,`.
-- (optional) `INCLUDE_SYMS_REGEX`
-  - **TODO**
-- (optional) `EXCLUDE_SYMS_REGEX`
-  - **TODO**
-- (optional) `INCLUDE_TEST_KINDS`
-  - Option `read` includes register read tests.
-  - Option `reset` include register reset tests.
-  - Option `read_is_reset_val` **TODO**
-  - You must give option in lowercase.
-  - You must separate multiple options using comma `,`.
-- (optional) `OUTPUT_PATH`
-  - Absolute path where test case source file is written to.
-- (optional) `ARCHI_PTR_SIZE`
-  - Override pointer size that is normally parsed from the SVD-file.
+| Variable              | Example value       | Description                          |
+| :-:                   | :-                  | :-                                   |
+| `SVD_PATH`            | $PWD/test.svd       | Source for the testable register maps |
+| `INCLUDE_PERIPHERALS` | apb_uart0,apb_uart1 | Comma separated list of peripheral identifiers to include |
+| `EXCLUDE_PERIPHERALS` | apb_uart0,apb_uart1 | Comma separated list of peripheral identifiers to exclude |
+| `INCLUDE_SYMS_REGEX`  | "^HPC.*clint|plic"  | Regex of peripherals to include |
+| `EXCLUDE_SYMS_REGEX`  | "^HPC.*clint|plic"  | Regex of peripherals to exclude |
+| `INCLUDE_TEST_KINDS`  | read,reset,read_is_reset_val | Comma separated list of test kinds to include |
+| `ARCH_PTR_BYTES`      | 8                   | Architecture width in bytes, e.g. 8 for a 64-bit processor |
+| `OUTPUT_PATH`         | "test_cases.rs"     | Absolute path where test case source file is written to |
 
 ## Further build instructions
 
