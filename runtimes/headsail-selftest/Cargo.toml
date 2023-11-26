@@ -1,0 +1,15 @@
+[package]
+name = "headsail-selftest"
+version = "0.1.0"
+authors = [
+    "Roni Hämäläinen <roni.hamalainen@tuni.fi>",
+    "Henri Lunnikivi <henri.lunnikivi@tuni.fi>",
+]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+
+[dependencies]
+register-selftest = { version = "0.1.0", path = "../../register-selftest" }
