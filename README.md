@@ -62,3 +62,8 @@ Set following environment variables.
   - `SVD_PATH=$PWD/data/test.svd just run`
 
 File with test cases can be found at `target/<debug | release>/build/register-selftest-<hash>/out/register_selftest.rs`.
+
+## Contributing
+
+We are in the process of adapting the library for more use cases across the SoC Hub project. Expect major changes to the
+project architecture. The libary is an unstable target and it may be difficult to integrate changes at this point.
