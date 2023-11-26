@@ -1,6 +1,6 @@
 //! Common types and functions for register test generator.
 
-// TODO: leave error handling to customer crate
+// TODO: leave error handling to user crate
 
 mod error;
 mod generate;
@@ -135,7 +135,7 @@ fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
     env::var(var)
         .map(|s| {
             let peripherals = s.split(sep).map(ToOwned::to_owned).collect_vec();
-            // TODO: validate that these are valid peripherals
+            // TODO: verify that these are valid peripherals
             peripherals
         })
         .ok()
