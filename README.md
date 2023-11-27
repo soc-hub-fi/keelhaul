@@ -63,6 +63,21 @@ Set following environment variables.
 
 File with test cases can be found at `target/<debug | release>/build/register-selftest-<hash>/out/register_selftest.rs`.
 
+## Citing
+
+If you intend to use this tool for an academic publication, please consider citing it:
+
+```bibtex
+@inproceedings{hamalainen2023memory,
+  title={Memory Mapped I/O Register Test Case Generator for Large Systems-on-Chip},
+  author={H{\"a}m{\"a}l{\"a}inen, Roni and Lunnikivi, Henri and H{\"a}m{\"a}l{\"a}inen, Timo},
+  booktitle={2023 IEEE Nordic Circuits and Systems Conference (NorCAS)},
+  pages={1--7},
+  year={2023},
+  organization={IEEE}
+}
+```
+
 ## Contributing
 
 We are in the process of adapting the library for more use cases across the SoC Hub project. Expect major changes to the
