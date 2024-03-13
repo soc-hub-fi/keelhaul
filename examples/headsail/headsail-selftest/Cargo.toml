@@ -12,4 +12,4 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-register-selftest = { version = "0.1.0", path = "../../register-selftest" }
+register-selftest = { version = "0.1.0", path = "../../../register-selftest" }

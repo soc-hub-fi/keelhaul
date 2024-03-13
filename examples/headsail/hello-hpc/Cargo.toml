@@ -1,0 +1,12 @@
+[package]
+name = "hello-hpc"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+panic-halt = "0.2.0"
+riscv-rt = "0.12.2"

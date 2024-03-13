@@ -1,22 +1,7 @@
-using sysbus
-
-mach create "headsail"
-
-machine LoadPlatformDescription $ORIGIN/headsail.repl
+include mach_create.resc
 
 : Disable SysCtrl on start
 sysbus.cpu_sysctrl IsHalted true
-
-emulation CreateUartPtyTerminal "term0" "/tmp/uart0" True
-emulation CreateUartPtyTerminal "term1" "/tmp/uart1" True
-connector Connect sysbus.apb_uart_0 term0
-connector Connect sysbus.apb_uart_1 term1
-
-:showAnalyzer sysbus.apb_uart_0
-:showAnalyzer sysbus.apb_uart_1
-
-machine StartGdbServer 3333 true sysbus.cpu_sysctrl
-machine StartGdbServer 3335 true sysbus.cpu_hpc
 
 sysbus LoadELF $bin false true sysbus.cpu_hpc
 
