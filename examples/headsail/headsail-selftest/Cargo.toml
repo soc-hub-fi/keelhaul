@@ -9,7 +9,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[workspace]
-
 [dependencies]
+headsail-bsp = { version = "0.1.0", path = "../headsail-bsp", features = [
+    "sysctrl-rt",
+    "panic-uart",
+] }
 register-selftest = { version = "0.1.0", path = "../../../register-selftest" }

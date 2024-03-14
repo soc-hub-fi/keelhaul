@@ -1,16 +1,6 @@
 [build]
 target = "riscv32imc-unknown-none-elf"
 
-[profile.dev]
-opt-level = "s"
-
-[profile.release]
-opt-level = "s"
-strip = true
-panic = "abort"
-
-[profile.test]
-opt-level = "s"
-
-[profile.bench]
-opt-level = "s"
+[target.riscv32imc-unknown-none-elf]
+runner = "./renode.sh"
+rustflags = ["-C", "link-arg=-Tmemory.x", "-C", "link-arg=-Tlink.x"]
