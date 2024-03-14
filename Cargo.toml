@@ -1,5 +1,6 @@
 [workspace]
 members = ["register-test-generator", "register-selftest"]
+resolver = "2"
 
 [workspace.dependencies]
 json = "0.12"
