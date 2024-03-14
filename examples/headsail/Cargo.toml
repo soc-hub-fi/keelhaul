@@ -1,0 +1,6 @@
+[workspace]
+members = ["headsail-bsp", "headsail-selftest", "hello-hpc", "hello-sysctrl"]
+resolver = "2"
+
+[profile.release]
+debug = true
