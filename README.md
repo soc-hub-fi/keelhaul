@@ -33,8 +33,8 @@ Use these steps to bring up support for Keelhaul in an SoC project:
 | `SVD_PATH`            | $PWD/test.svd       | Source for the testable register maps |
 | `INCLUDE_PERIPHERALS` | apb_uart0,apb_uart1 | Comma separated list of peripheral identifiers to include |
 | `EXCLUDE_PERIPHERALS` | apb_uart0,apb_uart1 | Comma separated list of peripheral identifiers to exclude |
-| `INCLUDE_SYMS_REGEX`  | "^HPC.*clint|plic"  | Regex of peripherals to include |
-| `EXCLUDE_SYMS_REGEX`  | "^HPC.*clint|plic"  | Regex of peripherals to exclude |
+| `INCLUDE_SYMS_REGEX`  | "^HPC.*clint\|plic"  | Regex of peripherals to include |
+| `EXCLUDE_SYMS_REGEX`  | "^HPC.*clint\|plic"  | Regex of peripherals to exclude |
 | `INCLUDE_TEST_KINDS`  | read,reset,read_is_reset_val | Comma separated list of test kinds to include |
 | `ARCH_PTR_BYTES`      | 8                   | Architecture width in bytes, e.g. 8 for a 64-bit processor |
 | `OUTPUT_PATH`         | "test_cases.rs"     | Absolute path where test case source file is written to |
