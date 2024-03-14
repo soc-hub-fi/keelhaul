@@ -1,0 +1,9 @@
+include $ORIGIN/1_sysctrl.resc
+
+macro reset
+"""
+    sysbus LoadELF $bin false true sysbus.cpu_sysctrl
+"""
+
+runMacro $reset;
+start;

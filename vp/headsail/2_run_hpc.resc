@@ -1,0 +1,9 @@
+include $ORIGIN/1_hpc.resc
+
+macro reset
+"""
+    sysbus LoadELF $bin false true sysbus.cpu_hpc
+"""
+
+runMacro $reset;
+start;

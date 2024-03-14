@@ -1,24 +1,11 @@
-cpu_hpc: CPU.RiscV64 @ sysbus
-    cpuType: "rv64imac"
-    hartId: 0
-    timeProvider: empty
-
-cpu_sysctrl: CPU.IbexRiscV32 @ sysbus
-    // CPU ISA is actually rv32em but SW & VP support for that is sketchy
-    cpuType: "rv32imc"
-    timeProvider: empty
-
 mem_dsp_0: Memory.MappedMemory @ sysbus 0xFF810000
-    size: 0x00010000
+    size: 0x10000
 
 mem_dsp_1: Memory.MappedMemory @ sysbus 0xFF830000
-    size: 0x00010000
+    size: 0x10000
 
 hpc_bootram: Memory.MappedMemory @ sysbus 0x10000
     size: 0x8000
-
-sdram: Memory.MappedMemory @ sysbus 0x10000000
-    size: 0x70000000
 
 ram_0: Memory.MappedMemory @ sysbus 0x90080000
     size: 0x8000

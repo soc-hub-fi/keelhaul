@@ -1,0 +1,5 @@
+include $ORIGIN/0_mach_create.resc
+
+machine LoadPlatformDescription $ORIGIN/sysctrl.repl
+
+machine StartGdbServer 3333 true sysbus.cpu_sysctrl

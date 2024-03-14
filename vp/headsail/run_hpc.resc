@@ -1,8 +1,0 @@
-include mach_create.resc
-
-: Disable SysCtrl on start
-sysbus.cpu_sysctrl IsHalted true
-
-sysbus LoadELF $bin false true sysbus.cpu_hpc
-
-start;

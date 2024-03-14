@@ -1,0 +1,7 @@
+cpu_hpc: CPU.RiscV64 @ sysbus
+    cpuType: "rv64imac"
+    hartId: 0
+    timeProvider: empty
+
+sdram: Memory.MappedMemory @ sysbus 0x10000000
+    size: 0x70000000

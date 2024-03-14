@@ -1,0 +1,11 @@
+cpu_sysctrl: CPU.IbexRiscV32 @ sysbus
+    // CPU ISA is actually rv32em but SW & VP support for that is sketchy
+    cpuType: "rv32imc"
+    timeProvider: empty
+    allowUnalignedAccesses: false
+
+sysctrl_bank_0: Memory.MappedMemory @ sysbus 0x1c000000
+    size: 0x8000
+
+sysctrl_bank_1: Memory.MappedMemory @ sysbus 0x1c008000
+    size: 0x8000
