@@ -1,5 +1,0 @@
-include $ORIGIN/0_mach_create.resc
-
-machine LoadPlatformDescription $ORIGIN/hpc.repl
-
-machine StartGdbServer 3335 true sysbus.cpu_hpc
