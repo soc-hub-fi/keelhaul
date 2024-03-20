@@ -2,22 +2,9 @@
 #![no_main]
 
 use core::{mem, ptr};
+use headsail_bsp::{rt::entry, sprintln};
 
-// TODO: replace this by bringing in a platform-specific println implementation
-macro_rules! println {
-    () => {
-        todo!()
-    };
-    ($($arg:tt)*) => {
-        todo!()
-    };
-}
-
-// TODO: replace with a platform-specific panic implementation
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+// TODO: add exception handler
 
 mod constants {
     pub(crate) const CHECK_FOR_POINTER_ALIGNMENT: bool = false;
@@ -62,11 +49,11 @@ mod memorymap {
 use memorymap::*;
 
 fn align_error(uid: &str, addr: usize) {
-    println!(
-        "[ERROR] {uid} at 0x{addr:x} is not {}-byte aligned",
+    sprintln!(
+        "[ERROR] {} at 0x{:x} is not {}-byte aligned",
+        uid,
+        addr,
         usize::BITS / 8,
-        addr = addr,
-        uid = uid,
     );
 }
 
@@ -76,11 +63,11 @@ fn modify(reg: *mut u32, mask: u32) {
     unsafe { ptr::write_volatile(reg, val) };
 }
 
-#[no_mangle]
-unsafe fn main() -> i32 {
-    println!("[test memorymap-selftest]");
+#[entry]
+fn main() -> ! {
+    sprintln!("[{}]", env!("CARGO_PKG_NAME"));
 
-    println!("Activate everything...");
+    sprintln!("Activate everything...");
     modify(SS_RESET_EN, 0xffff_ffff);
     modify(
         SS_CLK_CTRL1,
@@ -104,20 +91,20 @@ unsafe fn main() -> i32 {
         SS_CLK_CTRL3,
         (CLK_CTRL_SEL_CKA_BIT | CLK_CTRL_CLKENA_BIT) << PERIPH_CLK_CTRL3_FIELD_OFFSET,
     );
-    println!("Done");
+    sprintln!("Done");
 
     let cases = &register_selftest::TEST_CASES;
     let test_count = cases.len();
-    println!("Test count: {}", test_count);
+    sprintln!("Test count: {}", test_count);
 
     // Minimize output for CI
     let min_output: bool = MINIMIZE_OUTPUT_ENV != "0";
 
     for (case_idx, case) in cases.iter().enumerate() {
         if min_output {
-            println!("{}", case_idx + 1);
+            sprintln!("{}", case_idx + 1);
         } else {
-            println!(
+            sprintln!(
                 "0x{:x} := {} ({}/{})...",
                 case.addr,
                 case.uid,
@@ -134,10 +121,10 @@ unsafe fn main() -> i32 {
         if (case.function)().is_err() {
             panic!();
         }
-        println!("> OK");
+        sprintln!("> OK");
     }
 
-    println!("[ok]");
+    sprintln!("[ok]");
 
-    0
+    loop {}
 }

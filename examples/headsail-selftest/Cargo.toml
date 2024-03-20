@@ -7,9 +7,16 @@ authors = [
 ]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [workspace]
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
+headsail-bsp = { version = "0.1.0", path = "../../vendor/headsail-vp/examples/headsail-bsp", features = [
+    "sysctrl-rt",
+    "panic-uart",
+] }
 register-selftest = { version = "0.1.0", path = "../../register-selftest" }
+
+[profile.release]
+debug = true
