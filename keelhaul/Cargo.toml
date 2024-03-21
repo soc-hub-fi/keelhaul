@@ -1,5 +1,5 @@
 [package]
-name = "register-test-generator"
+name = "keelhaul"
 version = "0.1.0"
 authors = [
     "Roni Hämäläinen <roni.hamalainen@tuni.fi>",
