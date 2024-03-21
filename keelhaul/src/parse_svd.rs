@@ -875,13 +875,15 @@ where
     let mut addresses = HashMap::new();
     for register in &registers {
         peripherals.insert(register.path.periph.clone());
-        if let Entry::Vacant(entry) = addresses.entry(register.full_addr().unwrap()) {
+        let addr: P = register.full_addr().unwrap();
+        if let Entry::Vacant(entry) = addresses.entry(addr.clone()) {
             entry.insert(register.path.join("-"));
         } else {
-            let address_holder = addresses
-                .get(&register.full_addr().unwrap())
+            let reg2 = addresses
+                .get(&addr)
                 .expect("failed to find register name by key");
-            warn!("register {}'s full address is already taken by register {address_holder}. This register is ignored.", register.path.join("-"));
+            warn!("Address for register {reg}@{addr:#x?} is already registered for another register {reg2}. {reg} is ignored.",
+                reg = register.path.join("-"));
         }
     }
 
@@ -928,6 +930,13 @@ where
     Ok(registers)
 }
 
+fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
+    let svd_path = env::var(var)?;
+    Ok(env::current_dir()
+        .expect("cannot access current working dir")
+        .join(svd_path))
+}
+
 /// Parse SVD-file.
 ///
 /// # Panics
@@ -945,8 +954,7 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    let svd_path = env::var("SVD_PATH")
-        .map_err(|_err| Error::MissingEnvironmentVariable("SVD_PATH".to_owned()))?;
+    let svd_path = read_path_from_env("SVD_PATH")?;
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =
@@ -961,18 +969,11 @@ where
         .transpose()?;
     let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
-    parse_svd_into_registers(
-        &PathBuf::from(svd_path),
-        &reg_filter,
-        &periph_filter,
-        &syms_filter,
-    )
+    parse_svd_into_registers(&svd_path, &reg_filter, &periph_filter, &syms_filter)
 }
 
 pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
-    let svd_path: PathBuf = env::var("SVD_PATH")
-        .map_err(|_err| SvdParseError::MissingEnvironmentVariable("SVD_PATH".to_owned()))?
-        .into();
+    let svd_path = read_path_from_env("SVD_PATH").unwrap();
     let svd_content = read_file_or_panic(&svd_path);
     let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
     let root = parsed.root().into_xml_node();
