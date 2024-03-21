@@ -1,10 +1,4 @@
 **/target/
-*.svd
 *.json
 *.lock
-!test.svd
-!test8.svd
-!test16.svd
-!test32.svd
-!test64.svd
 temp/*
