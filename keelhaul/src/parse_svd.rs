@@ -875,13 +875,15 @@ where
     let mut addresses = HashMap::new();
     for register in &registers {
         peripherals.insert(register.path.periph.clone());
-        if let Entry::Vacant(entry) = addresses.entry(register.full_addr().unwrap()) {
+        let addr: P = register.full_addr().unwrap();
+        if let Entry::Vacant(entry) = addresses.entry(addr.clone()) {
             entry.insert(register.path.join("-"));
         } else {
-            let address_holder = addresses
-                .get(&register.full_addr().unwrap())
+            let reg2 = addresses
+                .get(&addr)
                 .expect("failed to find register name by key");
-            warn!("register {}'s full address is already taken by register {address_holder}. This register is ignored.", register.path.join("-"));
+            warn!("Address for register {reg}@{addr:#x?} is already registered for another register {reg2}. {reg} is ignored.",
+                reg = register.path.join("-"));
         }
     }
 
