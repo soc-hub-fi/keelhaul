@@ -3,4 +3,10 @@ target = "riscv32imc-unknown-none-elf"
 
 [target.riscv32imc-unknown-none-elf]
 runner = "./renode.sh"
-rustflags = ["-C", "link-arg=-Tmemory.x", "-C", "link-arg=-Tlink.x"]
+rustflags = [
+    "-C",
+    "link-arg=-Tmemory.x",
+    "-C",
+    "link-arg=-Tlink.x",
+    "-Zstack-protector=basic",
+]
