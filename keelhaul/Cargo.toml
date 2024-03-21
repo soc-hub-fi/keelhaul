@@ -13,12 +13,12 @@ edition = "2021"
 json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-roxmltree = { version = "0.18", features = ["positions"] }
-itertools = "0.10"
+roxmltree = { version = "0.19", features = ["positions"] }
+itertools = "0.12"
 regex = "1.7.1"
 lazy_static = "1.4.0"
 quote = "1.0.26"
 proc-macro2 = "1.0.52"
 num = "0.4.0"
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { version = "0.26", features = ["derive"] }
 fs-err = "2.9.0"
