@@ -4,11 +4,10 @@ mod logger;
 
 use anyhow::{Context, Error};
 use fs_err::{self as fs, File};
-use log::{info, LevelFilter};
-use register_test_generator::{
-    parse_architecture_size, ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases,
-    TestConfig,
+use keelhaul::{
+    parse_architecture_size, ParseTestKindError, PtrSize, RegTestKind, TestCases, TestConfig,
 };
+use log::{info, LevelFilter};
 use std::{
     collections::HashSet,
     env,
@@ -88,22 +87,6 @@ fn arch_ptr_size_from_env() -> anyhow::Result<Option<PtrSize>> {
     }
 }
 
-fn parse_registers_u8() -> anyhow::Result<Registers<u8>> {
-    Ok(register_test_generator::parse::<u8>()?)
-}
-
-fn parse_registers_u16() -> anyhow::Result<Registers<u16>> {
-    Ok(register_test_generator::parse::<u16>()?)
-}
-
-fn parse_registers_u32() -> anyhow::Result<Registers<u32>> {
-    Ok(register_test_generator::parse::<u32>()?)
-}
-
-fn parse_registers_u64() -> anyhow::Result<Registers<u64>> {
-    Ok(register_test_generator::parse::<u64>()?)
-}
-
 fn solve_architecture_size() -> Result<PtrSize, Error> {
     match arch_ptr_size_from_env()? {
         Some(size) => Ok(size),
@@ -137,19 +120,19 @@ pub fn main() -> anyhow::Result<()> {
     let mut file_output = get_output_file();
     let test_cases: TestCases = match arch_ptr_size {
         PtrSize::U8 => {
-            let registers = parse_registers_u8()?;
+            let registers = keelhaul::parse::<u8>()?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U16 => {
-            let registers = parse_registers_u16()?;
+            let registers = keelhaul::parse::<u16>()?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U32 => {
-            let registers = parse_registers_u32()?;
+            let registers = keelhaul::parse::<u32>()?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U64 => {
-            let registers = parse_registers_u64()?;
+            let registers = keelhaul::parse::<u64>()?;
             TestCases::from_registers(&registers, &test_cfg)
         }
     }?;

@@ -26,7 +26,7 @@ run:
     cargo run --example=run_every_test
 
 test:
-    cargo test -p register-test-generator
+    cargo test -p keelhaul
 
 doc:
     cargo doc --no-deps

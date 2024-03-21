@@ -5,6 +5,7 @@ CMSIS-SVD files.
 
 ## Dependencies
 
+- Make sure to run `git submodule update --init` or equivalent
 - Install Rust from <https://rustup.rs/>
 - Install `just` (using cargo)
 

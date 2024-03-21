@@ -1,5 +1,5 @@
 [workspace]
-members = ["register-test-generator", "register-selftest"]
+members = ["keelhaul", "register-selftest"]
 resolver = "2"
 
 [workspace.dependencies]

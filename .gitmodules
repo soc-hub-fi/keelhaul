@@ -1,3 +1,3 @@
-[submodule "examples/vp/headsail"]
+[submodule "vendor/headsail-vp"]
 	path = vendor/headsail-vp
 	url = ssh://git@github.com/soc-hub-fi/headsail-vp.git
