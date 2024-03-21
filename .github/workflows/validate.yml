@@ -1,0 +1,63 @@
+name: Validate
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CI: 1
+  CARGO_TERM_COLOR: always
+  RENODE_PATH: /opt/renode/
+  # Used by renode-test to generate snapshots of failed tests
+  RENODE_CI_MODE: YES
+
+jobs:
+  build-headsail-selftest:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install requirements
+      run: rustup +nightly target add riscv32imc-unknown-none-elf
+    - name: Build Headsail selftest
+      working-directory: ./examples/headsail-selftest
+      run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifact
+        path: ./examples/headsail-selftest/target/riscv32imc-unknown-none-elf/release/headsail-selftest
+        if-no-files-found: error
+        retention-days: 14
+
+  run-headsail-selftest:
+    needs: build-headsail-selftest
+
+    runs-on: ubuntu-latest
+    container:
+      image: antmicro/renode:1.14.0
+      options: --user root
+
+    env:
+      BIN: artifact
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: https://github.com/soc-hub-fi/headsail-vp
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: artifact
+    - name: Create Renode peripheral symlinks
+      run: ln -s $(readlink -f "./vp/devel/python_peripherals/DLA.py") "$RENODE_PATH/scripts/pydev/DLA.py"
+    - name: Run Headsail selftest
+      run: renode-test scripts/robot/hello_dla.robot --variable BIN:"$(readlink -f $BIN)"
+    - name: Upload snapshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        path: snapshots/
