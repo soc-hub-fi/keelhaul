@@ -58,8 +58,3 @@ jobs:
       run: ln -s $(readlink -f "./vp/devel/python_peripherals/DLA.py") "$RENODE_PATH/scripts/pydev/DLA.py"
     - name: Run Headsail selftest
       run: renode-test scripts/robot/hello_dla.robot --variable BIN:"$(readlink -f $BIN)"
-    - name: Upload snapshots
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        path: snapshots/
