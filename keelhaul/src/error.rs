@@ -3,7 +3,7 @@ use std::{
     ops::{self, RangeInclusive},
 };
 
-use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
+use crate::{AddrRepr, ArchPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
@@ -237,7 +237,7 @@ pub enum GenerateError {
     InvalidConfig { c: TestConfig, cause: String },
 }
 
-impl<P: ArchiPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
+impl<P: ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
     fn from(value: AddrOverflowError<P>) -> Self {
         Self::AddrOverflow {
             err: Box::new(value),

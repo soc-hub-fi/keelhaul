@@ -2,7 +2,7 @@
 
 // TODO: maybe generate array registers under new module-level
 
-use crate::{ArchiPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{ArchPtr, GenerateError, PtrSize, RegValue, Register, Registers, ResetValue};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
@@ -364,12 +364,12 @@ fn reset_value_bitands_generate() {
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-struct RegTestGenerator<'r, 'c, P: ArchiPtr + quote::IdentFragment + 'static>(
+struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + 'static>(
     &'r Register<P>,
     &'c TestConfig,
 );
 
-impl<'r, 'c, P: ArchiPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
+impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(reg_ptr)
@@ -552,7 +552,7 @@ impl TestCases {
     /// # Errors
     ///
     /// - Failed to generate test case for a register
-    pub fn from_registers<P: ArchiPtr + quote::IdentFragment + 'static>(
+    pub fn from_registers<P: ArchPtr + quote::IdentFragment + 'static>(
         registers: &Registers<P>,
         config: &TestConfig,
     ) -> Result<Self, GenerateError> {

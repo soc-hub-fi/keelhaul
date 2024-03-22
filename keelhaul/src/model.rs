@@ -83,7 +83,7 @@ impl ToString for Access {
     }
 }
 
-pub trait ArchiPtr:
+pub trait ArchPtr:
     Clone +
     Eq +
     hash::Hash +
@@ -103,25 +103,25 @@ pub trait ArchiPtr:
     fn ptr_size() -> PtrSize;
 }
 
-impl ArchiPtr for u8 {
+impl ArchPtr for u8 {
     fn ptr_size() -> PtrSize {
         PtrSize::U8
     }
 }
 
-impl ArchiPtr for u16 {
+impl ArchPtr for u16 {
     fn ptr_size() -> PtrSize {
         PtrSize::U16
     }
 }
 
-impl ArchiPtr for u32 {
+impl ArchPtr for u32 {
     fn ptr_size() -> PtrSize {
         PtrSize::U32
     }
 }
 
-impl ArchiPtr for u64 {
+impl ArchPtr for u64 {
     fn ptr_size() -> PtrSize {
         PtrSize::U64
     }

@@ -3,7 +3,7 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
-    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
+    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchPtr,
     DimIndex, Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, PositionalError,
     Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
     RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
@@ -99,7 +99,7 @@ fn binary_size_mult_from_char_works() {
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int<P: ArchiPtr>(text: &str) -> Result<P, SvdParseError>
+fn parse_nonneg_int<P: ArchPtr>(text: &str) -> Result<P, SvdParseError>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -345,7 +345,7 @@ impl RegPropGroupBuilder {
     }
 }
 
-enum RegisterParentKind<P: ArchiPtr> {
+enum RegisterParentKind<P: ArchPtr> {
     Periph,
     Cluster {
         cluster_name: String,
@@ -353,14 +353,14 @@ enum RegisterParentKind<P: ArchiPtr> {
     },
 }
 
-struct RegisterParent<P: ArchiPtr> {
+struct RegisterParent<P: ArchPtr> {
     kind: RegisterParentKind<P>,
     periph_name: String,
     periph_base: P,
     properties: RegPropGroupBuilder,
 }
 
-impl<P: ArchiPtr> RegisterParent<P>
+impl<P: ArchPtr> RegisterParent<P>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -542,7 +542,7 @@ fn check_node_count(
     }
 }
 
-fn process_registers<P: ArchiPtr>(
+fn process_registers<P: ArchPtr>(
     parent: &RegisterParent<P>,
     register_node: XmlNode,
     reg_filter: &ItemFilter<String>,
@@ -685,7 +685,7 @@ where
     Ok(Some(registers))
 }
 
-fn process_cluster<P: ArchiPtr>(
+fn process_cluster<P: ArchPtr>(
     parent: &RegisterParent<P>,
     cluster_node: XmlNode,
     reg_filter: &ItemFilter<String>,
@@ -709,7 +709,7 @@ where
     Ok(Some(cluster_registers))
 }
 
-fn process_peripheral<P: ArchiPtr>(
+fn process_peripheral<P: ArchPtr>(
     periph_node: XmlNode,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
@@ -795,7 +795,7 @@ fn find_architecture_size(
     })
 }
 
-fn process_peripherals<P: ArchiPtr>(
+fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
@@ -818,7 +818,7 @@ where
     Ok(registers)
 }
 
-fn process_device<P: ArchiPtr>(
+fn process_device<P: ArchPtr>(
     device_node: &XmlNode,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
@@ -838,7 +838,7 @@ where
     process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex)
 }
 
-fn process_root<P: ArchiPtr>(
+fn process_root<P: ArchPtr>(
     root_node: XmlNode,
     periph_filter: &ItemFilter<String>,
     reg_filter: &ItemFilter<String>,
@@ -857,7 +857,7 @@ where
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers<P: ArchiPtr>(
+fn find_registers<P: ArchPtr>(
     parsed: &Document,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
@@ -902,7 +902,7 @@ where
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-fn parse_svd_into_registers<P: ArchiPtr>(
+fn parse_svd_into_registers<P: ArchPtr>(
     svd_path: &Path,
     reg_filter: &ItemFilter<String>,
     periph_filter: &ItemFilter<String>,
@@ -947,7 +947,7 @@ fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
+pub fn parse<P: ArchPtr>() -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
