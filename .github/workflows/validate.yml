@@ -22,7 +22,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: true
-        ssh-key: ${{ secrets.DEPLOY_KEY }}
     - name: Install requirements
       run: rustup +nightly target add riscv32imc-unknown-none-elf
     - name: Build Headsail selftest
