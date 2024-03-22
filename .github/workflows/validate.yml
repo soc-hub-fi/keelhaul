@@ -61,4 +61,4 @@ jobs:
       run: ln -s $(readlink -f "./vp/devel/python_peripherals/DLA.py") "$RENODE_PATH/scripts/pydev/DLA.py"
     - name: Run Headsail selftest
       working-directory: ./headsail-vp/
-      run: renode-test scripts/robot/hello_dla.robot --variable BIN:"$(readlink -f $HEADSAIL_SELFTEST_BIN)"
+      run: ./scripts/run_on_sysctrl.sh $(readlink -f $HEADSAIL_SELFTEST_BIN)
