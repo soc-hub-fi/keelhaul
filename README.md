@@ -67,6 +67,21 @@ If you intend to use this tool for an academic publication, please consider citi
 }
 ```
 
+## Supported models
+
+Supported model formats:
+
+- [x] [CMSIS-SVD](https://www.keil.com/pack/doc/CMSIS/SVD/html/index.html)
+
+Support is planned for:
+
+- [ ] [IEEE 1685-2014](https://standards.ieee.org/ieee/1685/5834/) (IP-XACT 2014)
+- [ ] [IEEE 1685-2022](https://standards.ieee.org/ieee/1685/10583/) (IP-XACT 2022)
+
+Support is not planned for:
+
+- [IEEE 1685-2009](https://standards.ieee.org/ieee/1685/4013/) (IP-XACT 2009)
+
 ## Contributing
 
 We are in the process of adapting the library for more use cases across the SoC Hub project. Expect major changes to the
