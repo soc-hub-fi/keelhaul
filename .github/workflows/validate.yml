@@ -20,6 +20,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: Install requirements
       run: rustup +nightly target add riscv32imc-unknown-none-elf
     - name: Build Headsail selftest
