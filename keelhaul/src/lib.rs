@@ -2,12 +2,11 @@
 
 // TODO: leave error handling to user crate
 
-mod error;
+pub mod error;
 mod generate;
 mod model;
 mod parse_svd;
 
-pub use error::*;
 pub use generate::*;
 use itertools::Itertools;
 pub use model::*;

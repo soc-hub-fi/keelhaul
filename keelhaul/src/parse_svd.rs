@@ -3,10 +3,10 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
-    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchPtr,
-    DimIndex, Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, PositionalError,
-    Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    error::Error, error::PositionalError, error::SvdParseError, read_excludes_from_env,
+    read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchPtr, DimIndex,
+    IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, Protection, PtrSize, RegPath, RegValue,
+    Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};

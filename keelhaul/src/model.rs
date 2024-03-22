@@ -7,7 +7,7 @@ use std::ops::RangeInclusive;
 use std::{hash, ops, str};
 use thiserror::Error;
 
-use crate::{AddrOverflowError, CommonParseError, NotImplementedError, SvdParseError};
+use crate::error::{AddrOverflowError, CommonParseError, NotImplementedError, SvdParseError};
 
 /// Software access rights e.g., read-only or read-write, as defined by
 /// CMSIS-SVD `accessType`.
