@@ -50,11 +50,15 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: soc-hub-fi/headsail-vp
+        path: headsail-vp/
     - name: Download artifact
       uses: actions/download-artifact@v4
       with:
         name: $BIN
+        path: ./headsail-vp/
     - name: Create Renode peripheral symlinks
+      working-directory: ./headsail-vp/
       run: ln -s $(readlink -f "./vp/devel/python_peripherals/DLA.py") "$RENODE_PATH/scripts/pydev/DLA.py"
     - name: Run Headsail selftest
+      working-directory: ./headsail-vp/
       run: renode-test scripts/robot/hello_dla.robot --variable BIN:"$(readlink -f $BIN)"
