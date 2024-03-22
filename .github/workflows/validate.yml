@@ -49,7 +49,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: https://github.com/soc-hub-fi/headsail-vp
+        repository: soc-hub-fi/headsail-vp
     - name: Download artifact
       uses: actions/download-artifact@v4
       with:
