@@ -9,9 +9,6 @@ on:
 env:
   CI: 1
   CARGO_TERM_COLOR: always
-  RENODE_PATH: /opt/renode/
-  # Used by renode-test to generate snapshots of failed tests
-  RENODE_CI_MODE: YES
   HEADSAIL_SELFTEST_BIN: headsail-selftest
 
 jobs:
@@ -43,6 +40,11 @@ jobs:
     container:
       image: antmicro/renode:1.14.0
       options: --user root
+
+    env:
+      RENODE_PATH: /opt/renode/
+      # Used by renode-test to generate snapshots of failed tests
+      RENODE_CI_MODE: YES
 
     steps:
     - uses: actions/checkout@v4
