@@ -3,10 +3,10 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
-    error::Error, error::PositionalError, error::SvdParseError, read_excludes_from_env,
-    read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchPtr, DimIndex,
-    IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, Protection, PtrSize, RegPath, RegValue,
-    Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+    error::{Error, PositionalError, SvdParseError},
+    read_file_or_panic, Access, AddrRepr, ArchPtr, DimIndex, Filters, IncompatibleTypesError,
+    IsAllowedOrBlocked, ItemFilter, Protection, PtrSize, RegPath, RegValue, Register,
+    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -14,7 +14,6 @@ use regex::Regex;
 use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env,
     ops::RangeInclusive,
     path::Path,
     str::FromStr,
@@ -545,8 +544,8 @@ fn check_node_count(
 fn process_registers<P: ArchPtr>(
     parent: &RegisterParent<P>,
     register_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    reg_filter: Option<&ItemFilter<String>>,
+    syms_regex: Option<&ItemFilter<String>>,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -602,7 +601,7 @@ where
             // FIXME: block WITH brackets or WITOUT brackets? maybe both?
             // FIXME: we match against only the register's name, not the path. This is not a
             // great way to exclude registers. We should match against the entire path.
-            if reg_filter.is_blocked(&subname) {
+            if reg_filter.is_some_and(|f| f.is_blocked(&subname)) {
                 info!("register {subname} is was not included due to values set in PATH_EXCLUDES");
                 return Ok(None);
             }
@@ -615,7 +614,7 @@ where
                     subname.to_owned(),
                 );
                 let reg_path = path.join("-");
-                if syms_regex.is_blocked(&reg_path) {
+                if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                     info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
                     return Ok(None);
                 }
@@ -654,7 +653,7 @@ where
                 name.to_owned(),
             );
             let reg_path = path.join("-");
-            if syms_regex.is_blocked(&reg_path) {
+            if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                 info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
                 return Ok(None);
             }
@@ -662,7 +661,7 @@ where
         };
         // FIXME: we match against only the register's name, not the path. This is not a
         // great way to exclude registers. We should match against the entire path.
-        if reg_filter.is_blocked(&name) {
+        if reg_filter.is_some_and(|f| f.is_blocked(&name)) {
             info!("register {name} is was not included due to values set in PATH_EXCLUDES");
             return Ok(None);
         }
@@ -688,8 +687,8 @@ where
 fn process_cluster<P: ArchPtr>(
     parent: &RegisterParent<P>,
     cluster_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    reg_filter: Option<&ItemFilter<String>>,
+    syms_regex: Option<&ItemFilter<String>>,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -711,9 +710,7 @@ where
 
 fn process_peripheral<P: ArchPtr>(
     periph_node: XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -724,7 +721,11 @@ where
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
-    if periph_filter.is_blocked(&periph_name.to_lowercase()) {
+    if filters
+        .periph_filter
+        .as_ref()
+        .is_some_and(|f| f.is_blocked(&periph_name.to_lowercase()))
+    {
         info!("Peripheral {periph_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
         return Ok(None);
     }
@@ -735,13 +736,22 @@ where
 
     let mut peripheral_registers = Vec::new();
     for cluster_node in registers_node.children_with_tag_name("cluster") {
-        if let Some(registers) = process_cluster(&periph, cluster_node, reg_filter, syms_regex)? {
+        if let Some(registers) = process_cluster(
+            &periph,
+            cluster_node,
+            filters.reg_filter.as_ref(),
+            filters.syms_regex.as_ref(),
+        )? {
             peripheral_registers.extend(registers);
         }
     }
     for register_node in registers_node.children_with_tag_name("register") {
-        if let Some(registers) = process_registers(&periph, register_node, reg_filter, syms_regex)?
-        {
+        if let Some(registers) = process_registers(
+            &periph,
+            register_node,
+            filters.reg_filter.as_ref(),
+            filters.syms_regex.as_ref(),
+        )? {
             peripheral_registers.extend(registers);
         }
     }
@@ -797,9 +807,7 @@ fn find_architecture_size(
 
 fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -809,9 +817,7 @@ where
 {
     let mut registers = Vec::new();
     for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
-        if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
-        {
+        if let Some(peripheral_registers) = process_peripheral(peripheral_node, filters)? {
             registers.extend(peripheral_registers);
         }
     }
@@ -820,9 +826,7 @@ where
 
 fn process_device<P: ArchPtr>(
     device_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -835,14 +839,12 @@ where
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
-    process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex)
+    process_peripherals(peripherals_node, filters)
 }
 
 fn process_root<P: ArchPtr>(
     root_node: XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -853,15 +855,13 @@ where
     let device_nodes = root_node.children_with_tag_name("device");
     check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
     let device_node = device_nodes.first().unwrap();
-    process_device(device_node, periph_filter, reg_filter, syms_regex)
+    process_device(device_node, filters)
 }
 
 /// Find registers from SVD XML-document.
 fn find_registers<P: ArchPtr>(
     parsed: &Document,
-    reg_filter: &ItemFilter<String>,
-    periph_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Registers<P>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -870,7 +870,7 @@ where
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
-    let registers = process_root(root, reg_filter, periph_filter, syms_regex)?;
+    let registers = process_root(root, filters)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
@@ -902,11 +902,9 @@ where
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-fn parse_svd_into_registers<P: ArchPtr>(
+pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
     svd_path: &Path,
-    reg_filter: &ItemFilter<String>,
-    periph_filter: &ItemFilter<String>,
-    syms_filter: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -916,7 +914,7 @@ where
 {
     let svd_content = read_file_or_panic(svd_path);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, reg_filter, periph_filter, syms_filter)
+    let registers = find_registers(&parsed, filters)
         .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
 
     // If zero registers were chosen for generation, this run is useless.
@@ -928,40 +926,6 @@ where
 
     info!("Found {} registers.", registers.len());
     Ok(registers)
-}
-
-/// Parse SVD-file.
-///
-/// # Panics
-///
-/// - Missing path to SVD-file
-///
-/// # Errors
-///
-/// - Failed to interpret given options
-/// - Failed to parse given SVD file
-pub fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
-    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
-    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let periph_filter =
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
-    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
-    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
-    parse_svd_into_registers(svd_path.as_ref(), &reg_filter, &periph_filter, &syms_filter)
 }
 
 pub fn parse_architecture_size(svd_path: impl AsRef<Path>) -> Result<PtrSize, SvdParseError> {

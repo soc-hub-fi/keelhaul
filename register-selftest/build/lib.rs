@@ -4,10 +4,14 @@ mod logger;
 
 use anyhow::{Context, Error};
 use fs_err::{self as fs, File};
+use itertools::Itertools;
 use keelhaul::{
-    parse_architecture_size, ParseTestKindError, PtrSize, RegTestKind, TestCases, TestConfig,
+    error::SvdParseError, parse_architecture_size, read_file_or_panic, ArchPtr, Filters,
+    ItemFilter, ModelSource, ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases,
+    TestConfig,
 };
 use log::{info, LevelFilter};
+use regex::Regex;
 use std::{
     collections::HashSet,
     env,
@@ -105,6 +109,80 @@ fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
         .join(svd_path))
 }
 
+/// Try to extract path to excludes-file from environment variable.
+fn read_file_from_env_or_panic(var: &str) -> Option<String> {
+    env::var(var)
+        .ok()
+        .map(|p| read_file_or_panic(&PathBuf::from(p)))
+}
+
+/// Returns a vector containing elements read from environment variable `var` if
+/// the variable is present.
+///
+/// # Parameters:
+///
+/// `var` - The name of the environment variable to be read
+/// `sep` - The separator for Vec elements
+fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
+    env::var(var)
+        .map(|s| {
+            let peripherals = s.split(sep).map(ToOwned::to_owned).collect_vec();
+            // TODO: verify that these are valid peripherals
+            peripherals
+        })
+        .ok()
+}
+
+/// Try to get names of excluded registers.
+fn read_excludes_from_env() -> Option<Vec<String>> {
+    read_file_from_env_or_panic("PATH_EXCLUDES").map(|contents|
+            // One register per line
+            contents.split('\n').map(ToOwned::to_owned).collect_vec())
+}
+
+/// Parse SVD-file.
+///
+/// # Panics
+///
+/// - Missing path to SVD-file
+///
+/// # Errors
+///
+/// - Failed to interpret given options
+/// - Failed to parse given SVD file
+pub fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
+where
+    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
+        + From<<P as FromStr>::Err>
+        + From<<P as TryFrom<u64>>::Error>,
+    <P as TryFrom<u64>>::Error: std::fmt::Debug,
+{
+    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
+    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
+    let periph_filter =
+        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
+    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?;
+    let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
+    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
+    Ok(keelhaul::parse_registers(
+        &[ModelSource::new(
+            svd_path.as_ref().to_path_buf(),
+            keelhaul::SourceFormat::Svd,
+        )],
+        Filters::from_filters(reg_filter, periph_filter, syms_filter),
+    )?
+    .into_iter()
+    .nth(0)
+    .unwrap())
+}
+
 pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed=INCLUDE_PERIPHERALS");
     println!("cargo:rerun-if-env-changed=EXCLUDE_PERIPHERALS");
@@ -130,19 +208,19 @@ pub fn main() -> anyhow::Result<()> {
     let svd_path = read_path_from_env("SVD_PATH")?;
     let test_cases: TestCases = match arch_ptr_size {
         PtrSize::U8 => {
-            let registers = keelhaul::parse::<u8>(&svd_path)?;
+            let registers = parse::<u8>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U16 => {
-            let registers = keelhaul::parse::<u16>(&svd_path)?;
+            let registers = parse::<u16>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U32 => {
-            let registers = keelhaul::parse::<u32>(&svd_path)?;
+            let registers = parse::<u32>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U64 => {
-            let registers = keelhaul::parse::<u64>(&svd_path)?;
+            let registers = parse::<u64>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
     }?;

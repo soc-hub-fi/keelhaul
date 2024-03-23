@@ -8,16 +8,12 @@ mod model;
 mod parse_svd;
 
 pub use generate::*;
-use itertools::Itertools;
 pub use model::*;
 pub use parse_svd::*;
 use regex::Regex;
 
 use fs_err as fs;
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 /// Returns contents of a file at `path`, panicking on any failure
 ///
@@ -36,22 +32,8 @@ pub fn read_file_or_panic(path: &Path) -> String {
     )
 }
 
-/// Try to extract path to excludes-file from environment variable.
-fn read_file_from_env_or_panic(var: &str) -> Option<String> {
-    env::var(var)
-        .ok()
-        .map(|p| read_file_or_panic(&PathBuf::from(p)))
-}
-
-/// Try to get names of excluded registers.
-fn read_excludes_from_env() -> Option<Vec<String>> {
-    read_file_from_env_or_panic("PATH_EXCLUDES").map(|contents|
-            // One register per line
-            contents.split('\n').map(ToOwned::to_owned).collect_vec())
-}
-
 /// What items of type `T` are allowed or not
-enum ItemFilter<T: PartialEq> {
+pub enum ItemFilter<T: PartialEq> {
     List {
         // If set, only the specified items are allowed. If not set, all items are
         // allowed except the ones listed in blocklist.
@@ -110,7 +92,7 @@ where
 
 impl<T: PartialEq> ItemFilter<T> {
     #[allow(clippy::use_self)]
-    fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+    pub fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
         Self::List {
             white_list,
             block_list,
@@ -118,24 +100,38 @@ impl<T: PartialEq> ItemFilter<T> {
     }
 
     #[allow(clippy::use_self)]
-    const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
+    pub const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
     }
 }
 
-/// Returns a vector containing elements read from environment variable `var` if
-/// the variable is present.
-///
-/// # Parameters:
-///
-/// `var` - The name of the environment variable to be read
-/// `sep` - The separator for Vec elements
-fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
-    env::var(var)
-        .map(|s| {
-            let peripherals = s.split(sep).map(ToOwned::to_owned).collect_vec();
-            // TODO: verify that these are valid peripherals
-            peripherals
-        })
-        .ok()
+// TODO: Move ItemFilter to api.rs
+
+pub struct Filters {
+    pub(crate) reg_filter: Option<ItemFilter<String>>,
+    pub(crate) periph_filter: Option<ItemFilter<String>>,
+    pub(crate) syms_regex: Option<ItemFilter<String>>,
+}
+
+impl Filters {
+    /// Take all registers in input
+    pub fn all() -> Self {
+        Self {
+            reg_filter: None,
+            periph_filter: None,
+            syms_regex: None,
+        }
+    }
+
+    pub fn from_filters(
+        reg_filter: ItemFilter<String>,
+        periph_filter: ItemFilter<String>,
+        syms_filter: ItemFilter<String>,
+    ) -> Self {
+        Self {
+            reg_filter: Some(reg_filter),
+            periph_filter: Some(periph_filter),
+            syms_regex: Some(syms_filter),
+        }
+    }
 }

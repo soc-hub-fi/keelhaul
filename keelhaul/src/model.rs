@@ -99,7 +99,8 @@ pub trait ArchPtr:
     // str::FromStr for converting strings into values
     str::FromStr +
     // Allow creating new values from 64-bit integers at runtime (if they fit)
-    TryFrom<u64> {
+    TryFrom<u64>
+    {
     fn ptr_size() -> PtrSize;
 }
 
