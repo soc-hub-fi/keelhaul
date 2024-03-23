@@ -1,7 +1,10 @@
 //! Common types and functions for register test generator.
 
-// TODO: leave error handling to user crate
+// Export full API at crate root
+pub use api::*;
 
+mod api;
+// TODO: leave error handling to user crate
 pub mod error;
 mod generate;
 mod model;
