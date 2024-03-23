@@ -16,7 +16,7 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     env,
     ops::RangeInclusive,
-    path::{Path, PathBuf},
+    path::Path,
     str::FromStr,
 };
 
@@ -930,13 +930,6 @@ where
     Ok(registers)
 }
 
-fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
-    let svd_path = env::var(var)?;
-    Ok(env::current_dir()
-        .expect("cannot access current working dir")
-        .join(svd_path))
-}
-
 /// Parse SVD-file.
 ///
 /// # Panics
@@ -947,14 +940,13 @@ fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-pub fn parse<P: ArchPtr>() -> Result<Registers<P>, Error>
+pub fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    let svd_path = read_path_from_env("SVD_PATH")?;
     let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
     let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
     let periph_filter =
@@ -969,12 +961,11 @@ where
         .transpose()?;
     let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
     let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
-    parse_svd_into_registers(&svd_path, &reg_filter, &periph_filter, &syms_filter)
+    parse_svd_into_registers(svd_path.as_ref(), &reg_filter, &periph_filter, &syms_filter)
 }
 
-pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
-    let svd_path = read_path_from_env("SVD_PATH").unwrap();
-    let svd_content = read_file_or_panic(&svd_path);
+pub fn parse_architecture_size(svd_path: impl AsRef<Path>) -> Result<PtrSize, SvdParseError> {
+    let svd_content = read_file_or_panic(svd_path.as_ref());
     let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
     let root = parsed.root().into_xml_node();
 

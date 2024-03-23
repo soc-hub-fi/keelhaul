@@ -91,10 +91,18 @@ fn solve_architecture_size() -> Result<PtrSize, Error> {
     match arch_ptr_size_from_env()? {
         Some(size) => Ok(size),
         None => {
+            let svd_path = read_path_from_env("SVD_PATH").unwrap();
             // Parse size from SVD-file.
-            Ok(parse_architecture_size()?)
+            Ok(parse_architecture_size(svd_path)?)
         }
     }
+}
+
+fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
+    let svd_path = env::var(var)?;
+    Ok(env::current_dir()
+        .expect("cannot access current working dir")
+        .join(svd_path))
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -118,21 +126,23 @@ pub fn main() -> anyhow::Result<()> {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
     let mut file_output = get_output_file();
+
+    let svd_path = read_path_from_env("SVD_PATH")?;
     let test_cases: TestCases = match arch_ptr_size {
         PtrSize::U8 => {
-            let registers = keelhaul::parse::<u8>()?;
+            let registers = keelhaul::parse::<u8>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U16 => {
-            let registers = keelhaul::parse::<u16>()?;
+            let registers = keelhaul::parse::<u16>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U32 => {
-            let registers = keelhaul::parse::<u32>()?;
+            let registers = keelhaul::parse::<u32>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
         PtrSize::U64 => {
-            let registers = keelhaul::parse::<u64>()?;
+            let registers = keelhaul::parse::<u64>(&svd_path)?;
             TestCases::from_registers(&registers, &test_cfg)
         }
     }?;
