@@ -1,5 +1,5 @@
 use std::{
-    convert, env, fmt,
+    convert, fmt,
     ops::{self, RangeInclusive},
 };
 
@@ -33,8 +33,6 @@ pub enum Error {
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
     ZeroEntries,
-    #[error("failed to read environment variable")]
-    VarError(#[from] env::VarError),
     #[error("pointer size of {0} bits is not supported")]
     PointerSizeNotSupported(usize),
     #[error(
