@@ -24,7 +24,7 @@ jobs:
       run: rustup +nightly target add riscv32imc-unknown-none-elf
     - name: Build Headsail selftest
       working-directory: ./examples/headsail-selftest
-      run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
+      run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) ARCH_PTR_BYTES=8 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
