@@ -735,7 +735,7 @@ where
             &periph,
             cluster_node,
             filters.reg_filter.as_ref(),
-            filters.syms_regex.as_ref(),
+            filters.syms_filter.as_ref(),
         )? {
             peripheral_registers.extend(registers);
         }
@@ -745,7 +745,7 @@ where
             &periph,
             register_node,
             filters.reg_filter.as_ref(),
-            filters.syms_regex.as_ref(),
+            filters.syms_filter.as_ref(),
         )? {
             peripheral_registers.extend(registers);
         }

@@ -94,7 +94,7 @@ impl<T: PartialEq> ItemFilter<T> {
 pub struct Filters {
     pub(crate) reg_filter: Option<ItemFilter<String>>,
     pub(crate) periph_filter: Option<ItemFilter<String>>,
-    pub(crate) syms_regex: Option<ItemFilter<String>>,
+    pub(crate) syms_filter: Option<ItemFilter<String>>,
 }
 
 impl Filters {
@@ -103,19 +103,19 @@ impl Filters {
         Self {
             reg_filter: None,
             periph_filter: None,
-            syms_regex: None,
+            syms_filter: None,
         }
     }
 
     pub fn from_filters(
-        reg_filter: ItemFilter<String>,
-        periph_filter: ItemFilter<String>,
-        syms_filter: ItemFilter<String>,
+        reg_filter: Option<ItemFilter<String>>,
+        periph_filter: Option<ItemFilter<String>>,
+        syms_filter: Option<ItemFilter<String>>,
     ) -> Self {
         Self {
-            reg_filter: Some(reg_filter),
-            periph_filter: Some(periph_filter),
-            syms_regex: Some(syms_filter),
+            reg_filter,
+            periph_filter,
+            syms_filter,
         }
     }
 }

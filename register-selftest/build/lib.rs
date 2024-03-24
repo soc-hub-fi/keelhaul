@@ -7,14 +7,12 @@ use std::{
     collections::HashSet,
     env,
     io::{self, Write},
-    path,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
 use anyhow::{Context, Error};
 use fs_err::{self as fs, File};
-use itertools::Itertools;
 use keelhaul::{
     error::SvdParseError, ArchPtr, Filters, ItemFilter, ModelSource, ParseTestKindError, PtrSize,
     RegTestKind, Registers, TestCases, TestConfig,
@@ -78,36 +76,6 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
     }
 }
 
-/// Returns contents of a file at `path`, panicking on any failure
-///
-/// # Panics
-///
-/// This function panics if the path does not exist, or if the file cannot be
-/// read.
-pub fn read_file_or_panic(path: &path::Path) -> String {
-    path.canonicalize().map_or_else(
-        |err| panic!("path {} does not exist: {err}", path.display()),
-        |p| {
-            fs::read_to_string(p)
-                .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
-        },
-    )
-}
-
-/// Try to extract path to excludes-file from environment variable.
-fn read_file_from_env_or_panic(var: &str) -> Option<String> {
-    env::var(var)
-        .ok()
-        .map(|p| read_file_or_panic(&PathBuf::from(p)))
-}
-
-/// Try to get names of excluded registers.
-fn read_excludes_from_env() -> Option<Vec<String>> {
-    read_file_from_env_or_panic("PATH_EXCLUDES").map(|contents|
-            // One register per line
-            contents.split('\n').map(ToOwned::to_owned).collect_vec())
-}
-
 /// Parse SVD-file.
 ///
 /// # Panics
@@ -118,7 +86,7 @@ fn read_excludes_from_env() -> Option<Vec<String>> {
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-pub fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
+fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -141,24 +109,19 @@ where
             .transpose()?;
         ItemFilter::regex(include_syms_regex, exclude_syms_regex)
     };
-    let reg_filter = {
-        let allow_list = None;
-        let block_list = read_excludes_from_env().unwrap_or_default();
-        ItemFilter::list(allow_list, block_list)
-    };
     Ok(keelhaul::parse_registers(
         &[ModelSource::new(
             svd_path.as_ref().to_path_buf(),
             keelhaul::SourceFormat::Svd,
         )],
-        Filters::from_filters(reg_filter, periph_filter, syms_filter),
+        Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
     )?
     .into_iter()
     .next()
     .unwrap())
 }
 
-pub fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed={ENV_INCLUDE_PERIPHS}");
     println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_PERIPHS}");
     println!("cargo:rerun-if-env-changed={ENV_INCLUDE_SYMS_REGEX}");
