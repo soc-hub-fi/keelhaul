@@ -431,67 +431,62 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
             let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
             parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
         };
-        let dim_index = {
-            let dim_index = match value.maybe_find_text_by_tag_name("dimIndex") {
-                Some((index, _)) => {
-                    let index = index.trim();
-                    let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
-                    let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
-                    let regex_listed = Regex::new(r"^[_0-9a-zA-Z]+(,\s*[_0-9a-zA-Z]+)+$").unwrap();
-                    let dim_index = if regex_numbered.is_match(index) {
-                        let regex = Regex::new(r"^(?P<start>[0-9]+)\-(?P<end>[0-9]+)$").unwrap();
-                        if let Some(captures) = regex.captures(index) {
-                            // TODO: use error
-                            let start: usize = captures
-                                .name("start")
-                                .expect("could not find dimension index range start")
-                                .as_str()
-                                .parse()
-                                .unwrap();
-                            // TODO: use error
-                            let end: usize = captures
-                                .name("end")
-                                .expect("could not find dimension index range end")
-                                .as_str()
-                                .parse()
-                                .unwrap();
-                            DimIndex::NumberRange(start..=end)
-                        } else {
-                            // TODO: use error
-                            panic!("asd");
-                        }
-                    } else if regex_lettered.is_match(index) {
-                        let regex = Regex::new(r"").unwrap();
-                        if let Some(captures) = regex.captures(index) {
-                            // TODO: use error
-                            let start: char =
-                                captures.name("start").expect("").as_str().parse().unwrap();
-                            // TODO: use error
-                            let end: char =
-                                captures.name("end").expect("").as_str().parse().unwrap();
-                            DimIndex::LetterRange(start..=end)
-                        } else {
-                            // TODO: use error
-                            panic!("asd");
-                        }
-                    } else if regex_listed.is_match(index) {
-                        let parts = index
-                            .split(',')
-                            .map(|s| s.trim())
-                            .map(|s| s.to_owned())
-                            .collect_vec();
-                        DimIndex::List(parts)
+        let dim_index = value
+            .maybe_find_text_by_tag_name("dimIndex")
+            .map(|(index, _)| {
+                let index = index.trim();
+                let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
+                let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
+                let regex_listed = Regex::new(r"^[_0-9a-zA-Z]+(,\s*[_0-9a-zA-Z]+)+$").unwrap();
+                let dim_index = if regex_numbered.is_match(index) {
+                    let regex = Regex::new(r"^(?P<start>[0-9]+)\-(?P<end>[0-9]+)$").unwrap();
+                    if let Some(captures) = regex.captures(index) {
+                        // TODO: use error
+                        let start: usize = captures
+                            .name("start")
+                            .expect("could not find dimension index range start")
+                            .as_str()
+                            .parse()
+                            .unwrap();
+                        // TODO: use error
+                        let end: usize = captures
+                            .name("end")
+                            .expect("could not find dimension index range end")
+                            .as_str()
+                            .parse()
+                            .unwrap();
+                        DimIndex::NumberRange(start..=end)
                     } else {
                         // TODO: use error
-                        // error: not supported dimIndex format: {}
                         panic!("asd");
-                    };
-                    Some(dim_index)
-                }
-                None => None,
-            };
-            dim_index
-        };
+                    }
+                } else if regex_lettered.is_match(index) {
+                    let regex = Regex::new(r"").unwrap();
+                    if let Some(captures) = regex.captures(index) {
+                        // TODO: use error
+                        let start: char =
+                            captures.name("start").expect("").as_str().parse().unwrap();
+                        // TODO: use error
+                        let end: char = captures.name("end").expect("").as_str().parse().unwrap();
+                        DimIndex::LetterRange(start..=end)
+                    } else {
+                        // TODO: use error
+                        panic!("asd");
+                    }
+                } else if regex_listed.is_match(index) {
+                    let parts = index
+                        .split(',')
+                        .map(|s| s.trim())
+                        .map(|s| s.to_owned())
+                        .collect_vec();
+                    DimIndex::List(parts)
+                } else {
+                    // TODO: use error
+                    // error: not supported dimIndex format: {}
+                    panic!("asd");
+                };
+                dim_index
+            });
         let dim_name = {
             value
                 .maybe_find_text_by_tag_name("dimName")
