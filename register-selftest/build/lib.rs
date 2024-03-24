@@ -21,7 +21,6 @@ use keelhaul::{
 };
 use log::{info, LevelFilter};
 use regex::Regex;
-use util::read_vec_from_env;
 
 const ENV_SVD_IN: &str = "SVD_PATH";
 /// `OUT_DIR` is predefined by the Rust compiler as the default output directory for all artifacts
@@ -66,7 +65,7 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindError> {
-    let test_kinds = read_vec_from_env(ENV_TEST_KINDS, ',');
+    let test_kinds = util::read_vec_from_env(ENV_TEST_KINDS, ',');
     if let Ok(test_kinds) = test_kinds {
         Ok(Some(
             test_kinds

@@ -26,7 +26,9 @@ pub enum ItemFilter<T: PartialEq> {
         block_list: Vec<T>,
     },
     Regex {
+        // If set, only items matching the regex are allowed
         allow: Option<Regex>,
+        // If set, items matching the regex are not allowed
         block: Option<Regex>,
     },
 }
