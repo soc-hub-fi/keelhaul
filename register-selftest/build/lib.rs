@@ -79,12 +79,6 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
     }
 }
 
-fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
-    let bytes_str = env::var(ENV_ARCH)?;
-    let ptr_size = bytes_str.parse::<u8>().with_context(|| ENV_ARCH).unwrap();
-    Ok(ptr_size.try_into()?)
-}
-
 /// Returns contents of a file at `path`, panicking on any failure
 ///
 /// # Panics
@@ -172,7 +166,9 @@ pub fn main() -> anyhow::Result<()> {
     // Install a logger to print useful messages into `cargo:warning={}`
     logger::init(LevelFilter::Info);
 
-    let arch_ptr_size = arch_ptr_size_from_env()?;
+    let arch_ptr_size = (util::read_u32_from_env(ENV_ARCH)
+        .with_context(|| format!("could not detect {ENV_ARCH}"))? as u8)
+        .try_into()?;
     let mut test_cfg = TestConfig::new(arch_ptr_size);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;

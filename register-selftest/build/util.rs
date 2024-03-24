@@ -1,8 +1,16 @@
 //! Methods for reading files and environment variables and for running shell commands
 
-use std::{env, io, path, process};
+use std::{env, io, num, path, process};
 
 use itertools::Itertools;
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum VarResolutionError {
+    #[error("could not resolve non-existent variable")]
+    Var(#[from] env::VarError),
+    #[error("could not parse int")]
+    ParseInt(#[from] num::ParseIntError),
+}
 
 /// Reads a path relative to caller location from `var`
 ///
@@ -24,6 +32,12 @@ pub(crate) fn read_relpath_from_env(var: &str) -> Result<path::PathBuf, env::Var
 pub(crate) fn read_abspath_from_env(var: &str) -> Result<path::PathBuf, env::VarError> {
     let path = env::var(var)?;
     Ok(path::PathBuf::from(path))
+}
+
+pub(crate) fn read_u32_from_env(var: &str) -> Result<u32, VarResolutionError> {
+    let u = env::var(var)?;
+    let u = u.parse::<u32>()?;
+    Ok(u)
 }
 
 /// Returns a vector from `var`
