@@ -3,10 +3,10 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
-    read_excludes_from_env, read_file_or_panic, read_vec_from_env, Access, AddrRepr, ArchiPtr,
-    DimIndex, Error, IncompatibleTypesError, IsAllowedOrBlocked, ItemFilter, PositionalError,
-    Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue, SvdParseError,
+    error::{Error, PositionalError, SvdParseError},
+    util, Access, AddrRepr, ArchPtr, DimIndex, Filters, IncompatibleTypesError, IsAllowedOrBlocked,
+    ItemFilter, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    RegisterPropertiesGroup, Registers, ResetValue,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -14,9 +14,8 @@ use regex::Regex;
 use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    env,
     ops::RangeInclusive,
-    path::{Path, PathBuf},
+    path,
     str::FromStr,
 };
 
@@ -99,7 +98,7 @@ fn binary_size_mult_from_char_works() {
 /// Parses an integer from `text`
 ///
 /// This implementation is format aware and uses regex to ensure correct behavior.
-fn parse_nonneg_int<P: ArchiPtr>(text: &str) -> Result<P, SvdParseError>
+fn parse_nonneg_int<P: ArchPtr>(text: &str) -> Result<P, SvdParseError>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -288,7 +287,7 @@ impl RegPropGroupBuilder {
             self.access = Some(access);
         };
         if let Some(protection) =
-            process_prop_from_node_if_present("protection", node, |s| Protection::from_str(s))?
+            process_prop_from_node_if_present("protection", node, Protection::from_str)?
         {
             self.protection = Some(protection);
         };
@@ -345,7 +344,7 @@ impl RegPropGroupBuilder {
     }
 }
 
-enum RegisterParentKind<P: ArchiPtr> {
+enum RegisterParentKind<P: ArchPtr> {
     Periph,
     Cluster {
         cluster_name: String,
@@ -353,14 +352,14 @@ enum RegisterParentKind<P: ArchiPtr> {
     },
 }
 
-struct RegisterParent<P: ArchiPtr> {
+struct RegisterParent<P: ArchPtr> {
     kind: RegisterParentKind<P>,
     periph_name: String,
     periph_base: P,
     properties: RegPropGroupBuilder,
 }
 
-impl<P: ArchiPtr> RegisterParent<P>
+impl<P: ArchPtr> RegisterParent<P>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -432,67 +431,62 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
             let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
             parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
         };
-        let dim_index = {
-            let dim_index = match value.maybe_find_text_by_tag_name("dimIndex") {
-                Some((index, _)) => {
-                    let index = index.trim();
-                    let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
-                    let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
-                    let regex_listed = Regex::new(r"^[_0-9a-zA-Z]+(,\s*[_0-9a-zA-Z]+)+$").unwrap();
-                    let dim_index = if regex_numbered.is_match(index) {
-                        let regex = Regex::new(r"^(?P<start>[0-9]+)\-(?P<end>[0-9]+)$").unwrap();
-                        if let Some(captures) = regex.captures(index) {
-                            // TODO: use error
-                            let start: usize = captures
-                                .name("start")
-                                .expect("could not find dimension index range start")
-                                .as_str()
-                                .parse()
-                                .unwrap();
-                            // TODO: use error
-                            let end: usize = captures
-                                .name("end")
-                                .expect("could not find dimension index range end")
-                                .as_str()
-                                .parse()
-                                .unwrap();
-                            DimIndex::NumberRange(start..=end)
-                        } else {
-                            // TODO: use error
-                            panic!("asd");
-                        }
-                    } else if regex_lettered.is_match(index) {
-                        let regex = Regex::new(r"").unwrap();
-                        if let Some(captures) = regex.captures(index) {
-                            // TODO: use error
-                            let start: char =
-                                captures.name("start").expect("").as_str().parse().unwrap();
-                            // TODO: use error
-                            let end: char =
-                                captures.name("end").expect("").as_str().parse().unwrap();
-                            DimIndex::LetterRange(start..=end)
-                        } else {
-                            // TODO: use error
-                            panic!("asd");
-                        }
-                    } else if regex_listed.is_match(index) {
-                        let parts = index
-                            .split(',')
-                            .map(|s| s.trim())
-                            .map(|s| s.to_owned())
-                            .collect_vec();
-                        DimIndex::List(parts)
+        let dim_index = value
+            .maybe_find_text_by_tag_name("dimIndex")
+            .map(|(index, _)| {
+                let index = index.trim();
+                let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
+                let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
+                let regex_listed = Regex::new(r"^[_0-9a-zA-Z]+(,\s*[_0-9a-zA-Z]+)+$").unwrap();
+                let dim_index = if regex_numbered.is_match(index) {
+                    let regex = Regex::new(r"^(?P<start>[0-9]+)\-(?P<end>[0-9]+)$").unwrap();
+                    if let Some(captures) = regex.captures(index) {
+                        // TODO: use error
+                        let start: usize = captures
+                            .name("start")
+                            .expect("could not find dimension index range start")
+                            .as_str()
+                            .parse()
+                            .unwrap();
+                        // TODO: use error
+                        let end: usize = captures
+                            .name("end")
+                            .expect("could not find dimension index range end")
+                            .as_str()
+                            .parse()
+                            .unwrap();
+                        DimIndex::NumberRange(start..=end)
                     } else {
                         // TODO: use error
-                        // error: not supported dimIndex format: {}
                         panic!("asd");
-                    };
-                    Some(dim_index)
-                }
-                None => None,
-            };
-            dim_index
-        };
+                    }
+                } else if regex_lettered.is_match(index) {
+                    let regex = Regex::new(r"").unwrap();
+                    if let Some(captures) = regex.captures(index) {
+                        // TODO: use error
+                        let start: char =
+                            captures.name("start").expect("").as_str().parse().unwrap();
+                        // TODO: use error
+                        let end: char = captures.name("end").expect("").as_str().parse().unwrap();
+                        DimIndex::LetterRange(start..=end)
+                    } else {
+                        // TODO: use error
+                        panic!("asd");
+                    }
+                } else if regex_listed.is_match(index) {
+                    let parts = index
+                        .split(',')
+                        .map(|s| s.trim())
+                        .map(|s| s.to_owned())
+                        .collect_vec();
+                    DimIndex::List(parts)
+                } else {
+                    // TODO: use error
+                    // error: not supported dimIndex format: {}
+                    panic!("asd");
+                };
+                dim_index
+            });
         let dim_name = {
             value
                 .maybe_find_text_by_tag_name("dimName")
@@ -542,11 +536,11 @@ fn check_node_count(
     }
 }
 
-fn process_registers<P: ArchiPtr>(
+fn process_registers<P: ArchPtr>(
     parent: &RegisterParent<P>,
     register_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    reg_filter: Option<&ItemFilter<String>>,
+    syms_regex: Option<&ItemFilter<String>>,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -602,7 +596,7 @@ where
             // FIXME: block WITH brackets or WITOUT brackets? maybe both?
             // FIXME: we match against only the register's name, not the path. This is not a
             // great way to exclude registers. We should match against the entire path.
-            if reg_filter.is_blocked(&subname) {
+            if reg_filter.is_some_and(|f| f.is_blocked(&subname)) {
                 info!("register {subname} is was not included due to values set in PATH_EXCLUDES");
                 return Ok(None);
             }
@@ -615,7 +609,7 @@ where
                     subname.to_owned(),
                 );
                 let reg_path = path.join("-");
-                if syms_regex.is_blocked(&reg_path) {
+                if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                     info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
                     return Ok(None);
                 }
@@ -654,7 +648,7 @@ where
                 name.to_owned(),
             );
             let reg_path = path.join("-");
-            if syms_regex.is_blocked(&reg_path) {
+            if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                 info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
                 return Ok(None);
             }
@@ -662,7 +656,7 @@ where
         };
         // FIXME: we match against only the register's name, not the path. This is not a
         // great way to exclude registers. We should match against the entire path.
-        if reg_filter.is_blocked(&name) {
+        if reg_filter.is_some_and(|f| f.is_blocked(&name)) {
             info!("register {name} is was not included due to values set in PATH_EXCLUDES");
             return Ok(None);
         }
@@ -685,11 +679,11 @@ where
     Ok(Some(registers))
 }
 
-fn process_cluster<P: ArchiPtr>(
+fn process_cluster<P: ArchPtr>(
     parent: &RegisterParent<P>,
     cluster_node: XmlNode,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    reg_filter: Option<&ItemFilter<String>>,
+    syms_regex: Option<&ItemFilter<String>>,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -709,11 +703,9 @@ where
     Ok(Some(cluster_registers))
 }
 
-fn process_peripheral<P: ArchiPtr>(
+fn process_peripheral<P: ArchPtr>(
     periph_node: XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -724,7 +716,11 @@ where
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
-    if periph_filter.is_blocked(&periph_name.to_lowercase()) {
+    if filters
+        .periph_filter
+        .as_ref()
+        .is_some_and(|f| f.is_blocked(&periph_name.to_lowercase()))
+    {
         info!("Peripheral {periph_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
         return Ok(None);
     }
@@ -735,39 +731,53 @@ where
 
     let mut peripheral_registers = Vec::new();
     for cluster_node in registers_node.children_with_tag_name("cluster") {
-        if let Some(registers) = process_cluster(&periph, cluster_node, reg_filter, syms_regex)? {
+        if let Some(registers) = process_cluster(
+            &periph,
+            cluster_node,
+            filters.reg_filter.as_ref(),
+            filters.syms_filter.as_ref(),
+        )? {
             peripheral_registers.extend(registers);
         }
     }
     for register_node in registers_node.children_with_tag_name("register") {
-        if let Some(registers) = process_registers(&periph, register_node, reg_filter, syms_regex)?
-        {
+        if let Some(registers) = process_registers(
+            &periph,
+            register_node,
+            filters.reg_filter.as_ref(),
+            filters.syms_filter.as_ref(),
+        )? {
             peripheral_registers.extend(registers);
         }
     }
     Ok(Some(peripheral_registers))
 }
 
+/// <https://siliconlabs.github.io/Gecko_SDK_Doc/CMSIS/SVD/html/group__svd__xml__device__gr.html>
 struct ArchitectureSize {
-    /// How many bits one address contains
-    pub address_bits: usize,
-    /// How many bits one bus transaction contains
-    pub bus_bits: usize,
+    /// Defines the number of data bits uniquely selected by each address. The value for Cortex-M
+    /// based devices is 8 (byte-addressable).
+    pub address_unit_bits: usize,
+    /// Defines the number of data bit-width of the maximum single data transfer supported by the
+    /// bus infrastructure. This information is relevant for debuggers when accessing registers,
+    /// because it might be required to issue multiple accesses for accessing a resource of a bigger
+    /// size. The expected value for Cortex-M based devices is 32.
+    pub width: usize,
 }
 
 fn find_architecture_size(
     device_node: &XmlNode,
 ) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
     // How many bits one address contains?
-    let address_bits = device_node.children_with_tag_name("addressUnitBits");
+    let address_unit_bits = device_node.children_with_tag_name("addressUnitBits");
     // TODO: maybe use range "allowed_range" which can also be used with the error
-    check_node_count(device_node, "addressUnitBits", &address_bits, 1..=1)?;
+    check_node_count(device_node, "addressUnitBits", &address_unit_bits, 1..=1)?;
 
     assert!(
-        address_bits.len() == 1,
+        address_unit_bits.len() == 1,
         "device-node must define address width in bits once",
     );
-    let address_bits: usize = address_bits
+    let address_unit_bits: usize = address_unit_bits
         .first()
         .unwrap()
         .0
@@ -777,29 +787,27 @@ fn find_architecture_size(
         .unwrap();
     // TODO: add error
     assert!(
-        address_bits == 8,
-        "{address_bits}-bit addressable architectures are not yet supported",
+        address_unit_bits == 8,
+        "{address_unit_bits}-bit addressable architectures are not yet supported",
     );
     // How many bits one bus transaction contains?
-    let bus_bits = device_node.children_with_tag_name("width");
-    check_node_count(device_node, "width", &bus_bits, 1..=1)?;
-    let bus_bits: usize = bus_bits.first().unwrap().0.text().unwrap().parse().unwrap();
+    let width = device_node.children_with_tag_name("width");
+    check_node_count(device_node, "width", &width, 1..=1)?;
+    let width: usize = width.first().unwrap().0.text().unwrap().parse().unwrap();
     // TODO: add error
     assert!(
-        bus_bits == 8 || bus_bits == 16 || bus_bits == 32 || bus_bits == 64,
-        "{bus_bits}-bit bus width architectures are not yet supported"
+        width == 8 || width == 16 || width == 32 || width == 64,
+        "{width}-bit bus width architectures are not yet supported"
     );
     Ok(ArchitectureSize {
-        address_bits,
-        bus_bits,
+        address_unit_bits,
+        width,
     })
 }
 
-fn process_peripherals<P: ArchiPtr>(
+fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -809,20 +817,16 @@ where
 {
     let mut registers = Vec::new();
     for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
-        if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, periph_filter, reg_filter, syms_regex)?
-        {
+        if let Some(peripheral_registers) = process_peripheral(peripheral_node, filters)? {
             registers.extend(peripheral_registers);
         }
     }
     Ok(registers)
 }
 
-fn process_device<P: ArchiPtr>(
+fn process_device<P: ArchPtr>(
     device_node: &XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -835,14 +839,12 @@ where
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
-    process_peripherals(peripherals_node, periph_filter, reg_filter, syms_regex)
+    process_peripherals(peripherals_node, filters)
 }
 
-fn process_root<P: ArchiPtr>(
+fn process_root<P: ArchPtr>(
     root_node: XmlNode,
-    periph_filter: &ItemFilter<String>,
-    reg_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -853,15 +855,13 @@ where
     let device_nodes = root_node.children_with_tag_name("device");
     check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
     let device_node = device_nodes.first().unwrap();
-    process_device(device_node, periph_filter, reg_filter, syms_regex)
+    process_device(device_node, filters)
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers<P: ArchiPtr>(
+fn find_registers<P: ArchPtr>(
     parsed: &Document,
-    reg_filter: &ItemFilter<String>,
-    periph_filter: &ItemFilter<String>,
-    syms_regex: &ItemFilter<String>,
+    filters: &Filters,
 ) -> Result<Registers<P>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -870,7 +870,7 @@ where
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
-    let registers = process_root(root, reg_filter, periph_filter, syms_regex)?;
+    let registers = process_root(root, filters)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
@@ -902,11 +902,9 @@ where
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-fn parse_svd_into_registers<P: ArchiPtr>(
-    svd_path: &Path,
-    reg_filter: &ItemFilter<String>,
-    periph_filter: &ItemFilter<String>,
-    syms_filter: &ItemFilter<String>,
+pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
+    svd_source: &path::Path,
+    filters: &Filters,
 ) -> Result<Registers<P>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -914,10 +912,10 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    let svd_content = read_file_or_panic(svd_path);
+    let svd_content = util::read_file_or_panic(svd_source);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, reg_filter, periph_filter, syms_filter)
-        .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
+    let registers = find_registers(&parsed, filters)
+        .map_err(|positional| positional.with_fname(format!("{}", svd_source.display())))?;
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
@@ -930,51 +928,8 @@ where
     Ok(registers)
 }
 
-fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
-    let svd_path = env::var(var)?;
-    Ok(env::current_dir()
-        .expect("cannot access current working dir")
-        .join(svd_path))
-}
-
-/// Parse SVD-file.
-///
-/// # Panics
-///
-/// - Missing path to SVD-file
-///
-/// # Errors
-///
-/// - Failed to interpret given options
-/// - Failed to parse given SVD file
-pub fn parse<P: ArchiPtr>() -> Result<Registers<P>, Error>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
-    let svd_path = read_path_from_env("SVD_PATH")?;
-    let include_peripherals = read_vec_from_env("INCLUDE_PERIPHERALS", ',');
-    let exclude_peripherals = read_vec_from_env("EXCLUDE_PERIPHERALS", ',');
-    let periph_filter =
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
-    let include_syms_regex = env::var("INCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let exclude_syms_regex = env::var("EXCLUDE_SYMS_REGEX")
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
-    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
-    parse_svd_into_registers(&svd_path, &reg_filter, &periph_filter, &syms_filter)
-}
-
-pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
-    let svd_path = read_path_from_env("SVD_PATH").unwrap();
-    let svd_content = read_file_or_panic(&svd_path);
+pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSize, SvdParseError> {
+    let svd_content = util::read_file_or_panic(svd_path.as_ref());
     let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
     let root = parsed.root().into_xml_node();
 
@@ -992,10 +947,10 @@ pub fn parse_architecture_size() -> Result<PtrSize, SvdParseError> {
         // TODO: fix this
         err.error()
     })?;
-    match PtrSize::from_bit_count(architecture_size.bus_bits as u64) {
+    match PtrSize::from_bit_count(architecture_size.width as u64) {
         Some(size) => Ok(size),
         None => Err(SvdParseError::PointerSizeNotSupported(
-            architecture_size.bus_bits,
+            architecture_size.width,
         )),
     }
 }

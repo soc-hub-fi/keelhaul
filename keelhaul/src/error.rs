@@ -1,9 +1,9 @@
 use std::{
-    convert, env, fmt,
+    convert, fmt,
     ops::{self, RangeInclusive},
 };
 
-use crate::{AddrRepr, ArchiPtr, IncompatibleTypesError, TestConfig};
+use crate::{AddrRepr, ArchPtr, IncompatibleTypesError, TestConfig};
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
@@ -25,7 +25,7 @@ impl<T: num::CheckedAdd> AddrOverflowError<T> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum Error {
     #[error("error while parsing SVD")]
     SvdParse(#[from] ParseFileError<SvdParseError>),
@@ -33,8 +33,6 @@ pub enum Error {
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
     ZeroEntries,
-    #[error("failed to read environment variable")]
-    VarError(#[from] env::VarError),
     #[error("pointer size of {0} bits is not supported")]
     PointerSizeNotSupported(usize),
     #[error(
@@ -47,7 +45,7 @@ pub enum Error {
     },
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 #[error("CMSIS-SVD parse error --> {fname}:{err}")]
 pub struct ParseFileError<T>
 where
@@ -60,7 +58,7 @@ where
 /// Representation of a file position in an error
 ///
 /// Indexes start from 1:1.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Position {
     Point {
         line: u32,
@@ -129,7 +127,7 @@ impl fmt::Display for Position {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Error, Debug)]
 #[error("{pos}\n{err}")]
 pub struct PositionalError<T>
 where
@@ -237,7 +235,7 @@ pub enum GenerateError {
     InvalidConfig { c: TestConfig, cause: String },
 }
 
-impl<P: ArchiPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
+impl<P: ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
     fn from(value: AddrOverflowError<P>) -> Self {
         Self::AddrOverflow {
             err: Box::new(value),

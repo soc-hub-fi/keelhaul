@@ -7,7 +7,8 @@ CMSIS-SVD files.
 
 - Make sure to run `git submodule update --init` or equivalent
 - Install Rust from <https://rustup.rs/>
-- Install `just` (using cargo)
+- Install `just`, a command runner
+  - `cargo install just`
 
 ## SoC integration guide
 
@@ -18,9 +19,9 @@ Use these steps to bring up support for Keelhaul in an SoC project:
 2. Depend on the `register-selftest` crate in Cargo.toml
     - `export SELFTEST=<path_here>/register-selftest`
     - `cargo add register-selftest --path=$SELFTEST`
-3. Write a platform-specific runtime such as the one provided at [./runtimes/headsail-selftest/src/main.rs](./runtimes/headsail-selftest/src/main.rs).
+3. Write a platform-specific runtime such as the one provided at [./examples/headsail-selftest/src/main.rs](./examples/headsail-selftest/src/main.rs).
 
-    `runtimes/headsail-selftest` is a reference project as used for the preparation for the tapeout of Headsail.
+    `examples/headsail-selftest` is a reference project as used for the preparation for the tapeout of Headsail.
 
 4. Finally, you can  generate test cases for an SVD file and run it against the target platform:
 
@@ -65,6 +66,21 @@ If you intend to use this tool for an academic publication, please consider citi
   organization={IEEE}
 }
 ```
+
+## Supported models
+
+Supported model formats:
+
+- [x] [CMSIS-SVD](https://www.keil.com/pack/doc/CMSIS/SVD/html/index.html)
+
+Support is planned for:
+
+- [ ] [IEEE 1685-2014](https://standards.ieee.org/ieee/1685/5834/) (IP-XACT 2014)
+- [ ] [IEEE 1685-2022](https://standards.ieee.org/ieee/1685/10583/) (IP-XACT 2022)
+
+Support is not planned for:
+
+- [IEEE 1685-2009](https://standards.ieee.org/ieee/1685/4013/) (IP-XACT 2009)
 
 ## Contributing
 

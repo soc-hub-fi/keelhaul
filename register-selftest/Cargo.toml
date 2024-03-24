@@ -13,10 +13,13 @@ authors = [
 [build-dependencies]
 keelhaul = { path = "../keelhaul" }
 json = { workspace = true }
-thiserror = { workspace = true }
+thiserror.workspace = true
 fs-err = "2.9.0"
 log = { workspace = true }
 anyhow = "1.0.70"
+itertools = "0.12.1"
+num = "0.4.1"
+regex = "1.10.4"
 
 [lib]
 name = "register_selftest"

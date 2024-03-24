@@ -1,67 +1,34 @@
 //! Common types and functions for register test generator.
 
-// TODO: leave error handling to user crate
+// Export full API at crate root
+pub use api::*;
 
-mod error;
+mod api;
+mod util;
+// TODO: leave error handling to user crate
+pub mod error;
 mod generate;
 mod model;
 mod parse_svd;
 
-pub use error::*;
 pub use generate::*;
-use itertools::Itertools;
 pub use model::*;
 pub use parse_svd::*;
 use regex::Regex;
 
-use fs_err as fs;
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
-
-/// Returns contents of a file at `path`, panicking on any failure
-///
-/// # Panics
-///
-/// This function panics if the path does not exist, or if the file cannot be
-/// read.
-#[must_use]
-pub fn read_file_or_panic(path: &Path) -> String {
-    path.canonicalize().map_or_else(
-        |err| panic!("path {} does not exist: {err}", path.display()),
-        |p| {
-            fs::read_to_string(p)
-                .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
-        },
-    )
-}
-
-/// Try to extract path to excludes-file from environment variable.
-fn read_file_from_env_or_panic(var: &str) -> Option<String> {
-    env::var(var)
-        .ok()
-        .map(|p| read_file_or_panic(&PathBuf::from(p)))
-}
-
-/// Try to get names of excluded registers.
-fn read_excludes_from_env() -> Option<Vec<String>> {
-    read_file_from_env_or_panic("PATH_EXCLUDES").map(|contents|
-            // One register per line
-            contents.split('\n').map(ToOwned::to_owned).collect_vec())
-}
-
 /// What items of type `T` are allowed or not
-enum ItemFilter<T: PartialEq> {
+pub enum ItemFilter<T: PartialEq> {
     List {
         // If set, only the specified items are allowed. If not set, all items are
         // allowed except the ones listed in blocklist.
-        white_list: Option<Vec<T>>,
+        allow_list: Option<Vec<T>>,
         // These items are always blocked even if present in `white_list`
         block_list: Vec<T>,
     },
     Regex {
+        // If set, only items matching the regex are allowed
         allow: Option<Regex>,
+        // If set, items matching the regex are not allowed
         block: Option<Regex>,
     },
 }
@@ -79,14 +46,14 @@ where
     fn is_allowed(&self, value: V) -> bool {
         match self {
             Self::List {
-                white_list,
+                allow_list,
                 block_list,
             } => {
                 // Items in block list are always blocked
                 if block_list.contains(&value.clone().into()) {
                     return false;
                 }
-                white_list
+                allow_list
                     .as_ref()
                     .map_or(true, |wl| wl.contains(&value.into()))
             }
@@ -110,33 +77,45 @@ where
 }
 
 impl<T: PartialEq> ItemFilter<T> {
-    #[allow(clippy::use_self)]
-    fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+    pub fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
         Self::List {
-            white_list,
+            allow_list: white_list,
             block_list,
         }
     }
 
-    #[allow(clippy::use_self)]
-    const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
+    pub const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
     }
 }
 
-/// Returns a vector containing elements read from environment variable `var` if
-/// the variable is present.
-///
-/// # Parameters:
-///
-/// `var` - The name of the environment variable to be read
-/// `sep` - The separator for Vec elements
-fn read_vec_from_env(var: &str, sep: char) -> Option<Vec<String>> {
-    env::var(var)
-        .map(|s| {
-            let peripherals = s.split(sep).map(ToOwned::to_owned).collect_vec();
-            // TODO: verify that these are valid peripherals
-            peripherals
-        })
-        .ok()
+// TODO: Move ItemFilter to api.rs
+
+pub struct Filters {
+    pub(crate) reg_filter: Option<ItemFilter<String>>,
+    pub(crate) periph_filter: Option<ItemFilter<String>>,
+    pub(crate) syms_filter: Option<ItemFilter<String>>,
+}
+
+impl Filters {
+    /// Take all registers in input
+    pub fn all() -> Self {
+        Self {
+            reg_filter: None,
+            periph_filter: None,
+            syms_filter: None,
+        }
+    }
+
+    pub fn from_filters(
+        reg_filter: Option<ItemFilter<String>>,
+        periph_filter: Option<ItemFilter<String>>,
+        syms_filter: Option<ItemFilter<String>>,
+    ) -> Self {
+        Self {
+            reg_filter,
+            periph_filter,
+            syms_filter,
+        }
+    }
 }
