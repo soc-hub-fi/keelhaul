@@ -15,10 +15,10 @@ thiserror = { workspace = true }
 log = { workspace = true }
 roxmltree = { version = "0.19", features = ["positions"] }
 itertools = "0.12"
-regex = "1.7.1"
+regex = "1.10"
 lazy_static = "1.4.0"
-quote = "1.0.26"
-proc-macro2 = "1.0.52"
-num = "0.4.0"
+quote = "1.0.35"
+proc-macro2 = "1.0.79"
+num = "0.4"
 strum = { version = "0.26", features = ["derive"] }
 fs-err = "2.9.0"
