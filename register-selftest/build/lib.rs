@@ -138,12 +138,15 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("could not detect {ENV_ARCH}"))? as u8)
         .try_into()?;
     let mut test_cfg = TestConfig::new(arch_ptr_size);
-    if let Some(test_kind_set) = test_types_from_env()? {
+    if let Some(test_kind_set) =
+        test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
+    {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
     let mut file_output = open_output_file();
 
-    let svd_path = util::read_relpath_from_env(ENV_SVD_IN)?;
+    let svd_path = util::read_relpath_from_env(ENV_SVD_IN)
+        .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
     let test_cases: TestCases = match arch_ptr_size {
         PtrSize::U8 => {
             let registers = parse::<u8>(&svd_path)?;
