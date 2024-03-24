@@ -26,7 +26,7 @@ pub(crate) fn read_abspath_from_env(var: &str) -> Result<path::PathBuf, env::Var
     Ok(path::PathBuf::from(path))
 }
 
-/// Returns a vector containing elements read from `var`
+/// Returns a vector from `var`
 ///
 /// Returns `VarError` if the var does not exist.
 ///

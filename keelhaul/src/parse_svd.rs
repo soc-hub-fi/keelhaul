@@ -287,7 +287,7 @@ impl RegPropGroupBuilder {
             self.access = Some(access);
         };
         if let Some(protection) =
-            process_prop_from_node_if_present("protection", node, |s| Protection::from_str(s))?
+            process_prop_from_node_if_present("protection", node, Protection::from_str)?
         {
             self.protection = Some(protection);
         };

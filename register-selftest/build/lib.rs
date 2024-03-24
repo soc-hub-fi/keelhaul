@@ -174,7 +174,7 @@ where
         Filters::from_filters(reg_filter, periph_filter, syms_filter),
     )?
     .into_iter()
-    .nth(0)
+    .next()
     .unwrap())
 }
 

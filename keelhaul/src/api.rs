@@ -66,7 +66,7 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
 ///
 /// # Type arguments
 ///
-/// * `P` - the architecture width as represented by u32 or u64
+/// * `P` - architecture width, i.e., a type that can represent any address on the platform
 pub fn parse_registers<P>(
     sources: &[ModelSource],
     filters: Filters,
