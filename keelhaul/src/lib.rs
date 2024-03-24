@@ -75,7 +75,6 @@ where
 }
 
 impl<T: PartialEq> ItemFilter<T> {
-    #[allow(clippy::use_self)]
     pub fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
         Self::List {
             allow_list: white_list,
@@ -83,7 +82,6 @@ impl<T: PartialEq> ItemFilter<T> {
         }
     }
 
-    #[allow(clippy::use_self)]
     pub const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
         Self::Regex { allow, block }
     }

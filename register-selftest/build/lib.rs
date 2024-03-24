@@ -85,7 +85,6 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
 ///
 /// This function panics if the path does not exist, or if the file cannot be
 /// read.
-#[must_use]
 pub fn read_file_or_panic(path: &path::Path) -> String {
     path.canonicalize().map_or_else(
         |err| panic!("path {} does not exist: {err}", path.display()),
