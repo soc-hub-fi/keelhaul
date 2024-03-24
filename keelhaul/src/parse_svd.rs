@@ -753,26 +753,31 @@ where
     Ok(Some(peripheral_registers))
 }
 
+/// <https://siliconlabs.github.io/Gecko_SDK_Doc/CMSIS/SVD/html/group__svd__xml__device__gr.html>
 struct ArchitectureSize {
-    /// How many bits one address contains
-    pub address_bits: usize,
-    /// How many bits one bus transaction contains
-    pub bus_bits: usize,
+    /// Defines the number of data bits uniquely selected by each address. The value for Cortex-M
+    /// based devices is 8 (byte-addressable).
+    pub address_unit_bits: usize,
+    /// Defines the number of data bit-width of the maximum single data transfer supported by the
+    /// bus infrastructure. This information is relevant for debuggers when accessing registers,
+    /// because it might be required to issue multiple accesses for accessing a resource of a bigger
+    /// size. The expected value for Cortex-M based devices is 32.
+    pub width: usize,
 }
 
 fn find_architecture_size(
     device_node: &XmlNode,
 ) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
     // How many bits one address contains?
-    let address_bits = device_node.children_with_tag_name("addressUnitBits");
+    let address_unit_bits = device_node.children_with_tag_name("addressUnitBits");
     // TODO: maybe use range "allowed_range" which can also be used with the error
-    check_node_count(device_node, "addressUnitBits", &address_bits, 1..=1)?;
+    check_node_count(device_node, "addressUnitBits", &address_unit_bits, 1..=1)?;
 
     assert!(
-        address_bits.len() == 1,
+        address_unit_bits.len() == 1,
         "device-node must define address width in bits once",
     );
-    let address_bits: usize = address_bits
+    let address_unit_bits: usize = address_unit_bits
         .first()
         .unwrap()
         .0
@@ -782,21 +787,21 @@ fn find_architecture_size(
         .unwrap();
     // TODO: add error
     assert!(
-        address_bits == 8,
-        "{address_bits}-bit addressable architectures are not yet supported",
+        address_unit_bits == 8,
+        "{address_unit_bits}-bit addressable architectures are not yet supported",
     );
     // How many bits one bus transaction contains?
-    let bus_bits = device_node.children_with_tag_name("width");
-    check_node_count(device_node, "width", &bus_bits, 1..=1)?;
-    let bus_bits: usize = bus_bits.first().unwrap().0.text().unwrap().parse().unwrap();
+    let width = device_node.children_with_tag_name("width");
+    check_node_count(device_node, "width", &width, 1..=1)?;
+    let width: usize = width.first().unwrap().0.text().unwrap().parse().unwrap();
     // TODO: add error
     assert!(
-        bus_bits == 8 || bus_bits == 16 || bus_bits == 32 || bus_bits == 64,
-        "{bus_bits}-bit bus width architectures are not yet supported"
+        width == 8 || width == 16 || width == 32 || width == 64,
+        "{width}-bit bus width architectures are not yet supported"
     );
     Ok(ArchitectureSize {
-        address_bits,
-        bus_bits,
+        address_unit_bits,
+        width,
     })
 }
 
@@ -942,10 +947,10 @@ pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSi
         // TODO: fix this
         err.error()
     })?;
-    match PtrSize::from_bit_count(architecture_size.bus_bits as u64) {
+    match PtrSize::from_bit_count(architecture_size.width as u64) {
         Some(size) => Ok(size),
         None => Err(SvdParseError::PointerSizeNotSupported(
-            architecture_size.bus_bits,
+            architecture_size.width,
         )),
     }
 }

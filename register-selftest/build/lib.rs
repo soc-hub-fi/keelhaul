@@ -16,8 +16,8 @@ use anyhow::{Context, Error};
 use fs_err::{self as fs, File};
 use itertools::Itertools;
 use keelhaul::{
-    error::SvdParseError, parse_architecture_size, ArchPtr, Filters, ItemFilter, ModelSource,
-    ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases, TestConfig,
+    error::SvdParseError, ArchPtr, Filters, ItemFilter, ModelSource, ParseTestKindError, PtrSize,
+    RegTestKind, Registers, TestCases, TestConfig,
 };
 use log::{info, LevelFilter};
 use regex::Regex;
@@ -79,29 +79,10 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
     }
 }
 
-fn arch_ptr_size_from_env() -> anyhow::Result<Option<PtrSize>> {
-    if let Ok(bytes_str) = env::var(ENV_ARCH) {
-        let ptr_size = bytes_str
-            .parse::<u8>()
-            .with_context(|| ENV_ARCH)
-            .unwrap()
-            .try_into()?;
-        info!("Pointer size is overriden with: {:?}", ptr_size);
-        Ok(Some(ptr_size))
-    } else {
-        Ok(None)
-    }
-}
-
-fn solve_architecture_size() -> Result<PtrSize, Error> {
-    match arch_ptr_size_from_env()? {
-        Some(size) => Ok(size),
-        None => {
-            let svd_path = util::read_relpath_from_env(ENV_SVD_IN).unwrap();
-            // Parse size from SVD-file.
-            Ok(parse_architecture_size(svd_path)?)
-        }
-    }
+fn arch_ptr_size_from_env() -> anyhow::Result<PtrSize> {
+    let bytes_str = env::var(ENV_ARCH)?;
+    let ptr_size = bytes_str.parse::<u8>().with_context(|| ENV_ARCH).unwrap();
+    Ok(ptr_size.try_into()?)
 }
 
 /// Returns contents of a file at `path`, panicking on any failure
@@ -185,15 +166,13 @@ pub fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_SYMS_REGEX}");
     println!("cargo:rerun-if-env-changed={ENV_TEST_KINDS}");
     println!("cargo:rerun-if-env-changed={ENV_SVD_IN}");
-    // TODO: this info can be found from SVD-file, providing it via CLI is redundant, or is it?
     println!("cargo:rerun-if-env-changed={ENV_ARCH}");
     println!("cargo:rerun-if-env-changed={ENV_OUT_DIR_OVERRIDE}");
-    println!("cargo:rerun-if-changed=build.rs");
 
     // Install a logger to print useful messages into `cargo:warning={}`
     logger::init(LevelFilter::Info);
 
-    let arch_ptr_size = solve_architecture_size()?;
+    let arch_ptr_size = arch_ptr_size_from_env()?;
     let mut test_cfg = TestConfig::new(arch_ptr_size);
     if let Some(test_kind_set) = test_types_from_env()? {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
