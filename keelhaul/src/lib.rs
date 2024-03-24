@@ -21,7 +21,7 @@ pub enum ItemFilter<T: PartialEq> {
     List {
         // If set, only the specified items are allowed. If not set, all items are
         // allowed except the ones listed in blocklist.
-        white_list: Option<Vec<T>>,
+        allow_list: Option<Vec<T>>,
         // These items are always blocked even if present in `white_list`
         block_list: Vec<T>,
     },
@@ -44,14 +44,14 @@ where
     fn is_allowed(&self, value: V) -> bool {
         match self {
             Self::List {
-                white_list,
+                allow_list,
                 block_list,
             } => {
                 // Items in block list are always blocked
                 if block_list.contains(&value.clone().into()) {
                     return false;
                 }
-                white_list
+                allow_list
                     .as_ref()
                     .map_or(true, |wl| wl.contains(&value.into()))
             }
@@ -78,7 +78,7 @@ impl<T: PartialEq> ItemFilter<T> {
     #[allow(clippy::use_self)]
     pub fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
         Self::List {
-            white_list,
+            allow_list: white_list,
             block_list,
         }
     }

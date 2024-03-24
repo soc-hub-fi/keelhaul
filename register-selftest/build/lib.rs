@@ -127,20 +127,27 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    let include_peripherals = util::read_vec_from_env(ENV_INCLUDE_PERIPHS, ',').ok();
-    let exclude_peripherals = util::read_vec_from_env(ENV_EXCLUDE_PERIPHS, ',').ok();
-    let periph_filter =
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default());
-    let include_syms_regex = env::var(ENV_INCLUDE_SYMS_REGEX)
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let exclude_syms_regex = env::var(ENV_EXCLUDE_SYMS_REGEX)
-        .ok()
-        .map(|s| Regex::new(&s))
-        .transpose()?;
-    let syms_filter = ItemFilter::regex(include_syms_regex, exclude_syms_regex);
-    let reg_filter = ItemFilter::list(None, read_excludes_from_env().unwrap_or_default());
+    let periph_filter = {
+        let include_peripherals = util::read_vec_from_env(ENV_INCLUDE_PERIPHS, ',').ok();
+        let exclude_peripherals = util::read_vec_from_env(ENV_EXCLUDE_PERIPHS, ',').ok();
+        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default())
+    };
+    let syms_filter = {
+        let include_syms_regex = env::var(ENV_INCLUDE_SYMS_REGEX)
+            .ok()
+            .map(|s| Regex::new(&s))
+            .transpose()?;
+        let exclude_syms_regex = env::var(ENV_EXCLUDE_SYMS_REGEX)
+            .ok()
+            .map(|s| Regex::new(&s))
+            .transpose()?;
+        ItemFilter::regex(include_syms_regex, exclude_syms_regex)
+    };
+    let reg_filter = {
+        let allow_list = None;
+        let block_list = read_excludes_from_env().unwrap_or_default();
+        ItemFilter::list(allow_list, block_list)
+    };
     Ok(keelhaul::parse_registers(
         &[ModelSource::new(
             svd_path.as_ref().to_path_buf(),
