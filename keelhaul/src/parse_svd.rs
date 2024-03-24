@@ -4,9 +4,9 @@
 
 use crate::{
     error::{Error, PositionalError, SvdParseError},
-    read_file_or_panic, Access, AddrRepr, ArchPtr, DimIndex, Filters, IncompatibleTypesError,
-    IsAllowedOrBlocked, ItemFilter, Protection, PtrSize, RegPath, RegValue, Register,
-    RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+    util, Access, AddrRepr, ArchPtr, DimIndex, Filters, IncompatibleTypesError, IsAllowedOrBlocked,
+    ItemFilter, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
+    RegisterPropertiesGroup, Registers, ResetValue,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -15,7 +15,7 @@ use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     ops::RangeInclusive,
-    path::Path,
+    path,
     str::FromStr,
 };
 
@@ -898,7 +898,7 @@ where
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
 pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
-    svd_path: &Path,
+    svd_source: &path::Path,
     filters: &Filters,
 ) -> Result<Registers<P>, Error>
 where
@@ -907,10 +907,10 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    let svd_content = read_file_or_panic(svd_path);
+    let svd_content = util::read_file_or_panic(svd_source);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
     let registers = find_registers(&parsed, filters)
-        .map_err(|positional| positional.with_fname(format!("{}", svd_path.display())))?;
+        .map_err(|positional| positional.with_fname(format!("{}", svd_source.display())))?;
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
@@ -923,8 +923,8 @@ where
     Ok(registers)
 }
 
-pub fn parse_architecture_size(svd_path: impl AsRef<Path>) -> Result<PtrSize, SvdParseError> {
-    let svd_content = read_file_or_panic(svd_path.as_ref());
+pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSize, SvdParseError> {
+    let svd_content = util::read_file_or_panic(svd_path.as_ref());
     let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
     let root = parsed.root().into_xml_node();
 

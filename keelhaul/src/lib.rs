@@ -4,6 +4,7 @@
 pub use api::*;
 
 mod api;
+mod util;
 // TODO: leave error handling to user crate
 pub mod error;
 mod generate;
@@ -14,26 +15,6 @@ pub use generate::*;
 pub use model::*;
 pub use parse_svd::*;
 use regex::Regex;
-
-use fs_err as fs;
-use std::path::Path;
-
-/// Returns contents of a file at `path`, panicking on any failure
-///
-/// # Panics
-///
-/// This function panics if the path does not exist, or if the file cannot be
-/// read.
-#[must_use]
-pub fn read_file_or_panic(path: &Path) -> String {
-    path.canonicalize().map_or_else(
-        |err| panic!("path {} does not exist: {err}", path.display()),
-        |p| {
-            fs::read_to_string(p)
-                .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
-        },
-    )
-}
 
 /// What items of type `T` are allowed or not
 pub enum ItemFilter<T: PartialEq> {

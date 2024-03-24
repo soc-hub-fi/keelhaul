@@ -2,24 +2,25 @@
 
 mod logger;
 
-use anyhow::{Context, Error};
-use fs_err::{self as fs, File};
-use itertools::Itertools;
-use keelhaul::{
-    error::SvdParseError, parse_architecture_size, read_file_or_panic, ArchPtr, Filters,
-    ItemFilter, ModelSource, ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases,
-    TestConfig,
-};
-use log::{info, LevelFilter};
-use regex::Regex;
 use std::{
     collections::HashSet,
     env,
     io::{self, Write},
+    path,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
 };
+
+use anyhow::{Context, Error};
+use fs_err::{self as fs, File};
+use itertools::Itertools;
+use keelhaul::{
+    error::SvdParseError, parse_architecture_size, ArchPtr, Filters, ItemFilter, ModelSource,
+    ParseTestKindError, PtrSize, RegTestKind, Registers, TestCases, TestConfig,
+};
+use log::{info, LevelFilter};
+use regex::Regex;
 
 /// Extract path to output file from environment variable.
 fn get_path_to_output() -> PathBuf {
@@ -107,6 +108,23 @@ fn read_path_from_env(var: &str) -> Result<PathBuf, Error> {
     Ok(env::current_dir()
         .expect("cannot access current working dir")
         .join(svd_path))
+}
+
+/// Returns contents of a file at `path`, panicking on any failure
+///
+/// # Panics
+///
+/// This function panics if the path does not exist, or if the file cannot be
+/// read.
+#[must_use]
+pub fn read_file_or_panic(path: &path::Path) -> String {
+    path.canonicalize().map_or_else(
+        |err| panic!("path {} does not exist: {err}", path.display()),
+        |p| {
+            fs::read_to_string(p)
+                .unwrap_or_else(|err| panic!("cannot read file at path {}: {err}", path.display()))
+        },
+    )
 }
 
 /// Try to extract path to excludes-file from environment variable.
