@@ -86,7 +86,9 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
+fn parse<P: ArchPtr>(
+    svd_path: impl AsRef<Path>,
+) -> Result<Registers<P, keelhaul::RefSchemaSvdV1_2>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -109,10 +111,10 @@ where
             .transpose()?;
         ItemFilter::regex(include_syms_regex, exclude_syms_regex)
     };
-    Ok(keelhaul::parse_registers(
+    Ok(keelhaul::parse_registers::<_, keelhaul::RefSchemaSvdV1_2>(
         &[ModelSource::new(
             svd_path.as_ref().to_path_buf(),
-            keelhaul::SourceFormat::Svd,
+            keelhaul::SourceFormat::SvdV1_3,
         )],
         Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
     )?
@@ -138,12 +140,15 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("could not detect {ENV_ARCH}"))? as u8)
         .try_into()?;
     let mut test_cfg = TestConfig::new(arch_ptr_size);
-    if let Some(test_kind_set) = test_types_from_env()? {
+    if let Some(test_kind_set) =
+        test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
+    {
         test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
     }
     let mut file_output = open_output_file();
 
-    let svd_path = util::read_relpath_from_env(ENV_SVD_IN)?;
+    let svd_path = util::read_relpath_from_env(ENV_SVD_IN)
+        .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
     let test_cases: TestCases = match arch_ptr_size {
         PtrSize::U8 => {
             let registers = parse::<u8>(&svd_path)?;

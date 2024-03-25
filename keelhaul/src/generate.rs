@@ -2,7 +2,10 @@
 
 // TODO: maybe generate array registers under new module-level
 
-use crate::{error::GenerateError, ArchPtr, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{
+    error::GenerateError,
+    model::{self, ArchPtr, PtrSize, RegValue, Register, Registers, ResetValue},
+};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
@@ -365,7 +368,7 @@ fn reset_value_bitands_generate() {
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
 /// This text is then compiled as Rust source code.
 struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + 'static>(
-    &'r Register<P>,
+    &'r Register<P, model::RefSchemaSvdV1_2>,
     &'c TestConfig,
 );
 
@@ -385,7 +388,10 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     }
 
     /// Create a [`RegTestGenerator`] from a register definition
-    pub const fn from_register(reg: &'r Register<P>, config: &'c TestConfig) -> Self {
+    pub const fn from_register(
+        reg: &'r Register<P, model::RefSchemaSvdV1_2>,
+        config: &'c TestConfig,
+    ) -> Self {
         Self(reg, config)
     }
 
@@ -448,7 +454,11 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
         let reg = self.0;
         let full_addr: Result<P, _> = reg.full_addr();
-        Ok(format_ident!("test_{}_{:#x}", reg.path.reg, full_addr?))
+        Ok(format_ident!(
+            "test_{}_{:#x}",
+            reg.path.reg().name,
+            full_addr?
+        ))
     }
 
     /// Generates a test function
@@ -519,7 +529,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// ```
     pub fn gen_test_def(&self) -> Result<TokenStream, GenerateError> {
         let fn_name = self.gen_test_fn_ident()?;
-        let periph_name_lc: TokenStream = self.0.path.periph.to_lowercase().parse().unwrap();
+        let periph_name_lc: TokenStream = self.0.path.periph().name.to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
         let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
         let uid = self.0.uid();
@@ -553,7 +563,7 @@ impl TestCases {
     ///
     /// - Failed to generate test case for a register
     pub fn from_registers<P: ArchPtr + quote::IdentFragment + 'static>(
-        registers: &Registers<P>,
+        registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
     ) -> Result<Self, GenerateError> {
         let preamble = gen_preamble(config).to_string();
@@ -565,7 +575,7 @@ impl TestCases {
             let test_fn = test_gen.gen_test_fn()?.to_string();
             let test_def = test_gen.gen_test_def()?.to_string();
             test_fns_and_defs_by_periph
-                .entry(register.path.periph.clone())
+                .entry(register.path.periph().name.clone())
                 .or_default()
                 .push((test_fn, test_def));
         }
