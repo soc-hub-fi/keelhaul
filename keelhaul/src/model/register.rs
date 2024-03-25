@@ -15,8 +15,11 @@ use log::warn;
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
+/// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
 pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
+    ///
+    /// Used for generating unique identifiers and symbol names in test cases
     pub path: RegPath<S>,
     /// Physical address of the register
     pub addr: AddrRepr<P, S>,
