@@ -22,3 +22,7 @@ proc-macro2 = "1.0.79"
 num = "0.4"
 strum = { version = "0.26", features = ["derive"] }
 fs-err = "2.9.0"
+svd = { package = "svd-rs", version = "0.14.8", features = [
+    "derive-from",
+    "serde",
+] }
