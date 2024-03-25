@@ -20,10 +20,18 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     pub path: RegPath<S>,
     /// Physical address of the register
     pub addr: AddrRepr<P, S>,
-    /// Defines register bit width, security and reset properties.
+    /// Bit-width of register
+    pub size: u32,
+    /// Register access rights.
+    pub access: Access,
+    /// Register access privileges.
+    pub protection: Protection,
+    /// Expected register value after reset based on source format
     ///
-    /// Cascades from higher levels to register level.
-    pub properties: RegisterPropertiesGroup,
+    /// Checking for the value may require special considerations in registers
+    /// with read-only or write-only fields. These considerations are encoded in
+    /// [ResetValue].
+    pub(crate) reset_value: ResetValue,
     pub dimensions: Option<RegisterDimElementGroup>,
 }
 
@@ -51,7 +59,7 @@ where
     }
 
     pub(crate) const fn masked_reset(&self) -> &ResetValue {
-        &self.properties.reset_value
+        &self.reset_value
     }
 }
 
@@ -254,42 +262,6 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
                 .map(|v| v.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         ))
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct RegisterPropertiesGroup {
-    /// Bit-width of register
-    pub size: u32,
-    /// Register access rights.
-    pub access: Access,
-    /// Register access privileges.
-    pub protection: Protection,
-    /// Expected register value after reset based on source format
-    ///
-    /// Checking for the value may require special considerations in registers
-    /// with read-only or write-only fields. These considerations are encoded in
-    /// [ResetValue].
-    reset_value: ResetValue,
-}
-
-impl RegisterPropertiesGroup {
-    pub(crate) const fn new(
-        size: u32,
-        access: Access,
-        protection: Protection,
-        reset_value: ResetValue,
-    ) -> Self {
-        Self {
-            size,
-            access,
-            protection,
-            reset_value,
-        }
-    }
-
-    pub(crate) const fn reset(&self) -> &ResetValue {
-        &self.reset_value
     }
 }
 
@@ -649,15 +621,6 @@ impl PtrSize {
             Self::U16 => RegValue::U16(u16::MAX),
             Self::U32 => RegValue::U32(u32::MAX),
             Self::U64 => RegValue::U64(u64::MAX),
-        }
-    }
-
-    pub(crate) const fn zero_value(self) -> RegValue {
-        match self {
-            Self::U8 => RegValue::U8(0),
-            Self::U16 => RegValue::U16(0),
-            Self::U32 => RegValue::U32(0),
-            Self::U64 => RegValue::U64(0),
         }
     }
 

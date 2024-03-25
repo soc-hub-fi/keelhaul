@@ -7,7 +7,7 @@ use crate::{
     error::{self, Error, PositionalError, SvdParseError},
     model::{
         self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
-        Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+        Register, RegisterDimElementGroup, Registers, ResetValue,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
@@ -350,6 +350,38 @@ impl RegPropGroupBuilder {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct RegisterPropertiesGroup {
+    /// Bit-width of register
+    pub size: u32,
+    /// Register access rights.
+    pub access: Access,
+    /// Register access privileges.
+    pub protection: Protection,
+    /// Expected register value after reset based on source format
+    ///
+    /// Checking for the value may require special considerations in registers
+    /// with read-only or write-only fields. These considerations are encoded in
+    /// [ResetValue].
+    pub(crate) reset_value: ResetValue,
+}
+
+impl RegisterPropertiesGroup {
+    pub(crate) const fn new(
+        size: u32,
+        access: Access,
+        protection: Protection,
+        reset_value: ResetValue,
+    ) -> Self {
+        Self {
+            size,
+            access,
+            protection,
+            reset_value,
+        }
+    }
+}
+
 enum RegisterParentKind<P: ArchPtr> {
     Periph,
     Cluster {
@@ -621,7 +653,7 @@ where
                 }
                 path
             };
-            let address = {
+            let addr = {
                 let (address_base, address_cluster, _) = addr.components();
                 // TODO: use error
                 let offset = P::try_from(i * dimensions.dim_increment).expect(
@@ -639,9 +671,12 @@ where
             };
             let register = Register {
                 path,
-                addr: address,
-                properties,
+                addr,
                 dimensions: Some(dimensions.clone()),
+                size: properties.size,
+                access: properties.access,
+                protection: properties.protection,
+                reset_value: properties.reset_value,
             };
             registers.push(register);
         }
@@ -677,8 +712,11 @@ where
         let register = Register {
             path,
             addr,
-            properties,
             dimensions,
+            size: properties.size,
+            access: properties.access,
+            protection: properties.protection,
+            reset_value: properties.reset_value,
         };
         registers.push(register);
     }
