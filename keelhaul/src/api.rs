@@ -3,11 +3,16 @@ mod error;
 
 use std::{path, str};
 
-use crate::{error::SvdParseError, model, Filters};
+use crate::{
+    error::SvdParseError,
+    model::{self},
+    Filters,
+};
 use error::NotImplementedError;
 
-pub use crate::model::{ArchPtr, PtrSize, RefSchemaSvdV1_2, Registers};
+pub use crate::model::{ArchPtr, PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::ApiError;
+pub use svd_parser::ValidateLevel;
 
 /// A source file for memory map metadata
 ///
@@ -65,6 +70,14 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
     Ok(())
 }
 
+pub enum Registers<P>
+where
+    P: ArchPtr,
+{
+    SvdV1_2(model::Registers<P, RefSchemaSvdV1_2>),
+    SvdV1_3(model::Registers<P, RefSchemaSvdV1_3>),
+}
+
 /// Run the parser on a set of `sources` and return the collection of registers contained within
 ///
 /// # Type arguments
@@ -73,7 +86,7 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
 pub fn parse_registers<P, S>(
     sources: &[ModelSource],
     filters: Filters,
-) -> Result<Vec<model::Registers<P, model::RefSchemaSvdV1_2>>, ApiError>
+) -> Result<Vec<Registers<P>>, ApiError>
 where
     P: model::ArchPtr,
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -94,9 +107,27 @@ where
         }
     }
 
-    let registers = sources
-        .iter()
-        .map(|src| crate::parse_svd::parse_svd_into_registers::<P>(src.path(), &filters))
-        .collect::<Result<Vec<_>, crate::error::Error>>()?;
+    let mut registers = vec![];
+
+    for src in sources {
+        match src.format {
+            SourceFormat::SvdV1_2 => registers.push(Registers::SvdV1_2(
+                crate::frontend::svd_v1_2::parse_svd_into_registers::<P>(src.path(), &filters)?,
+            )),
+            SourceFormat::SvdV1_3 => {
+                /*
+                registers.push(Registers::SvdV1_3(crate::frontend::svd_v1_3::parse_svd_into_registers::<P>(
+                    src.path(),
+                    &filters,
+                    validate_level,
+                )?)
+                */
+                todo!()
+            }
+            SourceFormat::Ieee1685_2014 => todo!(),
+            SourceFormat::Ieee1685_2022 => todo!(),
+        }
+    }
+
     Ok(registers)
 }

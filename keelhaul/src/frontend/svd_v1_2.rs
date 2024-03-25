@@ -1,7 +1,3 @@
-//! SVD-file parser for register test generator.
-
-// TODO: support deriving fields via <register derivedFrom="register1">
-
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     ops::RangeInclusive,
@@ -12,13 +8,14 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
-    util, Filters, IsAllowedOrBlocked, ItemFilter,
+    model::{self, AddrRepr, RegPath, RegValue, Register, Registers, ResetValue},
+    util, ArchPtr, Filters, IsAllowedOrBlocked, ItemFilter, PtrSize,
 };
 use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
 use roxmltree::Document;
+use svd_parser::svd;
 
 struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
 

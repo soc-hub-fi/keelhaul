@@ -5,13 +5,12 @@ pub use api::*;
 
 mod api;
 pub mod error;
+pub(crate) mod frontend;
 mod generate;
 mod model;
-mod parse_svd;
 mod util;
 
 pub use generate::*;
-pub use parse_svd::*;
 use regex::Regex;
 
 /// What items of type `T` are allowed or not
