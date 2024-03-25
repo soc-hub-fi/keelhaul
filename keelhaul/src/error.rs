@@ -147,10 +147,6 @@ where
     pub(crate) const fn with_fname(self, fname: String) -> ParseFileError<T> {
         ParseFileError { fname, err: self }
     }
-
-    pub(crate) fn error(&self) -> T {
-        self.err.clone()
-    }
 }
 
 /// Error that happened during parsing 'CMSIS-SVD'
