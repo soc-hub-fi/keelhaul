@@ -13,13 +13,13 @@ use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
     model::{
-        self, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue, Register,
+        self, AddrRepr, ArchPtr, DimIndex, PtrSize, RegPath, RegValue, Register,
         RegisterDimElementGroup, Registers, ResetValue,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
 use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{info, warn};
 use regex::Regex;
 use roxmltree::Document;
 
@@ -199,7 +199,7 @@ struct RegPropGroupBuilder {
     /// Register access rights.
     pub access: Option<svd::Access>,
     /// Register access privileges.
-    pub protection: Option<Protection>,
+    pub protection: Option<svd::Protection>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
     pub(crate) reset_value: Option<RegValue>,
@@ -290,9 +290,10 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) =
-            process_prop_from_node_if_present("protection", node, Protection::from_str)?
-        {
+        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
+            Ok(svd::Protection::parse_str(s)
+                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))?)
+        })? {
             self.protection = Some(protection);
         };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
@@ -323,12 +324,7 @@ impl RegPropGroupBuilder {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
             svd::Access::ReadWrite
         });
-        let protection = self.protection.unwrap_or_else(|| {
-            // This is a very common omission from SVD. We should not warn about it unless required by user
-            // TODO: allow changing this to warn! or error! via top level config
-            debug!("property 'protection' is not defined for register '{reg_path}' or any of its parents, assuming protection = NonSecureOrSecure");
-            Protection::NonSecureOrSecure
-        });
+        let protection = self.protection;
         let reset_value = {
             // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
             let size = PtrSize::from_bit_count(size).unwrap();
@@ -359,7 +355,7 @@ pub struct RegisterPropertiesGroup {
     /// Register access rights.
     pub access: svd::Access,
     /// Register access privileges.
-    pub protection: Protection,
+    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
@@ -372,7 +368,7 @@ impl RegisterPropertiesGroup {
     pub(crate) const fn new(
         size: u32,
         access: svd::Access,
-        protection: Protection,
+        protection: Option<svd::Protection>,
         reset_value: ResetValue,
     ) -> Self {
         Self {
@@ -677,7 +673,7 @@ where
                 dimensions: Some(dimensions.clone()),
                 size: properties.size,
                 access: properties.access,
-                protection: Some(properties.protection),
+                protection: properties.protection,
                 reset_value: properties.reset_value,
             };
             registers.push(register);
@@ -717,7 +713,7 @@ where
             dimensions,
             size: properties.size,
             access: properties.access,
-            protection: Some(properties.protection),
+            protection: properties.protection,
             reset_value: properties.reset_value,
         };
         registers.push(register);

@@ -27,7 +27,7 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Software access rights
     pub access: svd::Access,
     /// Register access privileges.
-    pub protection: Option<Protection>,
+    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
@@ -283,43 +283,6 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
                 .map(|v| v.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         ))
-    }
-}
-
-/// Specify the security privilege to access an address region
-#[derive(Clone, Copy)]
-pub enum Protection {
-    /// Secure permission required for access
-    Secure,
-    /// Non-secure or secure permission required for access
-    NonSecureOrSecure,
-    /// Privileged permission required for access
-    Privileged,
-}
-
-impl str::FromStr for Protection {
-    type Err = error::SvdParseError;
-
-    /// Convert from CMSIS-SVD `protectionStringType` string
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "s" => Ok(Self::Secure),
-            "n" => Ok(Self::NonSecureOrSecure),
-            "p" => Ok(Self::Privileged),
-            _ => Err(error::SvdParseError::InvalidProtectionType(s.to_owned())),
-        }
-    }
-}
-
-impl ToString for Protection {
-    /// Convert to CMSIS-SVD `protectionStringType` string
-    fn to_string(&self) -> String {
-        match self {
-            Self::Secure => "s",
-            Self::NonSecureOrSecure => "n",
-            Self::Privileged => "p",
-        }
-        .to_owned()
     }
 }
 
