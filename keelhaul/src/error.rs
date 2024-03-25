@@ -3,7 +3,7 @@ use std::{
     ops::{self, RangeInclusive},
 };
 
-use crate::{AddrRepr, ArchPtr, IncompatibleTypesError, TestConfig};
+use crate::model;
 use thiserror::Error;
 
 /// Error that happened during parsing 'CMSIS-SVD' or 'IP-XACT'
@@ -17,10 +17,10 @@ pub enum CommonParseError {
 #[derive(Error, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("address for {0} does not fit in architecture pointer {1}")]
-pub struct AddrOverflowError<T: num::CheckedAdd>(String, AddrRepr<T>);
+pub struct AddrOverflowError<T: num::CheckedAdd>(String, model::AddrRepr<T>);
 
 impl<T: num::CheckedAdd> AddrOverflowError<T> {
-    pub const fn new(id: String, addr: AddrRepr<T>) -> Self {
+    pub const fn new(id: String, addr: model::AddrRepr<T>) -> Self {
         Self(id, addr)
     }
 }
@@ -232,10 +232,10 @@ pub enum GenerateError {
         archi_bits: u8,
     },
     #[error("invalid configuration: {cause}, {c:#?}")]
-    InvalidConfig { c: TestConfig, cause: String },
+    InvalidConfig { c: crate::TestConfig, cause: String },
 }
 
-impl<P: ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
+impl<P: model::ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
     fn from(value: AddrOverflowError<P>) -> Self {
         Self::AddrOverflow {
             err: Box::new(value),
@@ -243,3 +243,8 @@ impl<P: ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
         }
     }
 }
+
+#[derive(Debug, Error, Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+#[error("types are incompatible: {0} != {1}")]
+pub struct IncompatibleTypesError(pub(crate) model::PtrSize, pub(crate) model::PtrSize);

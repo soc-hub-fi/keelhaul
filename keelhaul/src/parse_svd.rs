@@ -3,10 +3,10 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
-    error::{Error, PositionalError, SvdParseError},
-    util, Access, AddrRepr, ArchPtr, DimIndex, Filters, IncompatibleTypesError, IsAllowedOrBlocked,
-    ItemFilter, Protection, PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup,
-    RegisterPropertiesGroup, Registers, ResetValue,
+    error::{self, Error, PositionalError, SvdParseError},
+    util, Access, AddrRepr, ArchPtr, DimIndex, Filters, IsAllowedOrBlocked, ItemFilter, Protection,
+    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
+    Registers, ResetValue,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -308,7 +308,7 @@ impl RegPropGroupBuilder {
         self,
         reg_path: &str,
         arch_ptr_size: PtrSize,
-    ) -> Result<RegisterPropertiesGroup, IncompatibleTypesError> {
+    ) -> Result<RegisterPropertiesGroup, error::IncompatibleTypesError> {
         let value_size = self.size.unwrap_or_else(|| {
             warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {arch_ptr_size}");
             arch_ptr_size
