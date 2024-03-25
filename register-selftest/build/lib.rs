@@ -86,7 +86,9 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
 ///
 /// - Failed to interpret given options
 /// - Failed to parse given SVD file
-fn parse<P: ArchPtr>(svd_path: impl AsRef<Path>) -> Result<Registers<P>, Error>
+fn parse<P: ArchPtr>(
+    svd_path: impl AsRef<Path>,
+) -> Result<Registers<P, keelhaul::RefSchemaSvdV1_2>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -109,7 +111,7 @@ where
             .transpose()?;
         ItemFilter::regex(include_syms_regex, exclude_syms_regex)
     };
-    Ok(keelhaul::parse_registers(
+    Ok(keelhaul::parse_registers::<_, keelhaul::RefSchemaSvdV1_2>(
         &[ModelSource::new(
             svd_path.as_ref().to_path_buf(),
             keelhaul::SourceFormat::SvdV1_3,

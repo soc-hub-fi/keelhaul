@@ -1,9 +1,12 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{fmt, hash, ops, str};
+use std::{fmt, hash, marker::PhantomData, ops, str};
 
-use crate::error;
+use crate::{
+    error,
+    model::{schema::svd, RefSchema, RefSchemaSvdV1_2},
+};
 use itertools::Itertools;
 use log::warn;
 
@@ -12,11 +15,11 @@ use log::warn;
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-pub struct Register<P: num::CheckedAdd> {
-    /// Hierarchical path, e.g. `PERIPH-CLUSTER-REG`
-    pub path: RegPath,
+pub struct Register<P: num::CheckedAdd, S: RefSchema> {
+    /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
+    pub path: RegPath<S>,
     /// Physical address of the register
-    pub addr: AddrRepr<P>,
+    pub addr: AddrRepr<P, S>,
     /// Defines register bit width, security and reset properties.
     ///
     /// Cascades from higher levels to register level.
@@ -24,16 +27,17 @@ pub struct Register<P: num::CheckedAdd> {
     pub dimensions: Option<RegisterDimElementGroup>,
 }
 
-impl<P> Register<P>
+impl<P, S> Register<P, S>
 where
-    P: num::CheckedAdd + Clone,
+    P: num::CheckedAdd + Copy,
+    S: RefSchema,
 {
     /// Get register's absolute memory address
     ///
     /// # Errors
     ///
     /// Address overflows
-    pub fn full_addr(&self) -> Result<P, error::AddrOverflowError<P>> {
+    pub fn full_addr(&self) -> Result<P, error::AddrOverflowError<P, S>> {
         self.addr
             .full()
             .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
@@ -54,97 +58,172 @@ where
 /// Hierarchical representation of a register's path
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
-pub struct RegPath {
-    pub periph: String,
-    pub cluster: Option<String>,
-    pub reg: String,
+pub struct RegPath<S: RefSchema>(Vec<RegPathSegment<S>>);
+
+pub struct RegPathSegment<S: RefSchema> {
+    pub(crate) name: String,
+
+    /// Optional metadata indicating what caused this path segment to be generated
+    ///
+    /// For CMSIS-SVD this can be either "cluster" or "register"
+    pub(crate) source: Option<S::RegPathSegmentSource>,
 }
 
-impl RegPath {
-    #[must_use]
-    pub const fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
-        Self {
-            periph,
-            cluster,
-            reg,
-        }
+impl<S: RefSchema> RegPath<S> {
+    pub fn new(segments: Vec<RegPathSegment<S>>) -> Self {
+        Self(segments)
     }
 
-    /// Joins the path elements into one string
+    /// Joins the names of the path elements to one string using a separator
     #[must_use]
     pub fn join(&self, sep: &str) -> String {
-        let mut v = vec![&self.periph];
-        if let Some(cl) = self.cluster.as_ref() {
-            v.push(cl);
-        }
-        v.push(&self.reg);
+        self.0.iter().map(|seg| seg.name.clone()).join(sep)
+    }
+}
 
-        v.into_iter().join(sep)
+// SVD v1.2 only methods
+impl RegPath<RefSchemaSvdV1_2> {
+    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
+        let mut v = vec![];
+        v.push(RegPathSegment {
+            name: periph,
+            source: Some(svd::HierarchyLevel::Periph),
+        });
+        if let Some(cl) = cluster {
+            v.push(RegPathSegment {
+                name: cl,
+                source: Some(svd::HierarchyLevel::Cluster),
+            });
+        }
+        v.push(RegPathSegment {
+            name: reg,
+            source: Some(svd::HierarchyLevel::Reg),
+        });
+        Self::new(v)
+    }
+
+    pub fn periph(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+        unsafe { self.0.get_unchecked(0) }
+    }
+
+    pub fn reg(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+        if self.0.len() == 2 {
+            unsafe { self.0.get_unchecked(1) }
+        } else if self.0.len() == 3 {
+            unsafe { self.0.get_unchecked(2) }
+        } else {
+            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
+        }
     }
 }
 
 /// Address representation
 ///
-/// Addresses can be represented as full addresses, such as `0xdead_beef` or as
-/// components in SVD or IP-XACT, e.g., base + cluster offset + offset. This
-/// type allows converting between the two.
+/// Addresses can be represented in many ways. This implementation provides a vector of subsequent
+/// offsets.
 ///
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AddrRepr<P: num::CheckedAdd> {
-    base: P,
-    cluster: Option<P>,
-    offset: P,
-}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddrRepr<P: num::CheckedAdd, S: RefSchema>(Vec<P>, PhantomData<S>);
 
-impl<P> AddrRepr<P>
+impl<P, S> AddrRepr<P, S>
 where
-    P: num::CheckedAdd + Clone,
+    P: num::CheckedAdd + Copy,
+    S: RefSchema,
 {
-    pub const fn new(base: P, cluster: Option<P>, offset: P) -> Self {
-        Self {
-            base,
-            cluster,
-            offset,
-        }
-    }
-
-    pub fn components(&self) -> (P, Option<P>, P) {
-        (self.base.clone(), self.cluster.clone(), self.offset.clone())
+    pub fn from_vec(v: Vec<P>) -> Self {
+        assert!(v.len() != 0, "address must have at least base address");
+        Self(v, PhantomData::default())
     }
 
     /// Get register's absolute memory address
     ///
     /// Returns None on address overflow.
     pub fn full(&self) -> Option<P> {
-        let Self {
-            base,
-            cluster,
-            offset,
-        } = self;
-
-        let mut addr = Some(base.clone());
-        if let Some(cl) = cluster {
-            addr = addr.and_then(|x| x.checked_add(cl));
-        }
-        addr.and_then(|x| x.checked_add(offset))
+        let (base, offsets) = self.0.split_at(1);
+        offsets.iter().try_fold(
+            // Safety: addr repr must have at least the base address element, which is checked for in `from_vec`
+            unsafe { *base.get_unchecked(0) },
+            |acc, offset| acc.checked_add(offset),
+        )
     }
 }
 
-impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
+// SVD v1.2 only methods
+impl<P> AddrRepr<P, RefSchemaSvdV1_2>
+where
+    P: num::CheckedAdd + Copy,
+{
+    pub fn from_base_cluster_offset(base: P, cluster: Option<P>, offset: P) -> Self {
+        let mut v = vec![];
+        v.push(base);
+        if let Some(cl) = cluster {
+            v.push(cl);
+        }
+        v.push(offset);
+        Self::from_vec(v)
+    }
+
+    pub fn components(&self) -> (P, Option<P>, P) {
+        let v = &self.0;
+        if v.len() == 2 {
+            // Safety: length checked on conditional of previous line
+            unsafe { (*v.get_unchecked(0), None, *v.get_unchecked(1)) }
+        } else if v.len() == 3 {
+            // Safety: length checked on conditional of previous line
+            unsafe {
+                (
+                    *v.get_unchecked(0),
+                    Some(*v.get_unchecked(1)),
+                    *v.get_unchecked(2),
+                )
+            }
+        } else {
+            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
+        }
+    }
+
+    pub fn base(&self) -> P {
+        // Safety: `AddrRepr` must have at least base address
+        unsafe { *self.0.get_unchecked(0) }
+    }
+
+    pub fn cluster(&self) -> Option<P> {
+        // Safety: length checked
+        (self.0.len() == 3).then(|| unsafe { *self.0.get_unchecked(1) })
+    }
+
+    pub fn offset(&self) -> P {
+        let v = &self.0;
+        if v.len() == 2 {
+            // Safety: length checked on conditional of previous line
+            unsafe { *v.get_unchecked(1) }
+        } else if v.len() == 3 {
+            // Safety: length checked on conditional of previous line
+            unsafe { *v.get_unchecked(2) }
+        } else {
+            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
+        }
+    }
+}
+
+impl<P: num::CheckedAdd + fmt::LowerHex + Copy> fmt::Display for AddrRepr<P, RefSchemaSvdV1_2> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.cluster {
+        match &self.cluster() {
             Some(cluster) => write!(
                 f,
                 "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
-                self.base, cluster, self.offset
+                self.base(),
+                cluster,
+                self.offset()
             ),
             None => write!(
                 f,
                 "{{ base: {:#x}, offset: {:#x} }}",
-                self.base, self.offset
+                self.base(),
+                self.offset()
             ),
         }
     }
@@ -152,36 +231,29 @@ impl<P: num::CheckedAdd + fmt::LowerHex> fmt::Display for AddrRepr<P> {
 
 // Allow conversion from a 32-bit address representation to a 64-bit
 // representation to simplify debug implementations
-impl From<AddrRepr<u32>> for AddrRepr<u64> {
-    fn from(value: AddrRepr<u32>) -> Self {
-        Self {
-            base: value.base.into(),
-            cluster: value.cluster.map(|x| x.into()),
-            offset: value.offset.into(),
-        }
+impl From<AddrRepr<u32, RefSchemaSvdV1_2>> for AddrRepr<u64, RefSchemaSvdV1_2> {
+    fn from(value: AddrRepr<u32, RefSchemaSvdV1_2>) -> Self {
+        Self::from_base_cluster_offset(
+            value.base().into(),
+            value.cluster().map(|x| x.into()),
+            value.offset().into(),
+        )
     }
 }
 
 // 64-bit address can be fallibly converted to a 32-bit address. Returns Err on
 // overflow.
-impl TryFrom<AddrRepr<u64>> for AddrRepr<u32> {
+impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
     type Error = <u64 as TryInto<u32>>::Error;
 
-    fn try_from(value: AddrRepr<u64>) -> Result<Self, Self::Error> {
-        let AddrRepr {
-            base,
-            cluster,
-            offset,
-        } = value;
-
-        let base: u32 = base.try_into()?;
-        let cluster: Option<u32> = cluster.map(|x| x.try_into()).transpose()?;
-        let offset: u32 = offset.try_into()?;
-        Ok(Self {
-            base,
-            cluster,
-            offset,
-        })
+    fn try_from(value: AddrRepr<u64, S>) -> Result<Self, Self::Error> {
+        Ok(Self::from_vec(
+            value
+                .0
+                .into_iter()
+                .map(|v| v.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
     }
 }
 
@@ -491,7 +563,7 @@ impl ToString for Access {
 }
 
 pub trait ArchPtr:
-    Clone +
+    Clone + Copy +
     Eq +
     hash::Hash +
     fmt::Debug +

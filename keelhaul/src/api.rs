@@ -6,7 +6,7 @@ use std::{path, str};
 use crate::{error::SvdParseError, model, Filters};
 use error::NotImplementedError;
 
-pub use crate::model::{ArchPtr, PtrSize, Registers};
+pub use crate::model::{ArchPtr, PtrSize, RefSchemaSvdV1_2, Registers};
 pub use error::ApiError;
 
 /// A source file for memory map metadata
@@ -31,6 +31,8 @@ impl ModelSource {
 
 #[derive(Clone, Debug)]
 pub enum SourceFormat {
+    /// CMSIS-SVD v1.2 or lower
+    SvdV1_2,
     /// CMSIS-SVD v1.3 or lower
     SvdV1_3,
     /// IP-XACT 2014
@@ -54,10 +56,10 @@ pub enum ArchWidth {
 pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
     match arch {
         ArchWidth::U32 => {
-            parse_registers::<u32>(sources, Filters::all())?;
+            parse_registers::<u32, model::RefSchemaSvdV1_2>(sources, Filters::all())?;
         }
         ArchWidth::U64 => {
-            parse_registers::<u64>(sources, Filters::all())?;
+            parse_registers::<u64, model::RefSchemaSvdV1_2>(sources, Filters::all())?;
         }
     }
     Ok(())
@@ -68,10 +70,10 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
 /// # Type arguments
 ///
 /// * `P` - architecture width, i.e., a type that can represent any address on the platform
-pub fn parse_registers<P>(
+pub fn parse_registers<P, S>(
     sources: &[ModelSource],
     filters: Filters,
-) -> Result<Vec<model::Registers<P>>, ApiError>
+) -> Result<Vec<model::Registers<P, model::RefSchemaSvdV1_2>>, ApiError>
 where
     P: model::ArchPtr,
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>

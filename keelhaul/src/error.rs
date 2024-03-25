@@ -17,10 +17,13 @@ pub enum CommonParseError {
 #[derive(Error, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("address for {0} does not fit in architecture pointer {1}")]
-pub struct AddrOverflowError<T: num::CheckedAdd>(String, model::AddrRepr<T>);
+pub struct AddrOverflowError<T: num::CheckedAdd, S: model::RefSchema>(
+    String,
+    model::AddrRepr<T, S>,
+);
 
-impl<T: num::CheckedAdd> AddrOverflowError<T> {
-    pub const fn new(id: String, addr: model::AddrRepr<T>) -> Self {
+impl<T: num::CheckedAdd, S: model::RefSchema> AddrOverflowError<T, S> {
+    pub const fn new(id: String, addr: model::AddrRepr<T, S>) -> Self {
         Self(id, addr)
     }
 }
@@ -235,8 +238,10 @@ pub enum GenerateError {
     InvalidConfig { c: crate::TestConfig, cause: String },
 }
 
-impl<P: model::ArchPtr + 'static> From<AddrOverflowError<P>> for GenerateError {
-    fn from(value: AddrOverflowError<P>) -> Self {
+impl<P: model::ArchPtr + 'static> From<AddrOverflowError<P, model::RefSchemaSvdV1_2>>
+    for GenerateError
+{
+    fn from(value: AddrOverflowError<P, model::RefSchemaSvdV1_2>) -> Self {
         Self::AddrOverflow {
             err: Box::new(value),
             archi_bits: P::ptr_size().bits(),

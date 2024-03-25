@@ -5,8 +5,8 @@
 use crate::{
     error::{self, Error, PositionalError, SvdParseError},
     model::{
-        Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue, Register,
-        RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+        self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
+        Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
@@ -543,7 +543,7 @@ fn process_registers<P: ArchPtr>(
     register_node: XmlNode,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
-) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -562,7 +562,7 @@ where
                 register_node.find_text_by_tag_name("addressOffset")?;
             parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?
         };
-        AddrRepr::new(address_base, address_cluster, address_offset)
+        AddrRepr::from_base_cluster_offset(address_base, address_cluster, address_offset)
     };
     let mut registers = Vec::new();
     let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
@@ -623,7 +623,7 @@ where
                 let offset = P::try_from(i * dimensions.dim_increment).expect(
                     "failed to transform register array's dimension increment to pointer size",
                 );
-                AddrRepr::new(address_base, address_cluster, offset)
+                AddrRepr::from_base_cluster_offset(address_base, address_cluster, offset)
             };
             let properties = {
                 let reg_path = path.join("-");
@@ -686,7 +686,7 @@ fn process_cluster<P: ArchPtr>(
     cluster_node: XmlNode,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
-) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -708,7 +708,7 @@ where
 fn process_peripheral<P: ArchPtr>(
     periph_node: XmlNode,
     filters: &Filters,
-) -> Result<Option<Vec<Register<P>>>, PositionalError<SvdParseError>>
+) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -810,7 +810,7 @@ fn find_architecture_size(
 fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
     filters: &Filters,
-) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -829,7 +829,7 @@ where
 fn process_device<P: ArchPtr>(
     device_node: &XmlNode,
     filters: &Filters,
-) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -847,7 +847,7 @@ where
 fn process_root<P: ArchPtr>(
     root_node: XmlNode,
     filters: &Filters,
-) -> Result<Vec<Register<P>>, PositionalError<SvdParseError>>
+) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -864,7 +864,7 @@ where
 fn find_registers<P: ArchPtr>(
     parsed: &Document,
     filters: &Filters,
-) -> Result<Registers<P>, PositionalError<SvdParseError>>
+) -> Result<Registers<P, model::RefSchemaSvdV1_2>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
@@ -876,7 +876,7 @@ where
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
-        peripherals.insert(register.path.periph.clone());
+        peripherals.insert(register.path.periph().name.clone());
         let addr: P = register.full_addr().unwrap();
         if let Entry::Vacant(entry) = addresses.entry(addr.clone()) {
             entry.insert(register.path.join("-"));
@@ -907,7 +907,7 @@ where
 pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
     svd_source: &path::Path,
     filters: &Filters,
-) -> Result<Registers<P>, Error>
+) -> Result<Registers<P, model::RefSchemaSvdV1_2>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
         + From<<P as FromStr>::Err>
