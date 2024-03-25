@@ -5,7 +5,7 @@ use std::{fmt, hash, marker::PhantomData, ops, str};
 
 use crate::{
     bit_count_to_rust_uint_type_str, error,
-    model::{schema::svd, RefSchema, RefSchemaSvdV1_2},
+    model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
 use log::warn;
@@ -66,20 +66,15 @@ where
 /// Hierarchical representation of a register's path
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
-pub struct RegPath<S: RefSchema>(Vec<RegPathSegment<S>>);
+pub struct RegPath<S: RefSchema>(Vec<RegPathSegment>, PhantomData<S>);
 
-pub struct RegPathSegment<S: RefSchema> {
+pub struct RegPathSegment {
     pub(crate) name: String,
-
-    /// Optional metadata indicating what caused this path segment to be generated
-    ///
-    /// For CMSIS-SVD this can be either "cluster" or "register"
-    pub(crate) source: Option<S::RegPathSegmentSource>,
 }
 
 impl<S: RefSchema> RegPath<S> {
-    pub fn new(segments: Vec<RegPathSegment<S>>) -> Self {
-        Self(segments)
+    pub fn new(segments: Vec<RegPathSegment>) -> Self {
+        Self(segments, PhantomData::default())
     }
 
     /// Joins the names of the path elements to one string using a separator
@@ -93,28 +88,19 @@ impl<S: RefSchema> RegPath<S> {
 impl RegPath<RefSchemaSvdV1_2> {
     pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
         let mut v = vec![];
-        v.push(RegPathSegment {
-            name: periph,
-            source: Some(svd::HierarchyLevel::Periph),
-        });
+        v.push(RegPathSegment { name: periph });
         if let Some(cl) = cluster {
-            v.push(RegPathSegment {
-                name: cl,
-                source: Some(svd::HierarchyLevel::Cluster),
-            });
+            v.push(RegPathSegment { name: cl });
         }
-        v.push(RegPathSegment {
-            name: reg,
-            source: Some(svd::HierarchyLevel::Reg),
-        });
+        v.push(RegPathSegment { name: reg });
         Self::new(v)
     }
 
-    pub fn periph(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+    pub fn periph(&self) -> &RegPathSegment {
         unsafe { self.0.get_unchecked(0) }
     }
 
-    pub fn reg(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+    pub fn reg(&self) -> &RegPathSegment {
         if self.0.len() == 2 {
             unsafe { self.0.get_unchecked(1) }
         } else if self.0.len() == 3 {
