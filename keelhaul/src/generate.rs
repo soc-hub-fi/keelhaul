@@ -418,46 +418,6 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         }
     }
 
-    /// Generates a test that verifies that the read value matches with reported
-    /// reset value
-    fn gen_reset_val_test(&self, config: &TestConfig) -> Result<TokenStream, GenerateError> {
-        // Reset value test requires read test to be present. Can't check for
-        // reset value unless it's been read before.
-        debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
-
-        let read_value_binding = Self::read_value_binding();
-        let reset_val_frag = if config.force_ignore_reset_mask {
-            self.0.masked_reset().value().gen_literal_hex()
-        } else {
-            self.0.masked_reset().gen_bitand()
-        };
-        let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(self.0.size));
-
-        match config.on_fail {
-            // If reset value is incorrect, panic
-            FailureImplKind::Panic => Ok(quote! {
-                assert_eq!(#read_value_binding, #reset_val_frag as #reg_size_ty);
-            }),
-            // If reset value is incorrect, do nothing
-            FailureImplKind::None => Ok(quote! {}),
-            FailureImplKind::ReturnError => {
-                let uid = self.0.uid();
-                let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
-                let max_val_width = quote!(u64);
-                Ok(quote! {
-                    if #read_value_binding != #reset_val_frag as #reg_size_ty {
-                        return Err(Error::ReadValueIsNotResetValue {
-                                read_val: #read_value_binding as #max_val_width,
-                                reset_val: #reset_val_frag,
-                                reg_uid: #uid,
-                                reg_addr: #addr_hex,
-                            })
-                    }
-                })
-            }
-        }
-    }
-
     /// Generates a function identifier
     ///
     /// # Examples
@@ -509,7 +469,13 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
             && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
             && u64::from(self.0.masked_reset().mask()) != 0u64
         {
-            self.gen_reset_val_test(config)?
+            gen_reset_val_test(
+                self.0.uid(),
+                self.0.full_addr()?,
+                self.0.size,
+                *self.0.masked_reset(),
+                config,
+            )?
         } else {
             quote!()
         };
@@ -554,6 +520,57 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
             }
         };
         Ok(def)
+    }
+}
+
+/// Generates a test that verifies that the read value matches with reported
+/// reset value
+///
+/// # Arguments
+///
+/// * `uid` - Register UID
+/// * `size` - The size of the register in bits
+/// * `reset_value` - A masked reset value that will be checked against
+fn gen_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
+    uid: String,
+    addr: P,
+    size: u32,
+    reset_value: model::ResetValue,
+    config: &TestConfig,
+) -> Result<TokenStream, GenerateError> {
+    // Reset value test requires read test to be present. Can't check for
+    // reset value unless it's been read before.
+    debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
+
+    let read_value_binding = RegTestGenerator::<P>::read_value_binding();
+    let reset_val_frag = if config.force_ignore_reset_mask {
+        reset_value.value().gen_literal_hex()
+    } else {
+        reset_value.gen_bitand()
+    };
+    let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(size));
+
+    match config.on_fail {
+        // If reset value is incorrect, panic
+        FailureImplKind::Panic => Ok(quote! {
+            assert_eq!(#read_value_binding, #reset_val_frag as #reg_size_ty);
+        }),
+        // If reset value is incorrect, do nothing
+        FailureImplKind::None => Ok(quote! {}),
+        FailureImplKind::ReturnError => {
+            let addr_hex: TokenStream = format!("{:#x}", addr).parse().unwrap();
+            let max_val_width = quote!(u64);
+            Ok(quote! {
+                if #read_value_binding != #reset_val_frag as #reg_size_ty {
+                    return Err(Error::ReadValueIsNotResetValue {
+                            read_val: #read_value_binding as #max_val_width,
+                            reset_val: #reset_val_frag,
+                            reg_uid: #uid,
+                            reg_addr: #addr_hex,
+                        })
+                }
+            })
+        }
     }
 }
 
