@@ -2,12 +2,19 @@
 
 // TODO: support deriving fields via <register derivedFrom="register1">
 
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    ops::RangeInclusive,
+    path,
+    str::FromStr,
+};
+
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
     model::{
-        self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
-        Register, RegisterDimElementGroup, Registers, ResetValue,
+        self, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue, Register,
+        RegisterDimElementGroup, Registers, ResetValue,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
@@ -15,12 +22,6 @@ use itertools::Itertools;
 use log::{debug, info, warn};
 use regex::Regex;
 use roxmltree::Document;
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    ops::RangeInclusive,
-    path,
-    str::FromStr,
-};
 
 struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
 
@@ -196,7 +197,7 @@ struct RegPropGroupBuilder {
     /// Register bit-width.
     pub size: Option<u32>,
     /// Register access rights.
-    pub access: Option<Access>,
+    pub access: Option<svd::Access>,
     /// Register access privileges.
     pub protection: Option<Protection>,
     /// Register value after reset.
@@ -284,7 +285,8 @@ impl RegPropGroupBuilder {
             self.size = Some(size);
         }
         if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
-            Access::from_str(s).map_err(|e| e.into())
+            Ok(svd::Access::parse_str(s)
+                .ok_or_else(|| error::CommonParseError::InvalidAccessType(s.to_owned()))?)
         })? {
             self.access = Some(access);
         };
@@ -319,7 +321,7 @@ impl RegPropGroupBuilder {
         });
         let access = self.access.unwrap_or_else(|| {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
-            Access::ReadWrite
+            svd::Access::ReadWrite
         });
         let protection = self.protection.unwrap_or_else(|| {
             // This is a very common omission from SVD. We should not warn about it unless required by user
@@ -355,7 +357,7 @@ pub struct RegisterPropertiesGroup {
     /// Bit-width of register
     pub size: u32,
     /// Register access rights.
-    pub access: Access,
+    pub access: svd::Access,
     /// Register access privileges.
     pub protection: Protection,
     /// Expected register value after reset based on source format
@@ -369,7 +371,7 @@ pub struct RegisterPropertiesGroup {
 impl RegisterPropertiesGroup {
     pub(crate) const fn new(
         size: u32,
-        access: Access,
+        access: svd::Access,
         protection: Protection,
         reset_value: ResetValue,
     ) -> Self {
