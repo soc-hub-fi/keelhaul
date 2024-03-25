@@ -1,7 +1,7 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{fmt, hash, marker::PhantomData, ops, str};
+use std::{fmt, hash, marker::PhantomData, str};
 
 use crate::{
     bit_count_to_rust_uint_type_str, error,
@@ -25,8 +25,10 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Bit-width of register
     pub size: u32,
     /// Software access rights
+    ///
+    /// Used for determining what types of tests can be generated.
     pub access: svd::Access,
-    /// Register access privileges.
+    /// Security privilege required to access register
     pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
@@ -34,7 +36,7 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
     pub(crate) reset_value: ResetValue,
-    pub dimensions: Option<RegisterDimElementGroup>,
+    pub dimensions: Option<svd::DimElement>,
 }
 
 impl<P, S> Register<P, S>
@@ -283,44 +285,6 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
                 .map(|v| v.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
         ))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RegisterDimElementGroup {
-    pub dim: u64,
-    pub dim_increment: u64,
-    pub dim_index: Option<DimIndex>,
-    pub dim_name: Option<String>,
-    // TODO: this is not a number
-    pub dim_array_index: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub enum DimIndex {
-    NumberRange(ops::RangeInclusive<usize>),
-    LetterRange(ops::RangeInclusive<char>),
-    List(Vec<String>),
-}
-
-impl DimIndex {
-    pub fn get(&self, index: usize) -> String {
-        match self {
-            Self::NumberRange(range) => {
-                let mut range = range.clone();
-                // TODO: use error
-                range.nth(index).expect("").to_string()
-            }
-            Self::LetterRange(range) => {
-                let mut range = range.clone();
-                // TODO: use error
-                range.nth(index).expect("").to_string()
-            }
-            Self::List(list) => {
-                // TODO: use error
-                list.get(index).expect("").to_string()
-            }
-        }
     }
 }
 

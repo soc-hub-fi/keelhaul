@@ -12,10 +12,7 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::{
-        self, AddrRepr, ArchPtr, DimIndex, PtrSize, RegPath, RegValue, Register,
-        RegisterDimElementGroup, Registers, ResetValue,
-    },
+    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
 use itertools::Itertools;
@@ -456,20 +453,21 @@ where
     }
 }
 
-impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
-    type Error = PositionalError<SvdParseError>;
-    fn try_from(value: &XmlNode) -> Result<Self, Self::Error> {
-        let dim = {
-            let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
-            parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?
-        };
-        let dim_increment = {
-            let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
-            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
-        };
-        let dim_index = value
+fn try_dim_element_from_xml_node(
+    value: &XmlNode,
+    lvl: svd::ValidateLevel,
+) -> Result<svd::DimElement, PositionalError<SvdParseError>> {
+    let dim = {
+        let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
+        parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?
+    };
+    let dim_increment = {
+        let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
+        parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
+    };
+    let dim_index = value
             .maybe_find_text_by_tag_name("dimIndex")
-            .map(|(index, _)| {
+            .and_then(|(index, _)| {
                 let index = index.trim();
                 let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
                 let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
@@ -491,7 +489,8 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                             .as_str()
                             .parse()
                             .unwrap();
-                        DimIndex::NumberRange(start..=end)
+                        warn!("dimIndex was present in input but was not constructed due to unfinished implementation; positions were {start} and {end}");
+                        None
                     } else {
                         // TODO: use error
                         panic!("asd");
@@ -504,7 +503,8 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                             captures.name("start").expect("").as_str().parse().unwrap();
                         // TODO: use error
                         let end: char = captures.name("end").expect("").as_str().parse().unwrap();
-                        DimIndex::LetterRange(start..=end)
+                        warn!("dimIndex was present in input but was not constructed due to unfinished implementation; positions were {start} and {end}");
+                        None
                     } else {
                         // TODO: use error
                         panic!("asd");
@@ -515,7 +515,7 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                         .map(|s| s.trim())
                         .map(|s| s.to_owned())
                         .collect_vec();
-                    DimIndex::List(parts)
+                    Some(parts)
                 } else {
                     // TODO: use error
                     // error: not supported dimIndex format: {}
@@ -523,33 +523,32 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                 };
                 dim_index
             });
-        let dim_name = {
-            value
-                .maybe_find_text_by_tag_name("dimName")
-                .map(|name| name.0.to_owned())
+    let dim_name = {
+        value
+            .maybe_find_text_by_tag_name("dimName")
+            .map(|name| name.0.to_owned())
+    };
+    let dim_array_index = {
+        // TODO: this is XML-element
+        None
+        /*
+        let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
+            Some(index) => {
+                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
+                Some(a as usize)
+            }
+            None => None,
         };
-        let dim_array_index = {
-            // TODO: this is XML-element
-            None
-            /*
-            let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
-                Some(index) => {
-                    let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
-                    Some(a as usize)
-                }
-                None => None,
-            };
-            dim_array_index
-            */
-        };
-        Ok(Self {
-            dim,
-            dim_increment,
-            dim_index,
-            dim_name,
-            dim_array_index,
-        })
-    }
+        dim_array_index
+        */
+    };
+    let builder = svd::DimElement::builder()
+        .dim(dim)
+        .dim_increment(dim_increment)
+        .dim_index(dim_index)
+        .dim_name(dim_name)
+        .dim_array_index(dim_array_index);
+    Ok(builder.build(lvl).unwrap())
 }
 
 fn check_node_count(
@@ -599,7 +598,8 @@ where
         AddrRepr::from_base_cluster_offset(address_base, address_cluster, address_offset)
     };
     let mut registers = Vec::new();
-    let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
+    let dimensions =
+        try_dim_element_from_xml_node(&register_node, svd::ValidateLevel::Disabled).ok();
     if let Some(dimensions) = dimensions {
         // Found a list or an array of registers.
         for i in 0..dimensions.dim {
@@ -609,7 +609,7 @@ where
             let index = {
                 if let Some(dim_index) = dimensions.dim_index.clone() {
                     // Index format is defined by the user.
-                    dim_index.get(i as usize)
+                    dim_index.get(i as usize).unwrap().clone()
                 } else {
                     // Index format is not defined by the user. Just use a number.
                     i.to_string()
@@ -654,7 +654,7 @@ where
             let addr = {
                 let (address_base, address_cluster, _) = addr.components();
                 // TODO: use error
-                let offset = P::try_from(i * dimensions.dim_increment).expect(
+                let offset = P::try_from(i as u64 * dimensions.dim_increment as u64).expect(
                     "failed to transform register array's dimension increment to pointer size",
                 );
                 AddrRepr::from_base_cluster_offset(address_base, address_cluster, offset)
