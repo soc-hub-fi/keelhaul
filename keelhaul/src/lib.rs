@@ -6,7 +6,7 @@ pub use api::*;
 mod api;
 pub mod error;
 pub(crate) mod frontend;
-mod generate;
+pub(crate) mod generate;
 mod model;
 mod util;
 

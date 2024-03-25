@@ -3,12 +3,9 @@ mod error;
 
 use std::{path, str};
 
-use crate::{
-    error::SvdParseError,
-    model::{self},
-    Filters,
-};
+use crate::{error::SvdParseError, generate, model, Filters, TestConfig};
 use error::NotImplementedError;
+use log::info;
 
 pub use crate::model::{ArchPtr, PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::ApiError;
@@ -61,32 +58,26 @@ pub enum ArchWidth {
 pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
     match arch {
         ArchWidth::U32 => {
-            parse_registers::<u32, model::RefSchemaSvdV1_2>(sources, Filters::all())?;
+            parse_registers::<u32, model::RefSchemaSvdV1_2>(sources, &Filters::all())?;
         }
         ArchWidth::U64 => {
-            parse_registers::<u64, model::RefSchemaSvdV1_2>(sources, Filters::all())?;
+            parse_registers::<u64, model::RefSchemaSvdV1_2>(sources, &Filters::all())?;
         }
     }
     Ok(())
 }
 
-pub enum Registers<P>
-where
-    P: ArchPtr,
-{
-    SvdV1_2(model::Registers<P, RefSchemaSvdV1_2>),
-    SvdV1_3(model::Registers<P, RefSchemaSvdV1_3>),
-}
+type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 
 /// Run the parser on a set of `sources` and return the collection of registers contained within
 ///
 /// # Type arguments
 ///
 /// * `P` - architecture width, i.e., a type that can represent any address on the platform
-pub fn parse_registers<P, S>(
+fn parse_registers<P, S>(
     sources: &[ModelSource],
-    filters: Filters,
-) -> Result<Vec<Registers<P>>, ApiError>
+    filters: &Filters,
+) -> Result<Registers<P>, ApiError>
 where
     P: model::ArchPtr,
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -111,11 +102,12 @@ where
 
     for src in sources {
         match src.format {
-            SourceFormat::SvdV1_2 => registers.push(Registers::SvdV1_2(
+            SourceFormat::SvdV1_2 => registers.push(
                 crate::frontend::svd_v1_2::parse_svd_into_registers::<P>(src.path(), &filters)?,
-            )),
+            ),
             SourceFormat::SvdV1_3 => {
                 /*
+                // TODO: needs to be wrapped in an enum
                 registers.push(Registers::SvdV1_3(crate::frontend::svd_v1_3::parse_svd_into_registers::<P>(
                     src.path(),
                     &filters,
@@ -129,5 +121,34 @@ where
         }
     }
 
-    Ok(registers)
+    Ok(registers.into_iter().nth(0).unwrap())
+}
+
+pub fn generate_tests(
+    sources: &[ModelSource],
+    arch_ptr_size: PtrSize,
+    test_cfg: &TestConfig,
+    filters: &Filters,
+) -> Result<String, ApiError> {
+    let test_cases: generate::TestCases = match arch_ptr_size {
+        PtrSize::U8 => {
+            let registers = parse_registers::<u8, RefSchemaSvdV1_2>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U16 => {
+            let registers = parse_registers::<u16, RefSchemaSvdV1_2>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U32 => {
+            let registers = parse_registers::<u32, RefSchemaSvdV1_2>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, &test_cfg)
+        }
+        PtrSize::U64 => {
+            let registers = parse_registers::<u64, RefSchemaSvdV1_2>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, &test_cfg)
+        }
+    }
+    .unwrap();
+    info!("Wrote {} test cases.", test_cases.test_case_count);
+    Ok(test_cases.to_module_string())
 }
