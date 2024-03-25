@@ -797,58 +797,6 @@ where
     Ok(Some(peripheral_registers))
 }
 
-/// <https://siliconlabs.github.io/Gecko_SDK_Doc/CMSIS/SVD/html/group__svd__xml__device__gr.html>
-struct ArchitectureSize {
-    /// Defines the number of data bits uniquely selected by each address. The value for Cortex-M
-    /// based devices is 8 (byte-addressable).
-    pub address_unit_bits: usize,
-    /// Defines the number of data bit-width of the maximum single data transfer supported by the
-    /// bus infrastructure. This information is relevant for debuggers when accessing registers,
-    /// because it might be required to issue multiple accesses for accessing a resource of a bigger
-    /// size. The expected value for Cortex-M based devices is 32.
-    pub width: usize,
-}
-
-fn find_architecture_size(
-    device_node: &XmlNode,
-) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
-    // How many bits one address contains?
-    let address_unit_bits = device_node.children_with_tag_name("addressUnitBits");
-    // TODO: maybe use range "allowed_range" which can also be used with the error
-    check_node_count(device_node, "addressUnitBits", &address_unit_bits, 1..=1)?;
-
-    assert!(
-        address_unit_bits.len() == 1,
-        "device-node must define address width in bits once",
-    );
-    let address_unit_bits: usize = address_unit_bits
-        .first()
-        .unwrap()
-        .0
-        .text()
-        .unwrap()
-        .parse()
-        .unwrap();
-    // TODO: add error
-    assert!(
-        address_unit_bits == 8,
-        "{address_unit_bits}-bit addressable architectures are not yet supported",
-    );
-    // How many bits one bus transaction contains?
-    let width = device_node.children_with_tag_name("width");
-    check_node_count(device_node, "width", &width, 1..=1)?;
-    let width: usize = width.first().unwrap().0.text().unwrap().parse().unwrap();
-    // TODO: add error
-    assert!(
-        width == 8 || width == 16 || width == 32 || width == 64,
-        "{width}-bit bus width architectures are not yet supported"
-    );
-    Ok(ArchitectureSize {
-        address_unit_bits,
-        width,
-    })
-}
-
 fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
     filters: &Filters,
@@ -878,8 +826,6 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    // TODO: allow parsing here -> avoid parsing twice! -> massive refactor because of the generic P
-    // let architecture_size = find_architecture_size(device_node);
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
@@ -970,31 +916,4 @@ where
 
     info!("Found {} registers.", registers.len());
     Ok(registers)
-}
-
-pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSize, SvdParseError> {
-    let svd_content = util::read_file_or_panic(svd_path.as_ref());
-    let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
-    let root = parsed.root().into_xml_node();
-
-    let device_nodes = root.children_with_tag_name("device");
-    // TODO: use check_node_count
-    if device_nodes.len() != 1 {
-        return Err(SvdParseError::InvalidNodeCount {
-            node_name: "device".to_owned(),
-            expected_count: 1..=1,
-            actual_count: device_nodes.len(),
-        });
-    }
-    let device_node = device_nodes.first().unwrap();
-    let architecture_size = find_architecture_size(device_node).map_err(|err| {
-        // TODO: fix this
-        err.error()
-    })?;
-    match PtrSize::from_bit_count(architecture_size.width as u32) {
-        Some(size) => Ok(size),
-        None => Err(SvdParseError::PointerSizeNotSupported(
-            architecture_size.width,
-        )),
-    }
 }
