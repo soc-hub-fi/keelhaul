@@ -675,7 +675,7 @@ where
                 dimensions: Some(dimensions.clone()),
                 size: properties.size,
                 access: properties.access,
-                protection: properties.protection,
+                protection: Some(properties.protection),
                 reset_value: properties.reset_value,
             };
             registers.push(register);
@@ -715,7 +715,7 @@ where
             dimensions,
             size: properties.size,
             access: properties.access,
-            protection: properties.protection,
+            protection: Some(properties.protection),
             reset_value: properties.reset_value,
         };
         registers.push(register);

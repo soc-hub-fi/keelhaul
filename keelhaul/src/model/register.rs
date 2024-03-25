@@ -28,7 +28,7 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Register access rights.
     pub access: Access,
     /// Register access privileges.
-    pub protection: Protection,
+    pub protection: Option<Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
