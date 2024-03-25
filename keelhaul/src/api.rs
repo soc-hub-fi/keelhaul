@@ -31,8 +31,8 @@ impl ModelSource {
 
 #[derive(Clone, Debug)]
 pub enum SourceFormat {
-    /// CMSIS-SVD
-    Svd,
+    /// CMSIS-SVD v1.3 or lower
+    SvdV1_3,
     /// IP-XACT 2014
     Ieee1685_2014,
     /// IP-XACT 2022

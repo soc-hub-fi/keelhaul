@@ -112,7 +112,7 @@ where
     Ok(keelhaul::parse_registers(
         &[ModelSource::new(
             svd_path.as_ref().to_path_buf(),
-            keelhaul::SourceFormat::Svd,
+            keelhaul::SourceFormat::SvdV1_3,
         )],
         Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
     )?
