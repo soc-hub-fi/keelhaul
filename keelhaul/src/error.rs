@@ -232,7 +232,7 @@ pub enum GenerateError {
     #[error("generated address overflows {archi_bits}-bit architecture pointer\n{err}")]
     AddrOverflow {
         err: Box<dyn std::error::Error + Send + Sync>,
-        archi_bits: u8,
+        archi_bits: u32,
     },
     #[error("invalid configuration: {cause}, {c:#?}")]
     InvalidConfig { c: crate::TestConfig, cause: String },
@@ -244,7 +244,7 @@ impl<P: model::ArchPtr + 'static> From<AddrOverflowError<P, model::RefSchemaSvdV
     fn from(value: AddrOverflowError<P, model::RefSchemaSvdV1_2>) -> Self {
         Self::AddrOverflow {
             err: Box::new(value),
-            archi_bits: P::ptr_size().bits(),
+            archi_bits: P::ptr_size().bit_count(),
         }
     }
 }

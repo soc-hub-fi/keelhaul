@@ -4,7 +4,7 @@
 use std::{fmt, hash, marker::PhantomData, ops, str};
 
 use crate::{
-    error,
+    bit_count_to_rust_uint_type_str, error,
     model::{schema::svd, RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
@@ -259,8 +259,8 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
 
 #[derive(Clone, Copy)]
 pub struct RegisterPropertiesGroup {
-    /// Register value bit-width.
-    pub value_size: PtrSize,
+    /// Bit-width of register
+    pub size: u32,
     /// Register access rights.
     pub access: Access,
     /// Register access privileges.
@@ -275,13 +275,13 @@ pub struct RegisterPropertiesGroup {
 
 impl RegisterPropertiesGroup {
     pub(crate) const fn new(
-        value_size: PtrSize,
+        size: u32,
         access: Access,
         protection: Protection,
         reset_value: ResetValue,
     ) -> Self {
         Self {
-            value_size,
+            size,
             access,
             protection,
             reset_value,
@@ -432,6 +432,18 @@ pub enum RegValue {
 }
 
 impl RegValue {
+    pub(crate) fn with_value_and_size(
+        val: u64,
+        size: PtrSize,
+    ) -> Result<Self, std::num::TryFromIntError> {
+        Ok(match size {
+            PtrSize::U8 => RegValue::U8(val.try_into()?),
+            PtrSize::U16 => RegValue::U16(val.try_into()?),
+            PtrSize::U32 => RegValue::U32(val.try_into()?),
+            PtrSize::U64 => RegValue::U64(val),
+        })
+    }
+
     pub(crate) const fn width(&self) -> PtrSize {
         match self {
             Self::U8(_) => PtrSize::U8,
@@ -616,22 +628,11 @@ pub enum PtrSize {
 }
 
 impl PtrSize {
-    /// E.g., u8, u16, u32, u64
-    #[must_use]
-    pub const fn to_rust_type_str(&self) -> &str {
-        match self {
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-        }
-    }
-
     /// Convert a bit count to [`PtrSize`]
     ///
     /// Returns None if the conversion cannot be done.
     #[must_use]
-    pub const fn from_bit_count(bc: u64) -> Option<Self> {
+    pub const fn from_bit_count(bc: u32) -> Option<Self> {
         match bc {
             8 => Some(Self::U8),
             16 => Some(Self::U16),
@@ -660,7 +661,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn bits(self) -> u8 {
+    pub(crate) const fn bit_count(self) -> u32 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -668,11 +669,18 @@ impl PtrSize {
             Self::U64 => 64,
         }
     }
+
+    pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
+        match bit_count {
+            8 | 16 | 32 | 64 => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_rust_type_str())
+        write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
     }
 }
 

@@ -3,6 +3,7 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
+    bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
     model::{
         self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
@@ -193,7 +194,7 @@ fn parse_nonneg_int_works() {
 #[derive(Clone, Default)]
 struct RegPropGroupBuilder {
     /// Register bit-width.
-    pub size: Option<PtrSize>,
+    pub size: Option<u32>,
     /// Register access rights.
     pub access: Option<Access>,
     /// Register access privileges.
@@ -277,10 +278,9 @@ impl RegPropGroupBuilder {
     /// * resetValue
     /// * resetMask
     fn update_from_node(&mut self, node: &XmlNode) -> Result<(), PositionalError<SvdParseError>> {
-        if let Some(size) = process_prop_from_node_if_present("size", node, |s| {
-            let bit_count = s.parse()?;
-            PtrSize::from_bit_count(bit_count).ok_or(SvdParseError::BitCountToPtrWidth(bit_count))
-        })? {
+        if let Some(size) =
+            process_prop_from_node_if_present("size", node, |s| Ok(s.parse::<u32>()?))?
+        {
             self.size = Some(size);
         }
         if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
@@ -309,11 +309,13 @@ impl RegPropGroupBuilder {
     pub(crate) fn build(
         self,
         reg_path: &str,
-        arch_ptr_size: PtrSize,
-    ) -> Result<RegisterPropertiesGroup, error::IncompatibleTypesError> {
-        let value_size = self.size.unwrap_or_else(|| {
-            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {arch_ptr_size}");
-            arch_ptr_size
+        default_register_size_bits: Option<u32>,
+    ) -> Result<RegisterPropertiesGroup, error::SvdParseError> {
+        let size = self.size.unwrap_or_else(|| {
+            let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
+            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
+            assert!(PtrSize::is_valid_bit_count(size_bits));
+            size_bits
         });
         let access = self.access.unwrap_or_else(|| {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
@@ -326,19 +328,21 @@ impl RegPropGroupBuilder {
             Protection::NonSecureOrSecure
         });
         let reset_value = {
-            let reset_value = self.reset_value.unwrap_or_else(|| {
+            // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
+            let size = PtrSize::from_bit_count(size).unwrap();
+            let reset_value = self.reset_value.unwrap_or( {
                 warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = 0");
-                value_size.zero_value()
+                RegValue::with_value_and_size( 0, size)?
             });
-            let reset_mask = self.reset_mask.unwrap_or_else(|| {
-                warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", value_size);
-                value_size.max_value()
+            let reset_mask = self.reset_mask.unwrap_or( {
+                warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.bit_count()));
+                size.max_value()
             });
             ResetValue::with_mask(reset_value, reset_mask)?
         };
 
         Ok(RegisterPropertiesGroup::new(
-            value_size,
+            size,
             access,
             protection,
             reset_value,
@@ -630,7 +634,7 @@ where
                 parent
                     .properties
                     .clone_and_update_from_node(&register_node)?
-                    .build(&reg_path, P::ptr_size())
+                    .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
             let register = Register {
@@ -667,7 +671,7 @@ where
             parent
                 .properties
                 .clone_and_update_from_node(&register_node)?
-                .build(&reg_path, P::ptr_size())
+                .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
         let register = Register {
@@ -949,7 +953,7 @@ pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSi
         // TODO: fix this
         err.error()
     })?;
-    match PtrSize::from_bit_count(architecture_size.width as u64) {
+    match PtrSize::from_bit_count(architecture_size.width as u32) {
         Some(size) => Ok(size),
         None => Err(SvdParseError::PointerSizeNotSupported(
             architecture_size.width,

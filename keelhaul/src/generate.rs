@@ -138,7 +138,10 @@ impl RegTestKind {
     /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
     ///   Error variant.
     fn error_variant_def(&self, max_value_width: PtrSize) -> Option<TokenStream> {
-        let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());
+        let max_value_width = format_ident!(
+            "{}",
+            bit_count_to_rust_uint_type_str(max_value_width.bit_count())
+        );
         match self {
             Self::Read => None,
             Self::ReadIsResetVal => Some(
@@ -363,6 +366,16 @@ fn reset_value_bitands_generate() {
     );
 }
 
+pub(crate) fn bit_count_to_rust_uint_type_str(bit_count: u32) -> &'static str {
+    match bit_count {
+        8 => "u8",
+        16 => "u16",
+        32 => "u32",
+        64 => "u64",
+        _ => panic!("{bit_count} is not a valid bit count"),
+    }
+}
+
 /// Generates test cases based on a [`Register`] definition and [`TestConfig`]
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
@@ -418,7 +431,10 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         } else {
             self.0.masked_reset().gen_bitand()
         };
-        let reg_size_ty = format_ident!("{}", self.0.properties.value_size.to_rust_type_str());
+        let reg_size_ty = format_ident!(
+            "{}",
+            bit_count_to_rust_uint_type_str(self.0.properties.size)
+        );
 
         match config.on_fail {
             // If reset value is incorrect, panic
@@ -478,7 +494,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
 
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", reg.properties.value_size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(reg.properties.size));
         let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
