@@ -4,9 +4,11 @@
 
 use crate::{
     error::{self, Error, PositionalError, SvdParseError},
-    util, Access, AddrRepr, ArchPtr, DimIndex, Filters, IsAllowedOrBlocked, ItemFilter, Protection,
-    PtrSize, RegPath, RegValue, Register, RegisterDimElementGroup, RegisterPropertiesGroup,
-    Registers, ResetValue,
+    model::{
+        Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue, Register,
+        RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+    },
+    util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
 use itertools::Itertools;
 use log::{debug, info, warn};

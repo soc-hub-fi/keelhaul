@@ -2,7 +2,10 @@
 
 // TODO: maybe generate array registers under new module-level
 
-use crate::{error::GenerateError, ArchPtr, PtrSize, RegValue, Register, Registers, ResetValue};
+use crate::{
+    error::GenerateError,
+    model::{ArchPtr, PtrSize, RegValue, Register, Registers, ResetValue},
+};
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};

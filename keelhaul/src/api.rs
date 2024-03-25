@@ -6,6 +6,7 @@ use std::{path, str};
 use crate::{error::SvdParseError, model, Filters};
 use error::NotImplementedError;
 
+pub use crate::model::{ArchPtr, PtrSize, Registers};
 pub use error::ApiError;
 
 /// A source file for memory map metadata

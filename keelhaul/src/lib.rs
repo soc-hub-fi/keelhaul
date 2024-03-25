@@ -4,15 +4,13 @@
 pub use api::*;
 
 mod api;
-mod util;
-// TODO: leave error handling to user crate
 pub mod error;
 mod generate;
 mod model;
 mod parse_svd;
+mod util;
 
 pub use generate::*;
-pub use model::*;
 pub use parse_svd::*;
 use regex::Regex;
 

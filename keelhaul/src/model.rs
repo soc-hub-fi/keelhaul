@@ -3,7 +3,8 @@
 
 mod register;
 
-pub(crate) use register::*;
+// Anything that's part of the public API of register is also part of the public API of model
+pub use register::*;
 
 use std::ops;
 
