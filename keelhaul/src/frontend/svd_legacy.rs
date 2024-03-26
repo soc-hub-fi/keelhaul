@@ -286,8 +286,8 @@ impl RegPropGroupBuilder {
             self.access = Some(access);
         };
         if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            Ok(svd::Protection::parse_str(s)
-                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))?)
+            svd::Protection::parse_str(s)
+                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))
         })? {
             self.protection = Some(protection);
         };
@@ -421,7 +421,7 @@ where
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
-            periph_base: self.periph_base.clone(),
+            periph_base: self.periph_base,
             properties: self.properties.clone_and_update_from_node(cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
@@ -446,7 +446,7 @@ where
             RegisterParentKind::Cluster {
                 cluster_name: _,
                 cluster_offset,
-            } => Some(cluster_offset.clone()),
+            } => Some(*cluster_offset),
         }
     }
 }
@@ -586,7 +586,7 @@ where
         name.to_owned()
     };
     let addr = {
-        let address_base = parent.periph_base.clone();
+        let address_base = parent.periph_base;
         let address_cluster = parent.cluster_address();
         let address_offset = {
             let (addr_offset_str, addr_offset_node) =
@@ -662,7 +662,7 @@ where
                 parent
                     .properties
                     .clone_and_update_from_node(&register_node)?
-                    .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
+                    .build(&reg_path, Some(P::ptr_size().bit_count()))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
             let register = Register {
@@ -702,7 +702,7 @@ where
             parent
                 .properties
                 .clone_and_update_from_node(&register_node)?
-                .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
+                .build(&reg_path, Some(P::ptr_size().bit_count()))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
         let register = Register {
@@ -862,7 +862,7 @@ where
     for register in &registers {
         peripherals.insert(register.path.periph().name.clone());
         let addr: P = register.full_addr().unwrap();
-        if let Entry::Vacant(entry) = addresses.entry(addr.clone()) {
+        if let Entry::Vacant(entry) = addresses.entry(addr) {
             entry.insert(register.path.join("-"));
         } else {
             let reg2 = addresses

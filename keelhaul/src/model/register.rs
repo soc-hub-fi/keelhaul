@@ -99,10 +99,8 @@ where
     }
 
     fn addr(&self) -> P {
-        self.full_addr().expect(&format!(
-            "could not resolve full address for register: {:?}",
-            &self
-        ))
+        self.full_addr()
+            .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
     }
 
     fn size(&self) -> u32 {
@@ -138,7 +136,7 @@ pub struct RegPathSegment {
 
 impl<S: RefSchema> RegPath<S> {
     pub fn new(segments: Vec<RegPathSegment>) -> Self {
-        Self(segments, PhantomData::default())
+        Self(segments, PhantomData)
     }
 
     /// Joins the names of the path elements to one string using a separator
@@ -192,8 +190,8 @@ where
     S: RefSchema,
 {
     pub fn from_vec(v: Vec<P>) -> Self {
-        assert!(v.len() != 0, "address must have at least base address");
-        Self(v, PhantomData::default())
+        assert!(!v.is_empty(), "address must have at least base address");
+        Self(v, PhantomData)
     }
 
     /// Get register's absolute memory address
@@ -400,22 +398,13 @@ impl RegValue {
         }
     }
 
-    pub(crate) fn bit_count(&self) -> u32 {
-        match self {
-            RegValue::U8(_) => 8,
-            RegValue::U16(_) => 16,
-            RegValue::U32(_) => 32,
-            RegValue::U64(_) => 64,
-        }
-    }
-
     /// Bit-extend the value to 64-bits
     pub(crate) fn as_u64(&self) -> u64 {
         match self {
             RegValue::U8(u) => *u as u64,
             RegValue::U16(u) => *u as u64,
             RegValue::U32(u) => *u as u64,
-            RegValue::U64(u) => *u as u64,
+            RegValue::U64(u) => *u,
         }
     }
 }
@@ -553,10 +542,7 @@ impl PtrSize {
     }
 
     pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
-        match bit_count {
-            8 | 16 | 32 | 64 => true,
-            _ => false,
-        }
+        matches!(bit_count, 8 | 16 | 32 | 64)
     }
 }
 

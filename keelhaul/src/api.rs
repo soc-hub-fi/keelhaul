@@ -54,10 +54,10 @@ pub enum ArchWidth {
 pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
     match arch {
         ArchWidth::U32 => {
-            parse_registers::<u32, model::RefSchemaSvdV1_2>(sources, &Filters::all())?;
+            parse_registers::<u32>(sources, &Filters::all())?;
         }
         ArchWidth::U64 => {
-            parse_registers::<u64, model::RefSchemaSvdV1_2>(sources, &Filters::all())?;
+            parse_registers::<u64>(sources, &Filters::all())?;
         }
     }
     Ok(())
@@ -70,10 +70,7 @@ type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 /// # Type arguments
 ///
 /// * `P` - architecture width, i.e., a type that can represent any address on the platform
-fn parse_registers<P, S>(
-    sources: &[ModelSource],
-    filters: &Filters,
-) -> Result<Registers<P>, ApiError>
+fn parse_registers<P>(sources: &[ModelSource], filters: &Filters) -> Result<Registers<P>, ApiError>
 where
     P: model::ArchPtr,
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -90,7 +87,7 @@ where
                 )
                 .into())
             }
-            _ => {}
+            SourceFormat::Svd => todo!(),
         }
     }
 
@@ -99,13 +96,13 @@ where
     for src in sources {
         match src.format {
             SourceFormat::Svd => registers.push(
-                crate::frontend::svd_legacy::parse_svd_into_registers::<P>(src.path(), &filters)?,
+                crate::frontend::svd_legacy::parse_svd_into_registers::<P>(src.path(), filters)?,
             ),
             SourceFormat::Ieee1685 => todo!(),
         }
     }
 
-    Ok(registers.into_iter().nth(0).unwrap())
+    Ok(registers.into_iter().next().unwrap())
 }
 
 pub fn generate_tests(
@@ -116,20 +113,20 @@ pub fn generate_tests(
 ) -> Result<String, ApiError> {
     let test_cases: generate::TestCases = match arch_ptr_size {
         PtrSize::U8 => {
-            let registers = parse_registers::<u8, RefSchemaSvdV1_2>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, &test_cfg)
+            let registers = parse_registers::<u8>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U16 => {
-            let registers = parse_registers::<u16, RefSchemaSvdV1_2>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, &test_cfg)
+            let registers = parse_registers::<u16>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U32 => {
-            let registers = parse_registers::<u32, RefSchemaSvdV1_2>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, &test_cfg)
+            let registers = parse_registers::<u32>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U64 => {
-            let registers = parse_registers::<u64, RefSchemaSvdV1_2>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, &test_cfg)
+            let registers = parse_registers::<u64>(sources, filters)?;
+            generate::TestCases::from_registers(&registers, test_cfg)
         }
     }
     .unwrap();
