@@ -3,7 +3,7 @@ mod error;
 
 use std::{path, str};
 
-use crate::{error::SvdParseError, generate, model, Filters, TestConfig};
+use crate::{codegen, error::SvdParseError, model, Filters, TestConfig};
 use error::NotImplementedError;
 use log::info;
 
@@ -111,22 +111,22 @@ pub fn generate_tests(
     test_cfg: &TestConfig,
     filters: &Filters,
 ) -> Result<String, ApiError> {
-    let test_cases: generate::TestCases = match arch_ptr_size {
+    let test_cases: codegen::TestCases = match arch_ptr_size {
         PtrSize::U8 => {
             let registers = parse_registers::<u8>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, test_cfg)
+            codegen::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U16 => {
             let registers = parse_registers::<u16>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, test_cfg)
+            codegen::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U32 => {
             let registers = parse_registers::<u32>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, test_cfg)
+            codegen::TestCases::from_registers(&registers, test_cfg)
         }
         PtrSize::U64 => {
             let registers = parse_registers::<u64>(sources, filters)?;
-            generate::TestCases::from_registers(&registers, test_cfg)
+            codegen::TestCases::from_registers(&registers, test_cfg)
         }
     }
     .unwrap();

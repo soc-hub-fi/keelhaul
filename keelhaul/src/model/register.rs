@@ -4,7 +4,7 @@
 use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
-    bit_count_to_rust_uint_type_str, error, generate,
+    bit_count_to_rust_uint_type_str, codegen, error,
     model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
@@ -85,7 +85,7 @@ where
     }
 }
 
-impl<P, S> generate::TestRegister<P> for Register<P, S>
+impl<P, S> codegen::TestRegister<P> for Register<P, S>
 where
     P: num::CheckedAdd + Copy + fmt::Debug,
     S: RefSchema,
@@ -121,7 +121,7 @@ where
     fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
         let value = self.reset_value.value().as_u64();
         let mask = self.reset_value.mask().as_u64();
-        Some(generate::ValueOnReset::new(value, Some(mask)))
+        Some(codegen::ValueOnReset::new(value, Some(mask)))
     }
 }
 

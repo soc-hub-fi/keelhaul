@@ -4,13 +4,13 @@
 pub use api::*;
 
 mod api;
+pub(crate) mod codegen;
 pub mod error;
 pub(crate) mod frontend;
-pub(crate) mod generate;
 mod model;
 mod util;
 
-pub use generate::*;
+pub use codegen::*;
 use regex::Regex;
 
 /// What items of type `T` are allowed or not
