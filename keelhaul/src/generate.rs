@@ -119,13 +119,14 @@ fn create_modules(
 #[error("cannot parse test kind from {0}")]
 pub struct ParseTestKindError(String);
 
+/// Type of metadata test generatable by keelhaul
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EnumIter)]
 pub enum RegTestKind {
-    /// The register value will be read
+    /// The register value will be read, though nothing will be done with the output
     Read,
-    /// The read value will be compared against the reset value
+    /// The register value will be read and compared compared against the known reset value
     ///
-    /// Only generated when the reset value is reported in source format
+    /// Reset tests are only generated for registers that have a known reset value.
     ReadIsResetVal,
 }
 
@@ -193,7 +194,7 @@ pub struct TestConfig {
     ///
     /// [RegTestKind::Read]: read register value (may cause e.g., bus failure or hang)
     /// [RegTestKind::Reset]: read register value and verify it matches with reset value
-    reg_test_kinds: HashSet<RegTestKind>,
+    tests_to_generate: HashSet<RegTestKind>,
     /// What to do on failure:
     ///
     /// [FailureImplementation::ReturnValue]: just return the possibly incorrect value
@@ -213,7 +214,7 @@ impl TestConfig {
     #[must_use]
     pub fn new(archi_ptr_size: PtrSize) -> Self {
         Self {
-            reg_test_kinds: iter::once(RegTestKind::Read).collect(),
+            tests_to_generate: iter::once(RegTestKind::Read).collect(),
             on_fail: FailureImplKind::ReturnError,
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
@@ -227,19 +228,19 @@ impl TestConfig {
     /// # Errors
     ///
     /// - Read test was not enabled while reset test was
-    pub fn reg_test_kinds(
+    pub fn tests_to_generate(
         mut self,
-        reg_test_kinds: HashSet<RegTestKind>,
+        tests_to_generate: HashSet<RegTestKind>,
     ) -> Result<Self, GenerateError> {
-        if reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
-            && !reg_test_kinds.contains(&RegTestKind::Read)
+        if tests_to_generate.contains(&RegTestKind::ReadIsResetVal)
+            && !tests_to_generate.contains(&RegTestKind::Read)
         {
             return Err(GenerateError::InvalidConfig {
                 c: self,
                 cause: "enabling of reset test requires read test to be enabled as well".to_owned(),
             });
         }
-        self.reg_test_kinds = reg_test_kinds;
+        self.tests_to_generate = tests_to_generate;
         Ok(self)
     }
 
@@ -457,15 +458,18 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test = if reg.is_readable() && config.reg_test_kinds.contains(&RegTestKind::Read) {
-            self.gen_read_test()
-        } else {
-            quote!()
-        };
+        let read_test =
+            if reg.is_readable() && config.tests_to_generate.contains(&RegTestKind::Read) {
+                self.gen_read_test()
+            } else {
+                quote!()
+            };
 
         // Only generate reset value test if register is readable
         let reset_val_test = if self.0.is_readable()
-            && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
+            && config
+                .tests_to_generate
+                .contains(&RegTestKind::ReadIsResetVal)
             && u64::from(self.0.masked_reset().mask()) != 0u64
         {
             gen_reset_val_test(
@@ -539,7 +543,7 @@ fn gen_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
 ) -> Result<TokenStream, GenerateError> {
     // Reset value test requires read test to be present. Can't check for
     // reset value unless it's been read before.
-    debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
+    debug_assert!(config.tests_to_generate.contains(&RegTestKind::Read));
 
     let read_value_binding = RegTestGenerator::<P>::read_value_binding();
     let reset_val_frag = if config.force_ignore_reset_mask {
