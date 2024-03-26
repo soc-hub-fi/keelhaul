@@ -13,7 +13,7 @@ use std::{
 
 use anyhow::Context;
 use fs_err::{self as fs, File};
-use keelhaul::{Filters, ItemFilter, ModelSource, ParseTestKindError, RegTestKind, TestConfig};
+use keelhaul::{Filters, ItemFilter, ModelSource, ParseTestKindError, TestConfig, TestKind};
 use log::LevelFilter;
 use regex::Regex;
 
@@ -59,13 +59,13 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
     util::run_cmd("rustfmt", &[format!("{}", path.as_ref().display())])
 }
 
-fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindError> {
+fn test_types_from_env() -> Result<Option<HashSet<TestKind>>, ParseTestKindError> {
     let test_kinds = util::read_vec_from_env(ENV_TEST_KINDS, ',');
     if let Ok(test_kinds) = test_kinds {
         Ok(Some(
             test_kinds
                 .into_iter()
-                .map(|test_kind| RegTestKind::from_str(&test_kind))
+                .map(|test_kind| TestKind::from_str(&test_kind))
                 .collect::<Result<HashSet<_>, ParseTestKindError>>()?,
         ))
     } else {
@@ -86,10 +86,14 @@ fn main() -> anyhow::Result<()> {
     // Install a logger to print useful messages into `cargo:warning={}`
     logger::init(LevelFilter::Info);
 
-    let arch_ptr_size = (util::read_u32_from_env(ENV_ARCH)
-        .with_context(|| format!("could not detect {ENV_ARCH}"))? as u8)
-        .try_into()?;
-    let mut test_cfg = TestConfig::new(arch_ptr_size);
+    let arch_ptr_size_bytes = match util::read_u32_from_env(ENV_ARCH)
+        .with_context(|| format!("could not detect {ENV_ARCH}"))?
+    {
+        4 => keelhaul::ArchWidth::U32,
+        8 => keelhaul::ArchWidth::U64,
+        _ => panic!("unsupported arch size"),
+    };
+    let mut test_cfg = TestConfig::new(arch_ptr_size_bytes);
     if let Some(test_kind_set) =
         test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
     {
@@ -118,7 +122,7 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
     let test_cases = keelhaul::generate_tests(
         &[ModelSource::new(svd_path, keelhaul::SourceFormat::Svd)],
-        arch_ptr_size,
+        arch_ptr_size_bytes,
         &test_cfg,
         &Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
     )?;

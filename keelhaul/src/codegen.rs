@@ -1,7 +1,7 @@
 //! Generate test cases from types implementing [`TestRegister`]
 
 // Codegen API
-pub use self::test_register::{ParseTestKindError, RegTestKind, TestRegister, ValueOnReset};
+pub use self::test_register::{ParseTestKindError, TestRegister, ValueOnReset};
 
 mod test_register;
 
@@ -13,8 +13,10 @@ use std::{
 
 use self::test_register::RegTestGenerator;
 use crate::{
+    api,
     error::GenerateError,
     model::{self, ArchPtr, Registers},
+    TestKind,
 };
 use itertools::Itertools;
 use proc_macro2::TokenStream;
@@ -30,7 +32,7 @@ fn gen_preamble(arch: model::PtrSize, error_derive_debug: bool) -> TokenStream {
     };
 
     // Generate an error variant for all test case kinds
-    let error_variant_defs: TokenStream = RegTestKind::iter()
+    let error_variant_defs: TokenStream = TestKind::iter()
         .filter_map(|test_kind| test_kind.error_variant_def(arch))
         .collect();
 
@@ -102,7 +104,7 @@ pub struct TestConfig {
     ///
     /// [RegTestKind::Read]: read register value (may cause e.g., bus failure or hang)
     /// [RegTestKind::Reset]: read register value and verify it matches with reset value
-    tests_to_generate: HashSet<RegTestKind>,
+    tests_to_generate: HashSet<TestKind>,
     /// What to do on failure:
     ///
     /// [FailureImplementation::ReturnValue]: just return the possibly incorrect value
@@ -115,19 +117,19 @@ pub struct TestConfig {
     /// This is useful because sometimes the people who make SVDs make all the
     /// reset masks zeros and we need to ignore them.
     force_ignore_reset_mask: bool,
-    arch_ptr_size: model::PtrSize,
+    arch_ptr_size: api::ArchWidth,
 }
 
 impl TestConfig {
     #[must_use]
-    pub fn new(archi_ptr_size: model::PtrSize) -> Self {
+    pub fn new(arch_ptr_size: api::ArchWidth) -> Self {
         Self {
-            tests_to_generate: iter::once(RegTestKind::Read).collect(),
+            tests_to_generate: iter::once(TestKind::Read).collect(),
             on_fail: FailureImplKind::ReturnError,
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
             force_ignore_reset_mask: true,
-            arch_ptr_size: archi_ptr_size,
+            arch_ptr_size,
         }
     }
 
@@ -138,10 +140,10 @@ impl TestConfig {
     /// - Read test was not enabled while reset test was
     pub fn tests_to_generate(
         mut self,
-        tests_to_generate: HashSet<RegTestKind>,
+        tests_to_generate: HashSet<TestKind>,
     ) -> Result<Self, GenerateError> {
-        if tests_to_generate.contains(&RegTestKind::ReadIsResetVal)
-            && !tests_to_generate.contains(&RegTestKind::Read)
+        if tests_to_generate.contains(&TestKind::ReadIsResetVal)
+            && !tests_to_generate.contains(&TestKind::Read)
         {
             return Err(GenerateError::InvalidConfig {
                 c: self,
@@ -157,13 +159,19 @@ impl TestConfig {
     /// # Errors
     ///
     /// - TODO
-    pub fn on_fail(mut self, on_fail: FailureImplKind) -> Result<Self, GenerateError> {
+    pub fn on_fail(mut self, on_fail: FailureImplKind) -> Self {
         self.on_fail = on_fail;
-        Ok(self)
+        self
     }
 
-    pub fn archi_ptr_size(&self) -> model::PtrSize {
-        self.arch_ptr_size
+    pub fn derive_debug(mut self, derive_debug: bool) -> Self {
+        self.derive_debug = derive_debug;
+        self
+    }
+
+    pub fn ignore_reset_masks(mut self, ignore_reset_masks: bool) -> Self {
+        self.force_ignore_reset_mask = ignore_reset_masks;
+        self
     }
 }
 
@@ -316,7 +324,7 @@ impl TestCases {
         registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
     ) -> Result<Self, GenerateError> {
-        let preamble = gen_preamble(config.arch_ptr_size, config.derive_debug).to_string();
+        let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug).to_string();
 
         let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();

@@ -579,16 +579,3 @@ impl fmt::Display for PtrSize {
         write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
     }
 }
-
-impl std::convert::TryFrom<u8> for PtrSize {
-    type Error = error::NotImplementedError;
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(Self::U8),
-            2 => Ok(Self::U16),
-            4 => Ok(Self::U32),
-            8 => Ok(Self::U64),
-            other => Err(error::NotImplementedError::PtrSize(other)),
-        }
-    }
-}

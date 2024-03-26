@@ -1,14 +1,11 @@
-use std::str;
-
 use crate::{
     codegen,
     error::GenerateError,
     model::{self, ArchPtr},
-    TestConfig,
+    TestConfig, TestKind,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use strum::EnumIter;
 use thiserror::Error;
 
 /// Type that a test can be generated for
@@ -64,20 +61,9 @@ impl<T> ValueOnReset<T> {
 
 #[derive(Error, Debug)]
 #[error("cannot parse test kind from {0}")]
-pub struct ParseTestKindError(String);
+pub struct ParseTestKindError(pub(crate) String);
 
-/// Type of metadata test generatable by keelhaul
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EnumIter)]
-pub enum RegTestKind {
-    /// The register value will be read, though nothing will be done with the output
-    Read,
-    /// The register value will be read and compared compared against the known reset value
-    ///
-    /// Reset tests are only generated for registers that have a known reset value.
-    ReadIsResetVal,
-}
-
-impl RegTestKind {
+impl crate::api::TestKind {
     /// Error variant for an error enumeration, including the comma at end
     ///
     /// # Parameters
@@ -112,18 +98,6 @@ impl RegTestKind {
                     },
                 },
             ),
-        }
-    }
-}
-
-impl str::FromStr for RegTestKind {
-    type Err = ParseTestKindError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "read" => Ok(Self::Read),
-            "reset" | "read_is_reset_val" => Ok(Self::ReadIsResetVal),
-            s => Err(ParseTestKindError(s.to_owned())),
         }
     }
 }
@@ -202,17 +176,14 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         let fn_name = self.gen_test_fn_ident();
 
         // Only generate read test if register is readable
-        let gen_read_test =
-            reg.is_readable() && config.tests_to_generate.contains(&RegTestKind::Read);
+        let gen_read_test = reg.is_readable() && config.tests_to_generate.contains(&TestKind::Read);
         let read_test = gen_read_test
             .then(|| self.gen_read_test())
             .unwrap_or_default();
 
         // Only generate reset value test if register is readable and has a reset value
-        let gen_reset_test = reg.is_readable()
-            && config
-                .tests_to_generate
-                .contains(&RegTestKind::ReadIsResetVal);
+        let gen_reset_test =
+            reg.is_readable() && config.tests_to_generate.contains(&TestKind::ReadIsResetVal);
         let reset_val_test = gen_reset_test
             .then(|| {
                 reg.reset_value()
@@ -232,7 +203,6 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         let ret = quote! {
             #[allow(non_snake_case)]
             pub fn #fn_name() -> Result<()> {
-                #[allow(unused)]
                 let #ptr_binding: *mut #reg_size_ty = #addr_hex as *mut #reg_size_ty;
 
                 #read_test
@@ -288,7 +258,7 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
 ) -> TokenStream {
     // Reset value test requires read test to be present. Can't check for
     // reset value unless it's been read before.
-    debug_assert!(config.tests_to_generate.contains(&RegTestKind::Read));
+    debug_assert!(config.tests_to_generate.contains(&TestKind::Read));
 
     let read_value_binding = RegTestGenerator::<P>::read_value_binding();
     let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask.is_none() {

@@ -1,15 +1,18 @@
 //! Exposes functionality supported by this crate
+
+// Export API types
+pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
+pub use error::ApiError;
+pub use svd_parser::ValidateLevel;
+
 mod error;
 
 use std::{path, str};
 
-use crate::{codegen, error::SvdParseError, model, Filters, TestConfig};
+use crate::{codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig};
 use error::NotImplementedError;
 use log::info;
-
-pub use crate::model::{ArchPtr, PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
-pub use error::ApiError;
-pub use svd_parser::ValidateLevel;
+use strum::EnumIter;
 
 /// A source file for memory map metadata
 ///
@@ -46,6 +49,38 @@ pub enum ArchWidth {
     U32,
     /// The target uses an 8-byte -- or 64-bit -- address space
     U64,
+}
+
+impl From<ArchWidth> for model::PtrSize {
+    fn from(value: ArchWidth) -> Self {
+        match value {
+            ArchWidth::U32 => model::PtrSize::U32,
+            ArchWidth::U64 => model::PtrSize::U64,
+        }
+    }
+}
+
+/// Type of metadata test generatable by keelhaul
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EnumIter)]
+pub enum TestKind {
+    /// The register value will be read, though nothing will be done with the output
+    Read,
+    /// The register value will be read and compared compared against the known reset value
+    ///
+    /// Reset tests are only generated for registers that have a known reset value.
+    ReadIsResetVal,
+}
+
+impl str::FromStr for TestKind {
+    type Err = ParseTestKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(Self::Read),
+            "reset" | "read_is_reset_val" => Ok(Self::ReadIsResetVal),
+            s => Err(ParseTestKindError(s.to_owned())),
+        }
+    }
 }
 
 /// Run the parser on the inputs without doing anything
@@ -107,29 +142,22 @@ where
 
 pub fn generate_tests(
     sources: &[ModelSource],
-    arch_ptr_size: PtrSize,
+    arch_ptr_size: ArchWidth,
     test_cfg: &TestConfig,
     filters: &Filters,
 ) -> Result<String, ApiError> {
     let test_cases: codegen::TestCases = match arch_ptr_size {
-        PtrSize::U8 => {
-            let registers = parse_registers::<u8>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
-        }
-        PtrSize::U16 => {
-            let registers = parse_registers::<u16>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
-        }
-        PtrSize::U32 => {
+        ArchWidth::U32 => {
             let registers = parse_registers::<u32>(sources, filters)?;
             codegen::TestCases::from_registers(&registers, test_cfg)
         }
-        PtrSize::U64 => {
+        ArchWidth::U64 => {
             let registers = parse_registers::<u64>(sources, filters)?;
             codegen::TestCases::from_registers(&registers, test_cfg)
         }
     }
     .unwrap();
+    // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
     Ok(test_cases.to_module_string())
 }
