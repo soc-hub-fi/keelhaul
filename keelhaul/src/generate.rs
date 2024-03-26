@@ -483,9 +483,9 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         let fn_name = self.gen_test_fn_ident();
 
         // Only generate read test if register is readable
-        let gen_reset_test =
+        let gen_read_test =
             reg.is_readable() && config.tests_to_generate.contains(&RegTestKind::Read);
-        let read_test = gen_reset_test
+        let read_test = gen_read_test
             .then(|| self.gen_read_test())
             .unwrap_or_default();
 
