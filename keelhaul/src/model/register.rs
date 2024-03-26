@@ -1,7 +1,7 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{fmt, hash, marker::PhantomData, str};
+use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
     bit_count_to_rust_uint_type_str, error, generate,
@@ -454,6 +454,34 @@ impl From<RegValue> for u64 {
         }
     }
 }
+
+/// `BitSized` types have a knowable size
+pub(crate) trait BitSized<T>: fmt::Debug + Copy {
+    fn bit_count() -> u32;
+    fn all_ones() -> T;
+    fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
+        val <= Self::all_ones()
+    }
+}
+
+macro_rules! impl_bit_sized {
+    ($ty:ty, $numbits:expr) => {
+        impl BitSized<$ty> for $ty {
+            fn bit_count() -> u32 {
+                $numbits
+            }
+            fn all_ones() -> $ty {
+                <$ty>::MAX
+            }
+        }
+    };
+}
+
+impl_bit_sized!(u8, 8);
+impl_bit_sized!(u16, 16);
+impl_bit_sized!(u32, 32);
+impl_bit_sized!(u64, 64);
+
 pub trait ArchPtr:
     Clone + Copy +
     Eq +
