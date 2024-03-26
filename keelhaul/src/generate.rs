@@ -281,8 +281,8 @@ impl TestConfig {
     }
 }
 
-// TODO: this struct should replace the model::PtrSize and move there eventually
-pub(crate) trait PtrSize<T>: fmt::Debug + Copy {
+/// `BitSized` types have a knowable size
+pub(crate) trait BitSized<T>: fmt::Debug + Copy {
     fn bit_count() -> u32;
     fn all_ones() -> T;
     fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
@@ -290,7 +290,7 @@ pub(crate) trait PtrSize<T>: fmt::Debug + Copy {
     }
 }
 
-impl PtrSize<u8> for u8 {
+impl BitSized<u8> for u8 {
     fn bit_count() -> u32 {
         8
     }
@@ -298,7 +298,7 @@ impl PtrSize<u8> for u8 {
         u8::MAX
     }
 }
-impl PtrSize<u16> for u16 {
+impl BitSized<u16> for u16 {
     fn bit_count() -> u32 {
         16
     }
@@ -306,7 +306,7 @@ impl PtrSize<u16> for u16 {
         u16::MAX
     }
 }
-impl PtrSize<u32> for u32 {
+impl BitSized<u32> for u32 {
     fn bit_count() -> u32 {
         32
     }
@@ -314,7 +314,7 @@ impl PtrSize<u32> for u32 {
         u32::MAX
     }
 }
-impl PtrSize<u64> for u64 {
+impl BitSized<u64> for u64 {
     fn bit_count() -> u32 {
         64
     }
@@ -329,7 +329,7 @@ impl PtrSize<u64> for u64 {
 ///
 /// `val = 0xb0`, `mask = u8::MAX` -> `0xb0u8`
 /// `val = 0xb0`, `mask = 1` ->  `(0xb0u8 & 0b1u8)`
-fn gen_bitand<T: PtrSize<T> + fmt::LowerHex + fmt::Binary + cmp::PartialOrd>(
+fn gen_bitand<T: BitSized<T> + fmt::LowerHex + fmt::Binary + cmp::PartialOrd>(
     value: T,
     mask: T,
 ) -> TokenStream {
@@ -349,7 +349,7 @@ fn gen_bitand<T: PtrSize<T> + fmt::LowerHex + fmt::Binary + cmp::PartialOrd>(
 }
 
 /// Get a literal hexadecimal representation of `val`, e.g., "0xdeadbeef"
-fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + PtrSize<T>>(val: T, bits: u32) -> String {
+fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + BitSized<T>>(val: T, bits: u32) -> String {
     assert!(
         T::can_represent(val),
         "value `{val:?}` cannot be represented using `{}`",
@@ -365,7 +365,7 @@ fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + PtrSize<T>>(val: T, bits: u3
 }
 
 /// Get a literal binary representation of `val`, e.g., "0b10101010"
-fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + PtrSize<T>>(val: T, bits: u32) -> String {
+fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + BitSized<T>>(val: T, bits: u32) -> String {
     assert!(
         T::can_represent(val),
         "value `{val:?}` cannot be represented using `{}`",
