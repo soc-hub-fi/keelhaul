@@ -18,6 +18,9 @@ struct Cli {
     #[arg(long, value_enum, required = true)]
     arch: ArchWidth,
 
+    #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+    validate_level: ValidateLevel,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -84,6 +87,44 @@ impl ValueEnum for FailureImplKind {
             keelhaul::FailureImplKind::None => Some(PossibleValue::new("ignore")),
             keelhaul::FailureImplKind::Panic => Some(PossibleValue::new("panic")),
             keelhaul::FailureImplKind::ReturnError => Some(PossibleValue::new("error")),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ValidateLevel(keelhaul::ValidateLevel);
+
+impl From<ValidateLevel> for keelhaul::ValidateLevel {
+    fn from(value: ValidateLevel) -> Self {
+        value.0
+    }
+}
+
+impl From<ValidateLevel> for clap::builder::OsStr {
+    fn from(value: ValidateLevel) -> Self {
+        match value.0 {
+            keelhaul::ValidateLevel::Disabled => "disabled".into(),
+            keelhaul::ValidateLevel::Weak => "weak".into(),
+            keelhaul::ValidateLevel::Strict => "strict".into(),
+        }
+    }
+}
+
+impl ValueEnum for ValidateLevel {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self(keelhaul::ValidateLevel::Disabled),
+            Self(keelhaul::ValidateLevel::Weak),
+            Self(keelhaul::ValidateLevel::Strict),
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        use clap::builder::PossibleValue;
+        match self.0 {
+            keelhaul::ValidateLevel::Disabled => Some(PossibleValue::new("disabled")),
+            keelhaul::ValidateLevel::Weak => Some(PossibleValue::new("weak")),
+            keelhaul::ValidateLevel::Strict => Some(PossibleValue::new("strict")),
         }
     }
 }
