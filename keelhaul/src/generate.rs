@@ -16,9 +16,9 @@ use std::{
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
-fn gen_preamble(config: &TestConfig) -> TokenStream {
+fn gen_preamble(arch: PtrSize, error_derive_debug: bool) -> TokenStream {
     // It costs a lot of code size to `#[derive(Debug)]` so we only do it if required
-    let opt_derive_debug = if config.derive_debug {
+    let opt_derive_debug = if error_derive_debug {
         quote!(#[derive(Debug)])
     } else {
         quote!()
@@ -26,7 +26,7 @@ fn gen_preamble(config: &TestConfig) -> TokenStream {
 
     // Generate an error variant for all test case kinds
     let error_variant_defs: TokenStream = RegTestKind::iter()
-        .filter_map(|test_kind| test_kind.error_variant_def(config.archi_ptr_size()))
+        .filter_map(|test_kind| test_kind.error_variant_def(arch))
         .collect();
 
     quote! {
@@ -176,7 +176,7 @@ pub struct TestConfig {
     /// This is useful because sometimes the people who make SVDs make all the
     /// reset masks zeros and we need to ignore them.
     force_ignore_reset_mask: bool,
-    archi_ptr_size: PtrSize,
+    arch_ptr_size: PtrSize,
 }
 
 impl TestConfig {
@@ -188,7 +188,7 @@ impl TestConfig {
             derive_debug: false,
             // HACK: set to true on defautl while Headsail's reset masks are broken
             force_ignore_reset_mask: true,
-            archi_ptr_size,
+            arch_ptr_size: archi_ptr_size,
         }
     }
 
@@ -224,7 +224,7 @@ impl TestConfig {
     }
 
     pub fn archi_ptr_size(&self) -> PtrSize {
-        self.archi_ptr_size
+        self.arch_ptr_size
     }
 }
 
@@ -567,7 +567,7 @@ impl TestCases {
         registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
     ) -> Result<Self, GenerateError> {
-        let preamble = gen_preamble(config).to_string();
+        let preamble = gen_preamble(config.arch_ptr_size, config.derive_debug).to_string();
 
         let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();
