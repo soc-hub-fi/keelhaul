@@ -2,21 +2,74 @@
 
 // TODO: maybe generate array registers under new module-level
 
+use std::{
+    any, cmp,
+    collections::{HashMap, HashSet},
+    fmt, iter, str,
+};
+
 use crate::{
     error::GenerateError,
-    model::{self, ArchPtr, PtrSize, RegValue, Register, Registers, ResetValue},
+    model::{self, ArchPtr, Registers},
 };
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use std::{
-    collections::{HashMap, HashSet},
-    iter, str,
-};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
-fn gen_preamble(arch: PtrSize, error_derive_debug: bool) -> TokenStream {
+/// Type that a test can be generated for
+pub(crate) trait TestRegister<P> {
+    /// The path of the register used for human readable identification of the register as part of a
+    /// larger design. Might comprise components such as "peripheral, register cluster, register
+    /// name".
+    fn path(&self) -> Vec<String>;
+
+    /// A human-readable unique identifier for the register, usually the the path that is used to
+    /// access the register.
+    fn uid(&self) -> String {
+        self.path().join("_")
+    }
+
+    /// Name of the top-level element containing this register, usually the first element of the
+    /// `path`
+    fn periph_name(&self) -> String {
+        self.path().first().unwrap().to_owned()
+    }
+
+    /// The name of the register, usually the final element of the `path`
+    fn name(&self) -> String {
+        self.path().last().unwrap().to_owned()
+    }
+
+    /// The address of the register
+    fn addr(&self) -> P;
+
+    /// The size of the register in bits
+    fn size(&self) -> u32;
+
+    /// Whether reading the register has a defined effect
+    fn is_readable(&self) -> bool;
+
+    /// An optional, known reset value
+    fn reset_value(&self) -> Option<ValueOnReset<u64>>;
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ValueOnReset<T> {
+    /// Known value on reset
+    value: T,
+    /// An optional reset mask, indicating which bits have the defined reset value
+    mask: Option<T>,
+}
+
+impl<T> ValueOnReset<T> {
+    pub(crate) fn new(value: T, mask: Option<T>) -> Self {
+        Self { value, mask }
+    }
+}
+
+fn gen_preamble(arch: model::PtrSize, error_derive_debug: bool) -> TokenStream {
     // It costs a lot of code size to `#[derive(Debug)]` so we only do it if required
     let opt_derive_debug = if error_derive_debug {
         quote!(#[derive(Debug)])
@@ -107,7 +160,7 @@ impl RegTestKind {
     /// - `arch_ptr_width` - The architecture pointer size.
     /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
     ///   Error variant.
-    fn error_variant_def(&self, max_value_width: PtrSize) -> Option<TokenStream> {
+    fn error_variant_def(&self, max_value_width: model::PtrSize) -> Option<TokenStream> {
         let max_value_width = format_ident!(
             "{}",
             bit_count_to_rust_uint_type_str(max_value_width.bit_count())
@@ -176,12 +229,12 @@ pub struct TestConfig {
     /// This is useful because sometimes the people who make SVDs make all the
     /// reset masks zeros and we need to ignore them.
     force_ignore_reset_mask: bool,
-    arch_ptr_size: PtrSize,
+    arch_ptr_size: model::PtrSize,
 }
 
 impl TestConfig {
     #[must_use]
-    pub fn new(archi_ptr_size: PtrSize) -> Self {
+    pub fn new(archi_ptr_size: model::PtrSize) -> Self {
         Self {
             tests_to_generate: iter::once(RegTestKind::Read).collect(),
             on_fail: FailureImplKind::ReturnError,
@@ -223,58 +276,107 @@ impl TestConfig {
         Ok(self)
     }
 
-    pub fn archi_ptr_size(&self) -> PtrSize {
+    pub fn archi_ptr_size(&self) -> model::PtrSize {
         self.arch_ptr_size
     }
 }
 
-impl ResetValue {
-    /// Generates a "bitwise and" operation for reset value that can be used to
-    /// compare to the value received from the register
-    ///
-    /// # Examples
-    ///
-    /// `val = 0xb0`, `mask = u8::MAX` -> `0xb0u8`
-    /// `val = 0xb0`, `mask = 1` ->  `(0xb0u8 & 0b1u8)`
-    fn gen_bitand(&self) -> TokenStream {
-        let (value, mask) = (self.value(), self.mask());
-        let value_lit = value.gen_literal_hex();
+// TODO: this struct should replace the model::PtrSize and move there eventually
+pub(crate) trait PtrSize<T>: fmt::Debug + Copy {
+    fn bit_count() -> u32;
+    fn all_ones() -> T;
+    fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
+        val <= Self::all_ones()
+    }
+}
 
-        match mask {
-            mask if mask == mask.width().max_value() => {
-                quote!(#value_lit)
-            }
-            mask => {
-                let mask_bin = mask.gen_literal_bin();
-                quote! {
-                    (#value_lit & #mask_bin)
-                }
+impl PtrSize<u8> for u8 {
+    fn bit_count() -> u32 {
+        8
+    }
+    fn all_ones() -> u8 {
+        u8::MAX
+    }
+}
+impl PtrSize<u16> for u16 {
+    fn bit_count() -> u32 {
+        16
+    }
+    fn all_ones() -> u16 {
+        u16::MAX
+    }
+}
+impl PtrSize<u32> for u32 {
+    fn bit_count() -> u32 {
+        32
+    }
+    fn all_ones() -> u32 {
+        u32::MAX
+    }
+}
+impl PtrSize<u64> for u64 {
+    fn bit_count() -> u32 {
+        64
+    }
+    fn all_ones() -> u64 {
+        u64::MAX
+    }
+}
+
+/// Generates a "bitwise and" operation for given value and mask
+///
+/// # Examples
+///
+/// `val = 0xb0`, `mask = u8::MAX` -> `0xb0u8`
+/// `val = 0xb0`, `mask = 1` ->  `(0xb0u8 & 0b1u8)`
+fn gen_bitand<T: PtrSize<T> + fmt::LowerHex + fmt::Binary + cmp::PartialOrd>(
+    value: T,
+    mask: T,
+) -> TokenStream {
+    let value_lit = u_to_hexlit(value, T::bit_count());
+
+    match mask {
+        mask if mask == T::all_ones() => {
+            quote!(#value_lit)
+        }
+        mask => {
+            let mask_bin = u_to_binlit(mask, T::bit_count());
+            quote! {
+                (#value_lit & #mask_bin)
             }
         }
     }
 }
 
-impl RegValue {
-    fn gen_literal_hex(&self) -> TokenStream {
-        match self {
-            Self::U8(u) => format!("{u:#x}u8"),
-            Self::U16(u) => format!("{u:#x}u16"),
-            Self::U32(u) => format!("{u:#x}u32"),
-            Self::U64(u) => format!("{u:#x}u64"),
-        }
-        .parse()
-        .unwrap()
+/// Get a literal hexadecimal representation of `val`, e.g., "0xdeadbeef"
+fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + PtrSize<T>>(val: T, bits: u32) -> String {
+    assert!(
+        T::can_represent(val),
+        "value `{val:?}` cannot be represented using `{}`",
+        any::type_name::<T>()
+    );
+    match bits {
+        8 => format!("{val:#x}u8"),
+        16 => format!("{val:#x}u16"),
+        32 => format!("{val:#x}u32"),
+        64 => format!("{val:#x}u64"),
+        b => panic!("invalid bit count for literal: {b}"),
     }
+}
 
-    fn gen_literal_bin(&self) -> TokenStream {
-        match self {
-            Self::U8(u) => format!("{u:#b}u8"),
-            Self::U16(u) => format!("{u:#b}u16"),
-            Self::U32(u) => format!("{u:#b}u32"),
-            Self::U64(u) => format!("{u:#b}u64"),
-        }
-        .parse()
-        .unwrap()
+/// Get a literal binary representation of `val`, e.g., "0b10101010"
+fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + PtrSize<T>>(val: T, bits: u32) -> String {
+    assert!(
+        T::can_represent(val),
+        "value `{val:?}` cannot be represented using `{}`",
+        any::type_name::<T>()
+    );
+    match bits {
+        8 => format!("{val:#b}u8"),
+        16 => format!("{val:#b}u16"),
+        32 => format!("{val:#b}u32"),
+        64 => format!("{val:#b}u64"),
+        b => panic!("invalid bit count for literal: {b}"),
     }
 }
 
@@ -346,12 +448,12 @@ pub(crate) fn bit_count_to_rust_uint_type_str(bit_count: u32) -> &'static str {
     }
 }
 
-/// Generates test cases based on a [`Register`] definition and [`TestConfig`]
+/// Generates test cases based on a [`TestRegister`] definition and [`TestConfig`]
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
 /// This text is then compiled as Rust source code.
 struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + 'static>(
-    &'r Register<P, model::RefSchemaSvdV1_2>,
+    &'r dyn TestRegister<P>,
     &'c TestConfig,
 );
 
@@ -371,10 +473,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     }
 
     /// Create a [`RegTestGenerator`] from a register definition
-    pub const fn from_register(
-        reg: &'r Register<P, model::RefSchemaSvdV1_2>,
-        config: &'c TestConfig,
-    ) -> Self {
+    pub fn from_register(reg: &'r impl TestRegister<P>, config: &'c TestConfig) -> Self {
         Self(reg, config)
     }
 
@@ -394,14 +493,10 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     ///
     /// * `test_MCR_0xfff00004`
     /// * `test_MDIO_RD_DATA_0xff40040c`
-    fn gen_test_fn_ident(&self) -> Result<Ident, GenerateError> {
-        let reg = self.0;
-        let full_addr: Result<P, _> = reg.full_addr();
-        Ok(format_ident!(
-            "test_{}_{:#x}",
-            reg.path.reg().name,
-            full_addr?
-        ))
+    fn gen_test_fn_ident(&self) -> Ident {
+        let reg = &self.0;
+        let addr: P = reg.addr();
+        format_ident!("test_{}_{:#x}", reg.name(), addr)
     }
 
     /// Generates a test function
@@ -417,40 +512,42 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// }
     /// ```
     pub fn gen_test_fn(&self) -> Result<TokenStream, GenerateError> {
-        let (reg, config) = (self.0, self.1);
+        let (reg, config) = (&self.0, self.1);
 
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(reg.size));
-        let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
+        let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(reg.size()));
+        let addr_hex: TokenStream = format!("{:#x}", reg.addr()).parse().unwrap();
 
-        let fn_name = self.gen_test_fn_ident()?;
+        let fn_name = self.gen_test_fn_ident();
 
         // Only generate read test if register is readable
-        let read_test =
-            if reg.is_readable() && config.tests_to_generate.contains(&RegTestKind::Read) {
-                self.gen_read_test()
-            } else {
-                quote!()
-            };
+        let gen_reset_test =
+            reg.is_readable() && config.tests_to_generate.contains(&RegTestKind::Read);
+        let read_test = gen_reset_test
+            .then(|| self.gen_read_test())
+            .unwrap_or_default();
 
-        // Only generate reset value test if register is readable
-        let reset_val_test = if self.0.is_readable()
+        // Only generate reset value test if register is readable and has a reset value
+        let gen_reset_test = reg.is_readable()
             && config
                 .tests_to_generate
-                .contains(&RegTestKind::ReadIsResetVal)
-            && u64::from(self.0.masked_reset().mask()) != 0u64
-        {
-            gen_reset_val_test(
-                self.0.uid(),
-                self.0.full_addr()?,
-                self.0.size,
-                *self.0.masked_reset(),
-                config,
-            )?
-        } else {
-            quote!()
-        };
+                .contains(&RegTestKind::ReadIsResetVal);
+        let reset_val_test = gen_reset_test
+            .then(|| {
+                reg.reset_value()
+                    .map(|value_on_reset| {
+                        gen_read_is_reset_val_test(
+                            reg.uid(),
+                            reg.addr(),
+                            reg.size(),
+                            &value_on_reset,
+                            config,
+                        )
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
 
         let ret = quote! {
             #[allow(non_snake_case)]
@@ -477,21 +574,20 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     ///     uid: "test_something",
     /// }
     /// ```
-    pub fn gen_test_def(&self) -> Result<TokenStream, GenerateError> {
-        let fn_name = self.gen_test_fn_ident()?;
-        let periph_name_lc: TokenStream = self.0.path.periph().name.to_lowercase().parse().unwrap();
+    pub fn gen_test_def(&self) -> TokenStream {
+        let fn_name = self.gen_test_fn_ident();
+        let periph_name_lc: TokenStream = self.0.periph_name().to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
-        let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
+        let addr_hex: TokenStream = format!("{:#x}", self.0.addr()).parse().unwrap();
         let uid = self.0.uid();
 
-        let def = quote! {
+        quote! {
             TestCase {
                 function: #func,
                 addr: #addr_hex,
                 uid: #uid,
             }
-        };
-        Ok(def)
+        }
     }
 }
 
@@ -503,36 +599,37 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
 /// * `uid` - Register UID
 /// * `size` - The size of the register in bits
 /// * `reset_value` - A masked reset value that will be checked against
-fn gen_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
+fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     uid: String,
     addr: P,
     size: u32,
-    reset_value: model::ResetValue,
+    reset_value: &ValueOnReset<u64>,
     config: &TestConfig,
-) -> Result<TokenStream, GenerateError> {
+) -> TokenStream {
     // Reset value test requires read test to be present. Can't check for
     // reset value unless it's been read before.
     debug_assert!(config.tests_to_generate.contains(&RegTestKind::Read));
 
     let read_value_binding = RegTestGenerator::<P>::read_value_binding();
-    let reset_val_frag = if config.force_ignore_reset_mask {
-        reset_value.value().gen_literal_hex()
+    let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask.is_none() {
+        u_to_hexlit(reset_value.value, size).parse().unwrap()
     } else {
-        reset_value.gen_bitand()
+        // Unwrap: checked on conditional
+        gen_bitand(reset_value.value, reset_value.mask.unwrap())
     };
     let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(size));
 
     match config.on_fail {
         // If reset value is incorrect, panic
-        FailureImplKind::Panic => Ok(quote! {
+        FailureImplKind::Panic => quote! {
             assert_eq!(#read_value_binding, #reset_val_frag as #reg_size_ty);
-        }),
+        },
         // If reset value is incorrect, do nothing
-        FailureImplKind::None => Ok(quote! {}),
+        FailureImplKind::None => quote! {},
         FailureImplKind::ReturnError => {
             let addr_hex: TokenStream = format!("{:#x}", addr).parse().unwrap();
             let max_val_width = quote!(u64);
-            Ok(quote! {
+            quote! {
                 if #read_value_binding != #reset_val_frag as #reg_size_ty {
                     return Err(Error::ReadValueIsNotResetValue {
                             read_val: #read_value_binding as #max_val_width,
@@ -541,7 +638,7 @@ fn gen_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
                             reg_addr: #addr_hex,
                         })
                 }
-            })
+            }
         }
     }
 }
@@ -574,7 +671,7 @@ impl TestCases {
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
             let test_fn = test_gen.gen_test_fn()?.to_string();
-            let test_def = test_gen.gen_test_def()?.to_string();
+            let test_def = test_gen.gen_test_def().to_string();
             test_fns_and_defs_by_periph
                 .entry(register.path.periph().name.clone())
                 .or_default()

@@ -4,7 +4,7 @@
 use std::{fmt, hash, marker::PhantomData, str};
 
 use crate::{
-    bit_count_to_rust_uint_type_str, error,
+    bit_count_to_rust_uint_type_str, error, generate,
     model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
@@ -62,21 +62,6 @@ where
         self.path.join("-")
     }
 
-    pub(crate) const fn masked_reset(&self) -> &ResetValue {
-        &self.reset_value
-    }
-
-    /// Whether this register is software readable or not
-    ///
-    /// Returns `false` when read operations have an undefined effect.
-    pub fn is_readable(&self) -> bool {
-        use svd::Access::*;
-        match self.access {
-            ReadOnly | ReadWrite => true,
-            ReadWriteOnce | WriteOnly | WriteOnce => false,
-        }
-    }
-
     /// Whether this register can be written to at least once after reset
     ///
     /// Returns `false` when write operations past the first one have an undefined effect.
@@ -97,6 +82,48 @@ where
             WriteOnly | ReadWrite => true,
             ReadOnly | WriteOnce | ReadWriteOnce => false,
         }
+    }
+}
+
+impl<P, S> generate::TestRegister<P> for Register<P, S>
+where
+    P: num::CheckedAdd + Copy + fmt::Debug,
+    S: RefSchema,
+{
+    fn path(&self) -> Vec<String> {
+        self.path
+            .0
+            .iter()
+            .map(|path| path.name.clone())
+            .collect_vec()
+    }
+
+    fn addr(&self) -> P {
+        self.full_addr().expect(&format!(
+            "could not resolve full address for register: {:?}",
+            &self
+        ))
+    }
+
+    fn size(&self) -> u32 {
+        self.size
+    }
+
+    /// Whether this register is software readable or not
+    ///
+    /// Returns `false` when read operations have an undefined effect.
+    fn is_readable(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            ReadOnly | ReadWrite => true,
+            ReadWriteOnce | WriteOnly | WriteOnce => false,
+        }
+    }
+
+    fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
+        let value = self.reset_value.value().as_u64();
+        let mask = self.reset_value.mask().as_u64();
+        Some(generate::ValueOnReset::new(value, Some(mask)))
     }
 }
 
@@ -370,6 +397,25 @@ impl RegValue {
             Self::U16(_) => PtrSize::U16,
             Self::U32(_) => PtrSize::U32,
             Self::U64(_) => PtrSize::U64,
+        }
+    }
+
+    pub(crate) fn bit_count(&self) -> u32 {
+        match self {
+            RegValue::U8(_) => 8,
+            RegValue::U16(_) => 16,
+            RegValue::U32(_) => 32,
+            RegValue::U64(_) => 64,
+        }
+    }
+
+    /// Bit-extend the value to 64-bits
+    pub(crate) fn as_u64(&self) -> u64 {
+        match self {
+            RegValue::U8(u) => *u as u64,
+            RegValue::U16(u) => *u as u64,
+            RegValue::U32(u) => *u as u64,
+            RegValue::U64(u) => *u as u64,
         }
     }
 }
