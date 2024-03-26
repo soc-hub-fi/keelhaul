@@ -222,29 +222,6 @@ pub enum NotImplementedError {
     PtrSize(u8),
 }
 
-/// Error that happened during test case generation.
-#[derive(Error, Debug)]
-pub enum GenerateError {
-    #[error("generated address overflows {archi_bits}-bit architecture pointer\n{err}")]
-    AddrOverflow {
-        err: Box<dyn std::error::Error + Send + Sync>,
-        archi_bits: u32,
-    },
-    #[error("invalid configuration: {cause}, {c:#?}")]
-    InvalidConfig { c: crate::TestConfig, cause: String },
-}
-
-impl<P: model::ArchPtr + 'static> From<AddrOverflowError<P, model::RefSchemaSvdV1_2>>
-    for GenerateError
-{
-    fn from(value: AddrOverflowError<P, model::RefSchemaSvdV1_2>) -> Self {
-        Self::AddrOverflow {
-            err: Box::new(value),
-            archi_bits: P::ptr_size().bit_count(),
-        }
-    }
-}
-
 #[derive(Debug, Error, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[error("types are incompatible: {0} != {1}")]

@@ -1,6 +1,5 @@
 use crate::{
     codegen,
-    error::GenerateError,
     model::{self, ArchPtr},
     TestConfig, TestKind,
 };
@@ -165,7 +164,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     ///     let _read_value = unsafe { read_volatile(reg_ptr) };
     /// }
     /// ```
-    pub fn gen_test_fn(&self) -> Result<TokenStream, GenerateError> {
+    pub fn gen_test_fn(&self) -> TokenStream {
         let (reg, config) = (&self.0, self.1);
 
         // Name for the variable holding the pointer to the register
@@ -210,7 +209,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
                 Ok(())
             }
         };
-        Ok(ret)
+        ret
     }
 
     /// Generates a test definition that can be put into an array initializer

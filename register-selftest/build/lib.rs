@@ -97,7 +97,7 @@ fn main() -> anyhow::Result<()> {
     if let Some(test_kind_set) =
         test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
     {
-        test_cfg = test_cfg.tests_to_generate(test_kind_set)?;
+        test_cfg = test_cfg.tests_to_generate(test_kind_set).unwrap();
     }
     let mut file_output = open_output_file();
 

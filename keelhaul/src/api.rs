@@ -155,8 +155,7 @@ pub fn generate_tests(
             let registers = parse_registers::<u64>(sources, filters)?;
             codegen::TestCases::from_registers(&registers, test_cfg)
         }
-    }
-    .unwrap();
+    };
     // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
     Ok(test_cases.to_module_string())

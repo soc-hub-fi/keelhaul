@@ -14,7 +14,6 @@ use std::{
 use self::test_register::RegTestGenerator;
 use crate::{
     api,
-    error::GenerateError,
     model::{self, ArchPtr, Registers},
     TestKind,
 };
@@ -141,14 +140,13 @@ impl TestConfig {
     pub fn tests_to_generate(
         mut self,
         tests_to_generate: HashSet<TestKind>,
-    ) -> Result<Self, GenerateError> {
+    ) -> Result<Self, String> {
         if tests_to_generate.contains(&TestKind::ReadIsResetVal)
             && !tests_to_generate.contains(&TestKind::Read)
         {
-            return Err(GenerateError::InvalidConfig {
-                c: self,
-                cause: "enabling of reset test requires read test to be enabled as well".to_owned(),
-            });
+            return Err(
+                "enabling of reset test requires read test to be enabled as well".to_owned(),
+            );
         }
         self.tests_to_generate = tests_to_generate;
         Ok(self)
@@ -323,14 +321,14 @@ impl TestCases {
     pub fn from_registers<P: ArchPtr + quote::IdentFragment + 'static>(
         registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
-    ) -> Result<Self, GenerateError> {
+    ) -> Self {
         let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug).to_string();
 
         let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
-            let test_fn = test_gen.gen_test_fn()?.to_string();
+            let test_fn = test_gen.gen_test_fn().to_string();
             let test_def = test_gen.gen_test_def().to_string();
             test_fns_and_defs_by_periph
                 .entry(register.path.periph().name.clone())
@@ -356,11 +354,11 @@ impl TestCases {
             .map(|ts| ts.to_string())
             .collect::<String>();
 
-        Ok(Self {
+        Self {
             preamble,
             test_cases: vec![mod_strings, format!("{test_case_array}")],
             test_case_count,
-        })
+        }
     }
 
     #[must_use]
