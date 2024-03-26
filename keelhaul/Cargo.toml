@@ -9,6 +9,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["rustfmt"]
+rustfmt = ["dep:rustfmt"]
+
 [dependencies]
 json = { workspace = true }
 thiserror = { workspace = true }
@@ -26,3 +30,4 @@ svd = { package = "svd-rs", version = "0.14.8", features = [
     "derive-from",
     "serde",
 ] }
+rustfmt = { version = "0.10.0", optional = true }
