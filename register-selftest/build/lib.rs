@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
     let svd_path = util::read_relpath_from_env(ENV_SVD_IN)
         .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
     let test_cases = keelhaul::generate_tests(
-        &[ModelSource::new(svd_path, keelhaul::SourceFormat::SvdV1_2)],
+        &[ModelSource::new(svd_path, keelhaul::SourceFormat::Svd)],
         arch_ptr_size,
         &test_cfg,
         &Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),

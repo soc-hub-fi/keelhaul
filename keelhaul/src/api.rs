@@ -33,14 +33,10 @@ impl ModelSource {
 
 #[derive(Clone, Debug)]
 pub enum SourceFormat {
-    /// CMSIS-SVD v1.2 or lower
-    SvdV1_2,
-    /// CMSIS-SVD v1.3 or lower
-    SvdV1_3,
-    /// IP-XACT 2014
-    Ieee1685_2014,
-    /// IP-XACT 2022
-    Ieee1685_2022,
+    /// CMSIS-SVD (at least v1.3 and below)
+    Svd,
+    /// IP-XACT (2014, 2022)
+    Ieee1685,
 }
 
 /// Pointer width used by the target architecture
@@ -87,7 +83,7 @@ where
 {
     for src in sources {
         match src.format {
-            SourceFormat::Ieee1685_2014 | SourceFormat::Ieee1685_2022 => {
+            SourceFormat::Ieee1685 => {
                 return Err(NotImplementedError::UnsupportedSourceFormat(
                     src.path.clone(),
                     src.format.clone(),
@@ -102,22 +98,10 @@ where
 
     for src in sources {
         match src.format {
-            SourceFormat::SvdV1_2 => registers.push(
-                crate::frontend::svd_v1_2::parse_svd_into_registers::<P>(src.path(), &filters)?,
+            SourceFormat::Svd => registers.push(
+                crate::frontend::svd_legacy::parse_svd_into_registers::<P>(src.path(), &filters)?,
             ),
-            SourceFormat::SvdV1_3 => {
-                /*
-                // TODO: needs to be wrapped in an enum
-                registers.push(Registers::SvdV1_3(crate::frontend::svd_v1_3::parse_svd_into_registers::<P>(
-                    src.path(),
-                    &filters,
-                    validate_level,
-                )?)
-                */
-                todo!()
-            }
-            SourceFormat::Ieee1685_2014 => todo!(),
-            SourceFormat::Ieee1685_2022 => todo!(),
+            SourceFormat::Ieee1685 => todo!(),
         }
     }
 

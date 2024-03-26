@@ -1,3 +1,3 @@
 //! The point of any frontend is to convert the given source file into a model of [Registers]
 
-pub(crate) mod svd_v1_2;
+pub(crate) mod svd_legacy;
