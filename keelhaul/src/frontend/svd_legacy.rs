@@ -312,7 +312,7 @@ impl RegPropGroupBuilder {
         let size = self.size.unwrap_or_else(|| {
             let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
             warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
-            assert!(PtrSize::is_valid_bit_count(size_bits));
+            assert!(model::is_valid_bit_count(size_bits));
             size_bits
         });
         let access = self.access.unwrap_or_else(|| {

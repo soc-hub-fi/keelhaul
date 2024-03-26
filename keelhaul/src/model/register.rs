@@ -540,10 +540,10 @@ impl PtrSize {
             Self::U64 => 64,
         }
     }
+}
 
-    pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
-        matches!(bit_count, 8 | 16 | 32 | 64)
-    }
+pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
+    matches!(bit_count, 8 | 16 | 32 | 64)
 }
 
 impl fmt::Display for PtrSize {
