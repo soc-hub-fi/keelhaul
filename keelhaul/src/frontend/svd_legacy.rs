@@ -665,15 +665,15 @@ where
                     .build(&reg_path, Some(P::ptr_size().bit_count()))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
-            let register = Register {
+            let register = Register::new(
                 path,
                 addr,
-                dimensions: Some(dimensions.clone()),
-                size: properties.size,
-                access: properties.access,
-                protection: properties.protection,
-                reset_value: properties.reset_value,
-            };
+                properties.size,
+                properties.access,
+                properties.protection,
+                properties.reset_value,
+                Some(dimensions.clone()),
+            );
             registers.push(register);
         }
     } else {
@@ -705,15 +705,15 @@ where
                 .build(&reg_path, Some(P::ptr_size().bit_count()))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
-        let register = Register {
+        let register = Register::new(
             path,
             addr,
+            properties.size,
+            properties.access,
+            properties.protection,
+            properties.reset_value,
             dimensions,
-            size: properties.size,
-            access: properties.access,
-            protection: properties.protection,
-            reset_value: properties.reset_value,
-        };
+        );
         registers.push(register);
     }
     Ok(Some(registers))
@@ -860,16 +860,16 @@ where
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
-        peripherals.insert(register.path.periph().name.clone());
+        peripherals.insert(register.top_container_name());
         let addr: P = register.full_addr().unwrap();
         if let Entry::Vacant(entry) = addresses.entry(addr) {
-            entry.insert(register.path.join("-"));
+            entry.insert(register.path().join("-"));
         } else {
             let reg2 = addresses
                 .get(&addr)
                 .expect("failed to find register name by key");
             warn!("Address for register {reg}@{addr:#x?} is already registered for another register {reg2}. {reg} is ignored.",
-                reg = register.path.join("-"));
+                reg = register.path().join("-"));
         }
     }
 

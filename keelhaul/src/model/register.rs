@@ -20,24 +20,24 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
     /// Used for generating unique identifiers and symbol names in test cases
-    pub path: RegPath<S>,
-    /// Physical address of the register
-    pub addr: AddrRepr<P, S>,
+    path: RegPath<S>,
+    /// Address of the register
+    addr: AddrRepr<P, S>,
     /// Bit-width of register
-    pub size: u32,
+    size: u32,
     /// Software access rights
     ///
     /// Used for determining what types of tests can be generated.
-    pub access: svd::Access,
+    access: svd::Access,
     /// Security privilege required to access register
-    pub protection: Option<svd::Protection>,
+    protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    pub(crate) reset_value: ResetValue,
-    pub dimensions: Option<svd::DimElement>,
+    reset_value: ResetValue,
+    dimensions: Option<svd::DimElement>,
 }
 
 impl<P, S> Register<P, S>
@@ -45,6 +45,26 @@ where
     P: num::CheckedAdd + Copy,
     S: RefSchema,
 {
+    pub(crate) fn new(
+        path: RegPath<S>,
+        addr: AddrRepr<P, S>,
+        size: u32,
+        access: svd::Access,
+        protection: Option<svd::Protection>,
+        reset_value: ResetValue,
+        dimensions: Option<svd::DimElement>,
+    ) -> Self {
+        Self {
+            path,
+            addr,
+            size,
+            access,
+            protection,
+            reset_value,
+            dimensions,
+        }
+    }
+
     /// Get register's absolute memory address
     ///
     /// # Errors
@@ -159,20 +179,6 @@ impl RegPath<RefSchemaSvdV1_2> {
         }
         v.push(RegPathSegment { name: reg });
         Self::new(v)
-    }
-
-    pub fn periph(&self) -> &RegPathSegment {
-        unsafe { self.0.get_unchecked(0) }
-    }
-
-    pub fn reg(&self) -> &RegPathSegment {
-        if self.0.len() == 2 {
-            unsafe { self.0.get_unchecked(1) }
-        } else if self.0.len() == 3 {
-            unsafe { self.0.get_unchecked(2) }
-        } else {
-            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
-        }
     }
 }
 

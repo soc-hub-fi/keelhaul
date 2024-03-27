@@ -307,7 +307,7 @@ impl TestCases {
             let test_fn = test_gen.gen_test_fn().to_string();
             let test_def = test_gen.gen_test_def().to_string();
             test_fns_and_defs_by_periph
-                .entry(register.path.periph().name.clone())
+                .entry(register.top_container_name())
                 .or_default()
                 .push((test_fn, test_def));
         }
