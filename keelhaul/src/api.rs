@@ -3,7 +3,7 @@
 // Export API types
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::ApiError;
-pub use svd_parser::ValidateLevel;
+pub use svd::ValidateLevel;
 
 mod error;
 

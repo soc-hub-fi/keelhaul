@@ -17,7 +17,6 @@ use itertools::Itertools;
 use log::{info, warn};
 use regex::Regex;
 use roxmltree::Document;
-use svd_parser::svd;
 
 struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
 
