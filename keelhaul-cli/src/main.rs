@@ -36,6 +36,8 @@ enum Commands {
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_count: bool,
+        #[arg(long, default_value = "alpha")]
+        sorting: Sorting,
     },
     CountRegisters {},
     Coverage {
@@ -64,6 +66,26 @@ enum Commands {
         #[arg(long, action = clap::ArgAction::SetTrue)]
         ignore_reset_masks: bool,
     },
+}
+
+#[derive(Clone)]
+enum Sorting {
+    Preserve,
+    Alpha,
+}
+
+impl ValueEnum for Sorting {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Sorting::Alpha, Sorting::Preserve]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        use clap::builder::PossibleValue;
+        match self {
+            Sorting::Alpha => Some(PossibleValue::new("alpha")),
+            Sorting::Preserve => Some(PossibleValue::new("preserve")),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -223,11 +245,15 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
             }
         }
-        Some(Commands::LsTop { no_count }) => {
-            let top_and_count = keelhaul::list_top(&sources, arch)?;
+        Some(Commands::LsTop { no_count, sorting }) => {
+            let mut top_and_count = keelhaul::list_top(&sources, arch)?;
             if top_and_count.is_empty() {
                 println!("keelhaul: no peripherals found in input");
             }
+            match sorting {
+                Sorting::Preserve => { /* do nothing */ }
+                Sorting::Alpha => top_and_count.sort(),
+            };
             let longest = top_and_count.iter().map(|(s, _)| s.len()).max().unwrap();
             for (top, count) in top_and_count {
                 if *no_count {
