@@ -60,10 +60,10 @@ where
         }
     }
 
-    /// Get register's unique identifier
+    /// Get register's unique path identifier
     ///
     /// Constructed from the hierarchical path, e.g., PERIPH-CLUSTER-REG.
-    pub fn uid(&self) -> String {
+    pub fn path_id(&self) -> String {
         self.path.join("-")
     }
 

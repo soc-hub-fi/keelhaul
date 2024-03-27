@@ -16,7 +16,7 @@ pub trait TestRegister<P> {
 
     /// A human-readable unique identifier for the register, usually the the path that is used to
     /// access the register.
-    fn uid(&self) -> String {
+    fn binding_id(&self) -> String {
         self.path().join("_")
     }
 
@@ -188,7 +188,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
                 reg.reset_value()
                     .map(|value_on_reset| {
                         gen_read_is_reset_val_test(
-                            reg.uid(),
+                            reg.binding_id(),
                             reg.addr(),
                             reg.size(),
                             &value_on_reset,
@@ -229,7 +229,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
             self.0.top_container_name().to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
         let addr_hex: TokenStream = format!("{:#x}", self.0.addr()).parse().unwrap();
-        let uid = self.0.uid();
+        let uid = self.0.binding_id();
 
         quote! {
             TestCase {

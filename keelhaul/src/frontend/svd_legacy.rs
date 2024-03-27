@@ -8,10 +8,8 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::ArchPtr,
-    model::PtrSize,
-    model::{self, AddrRepr, RegPath, RegValue, Register, Registers, ResetValue},
-    util, Filters, IsAllowedOrBlocked, ItemFilter,
+    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
+    util, Filters, IsAllowedOrBlocked, ItemFilter, TestRegister,
 };
 use itertools::Itertools;
 use log::{info, warn};
