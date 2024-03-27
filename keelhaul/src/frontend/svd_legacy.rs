@@ -830,12 +830,12 @@ where
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
-    let registers = process_root(root, filters)?;
+    let registers = process_root::<P>(root, filters)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
         peripherals.insert(register.top_container_name());
-        let addr: P = register.full_addr().unwrap();
+        let addr: P = register.addr();
         if let Entry::Vacant(entry) = addresses.entry(addr) {
             entry.insert(register.path().join("-"));
         } else {

@@ -31,7 +31,7 @@ pub trait TestRegister<P> {
         self.path().last().unwrap().to_owned()
     }
 
-    /// The address of the register
+    /// Get the absolute memory address of the register
     fn addr(&self) -> P;
 
     /// The size of the register in bits

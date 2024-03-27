@@ -60,17 +60,6 @@ where
         }
     }
 
-    /// Get register's absolute memory address
-    ///
-    /// # Errors
-    ///
-    /// Address overflows
-    pub fn full_addr(&self) -> Result<P, error::AddrOverflowError<P, S>> {
-        self.addr
-            .full()
-            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
-    }
-
     /// Get register's unique identifier
     ///
     /// Constructed from the hierarchical path, e.g., PERIPH-CLUSTER-REG.
@@ -114,8 +103,15 @@ where
             .collect_vec()
     }
 
+    /// Get the absolute memory address of the register
+    ///
+    /// # Panics
+    ///
+    /// * address overflows
     fn addr(&self) -> P {
-        self.full_addr()
+        self.addr
+            .full()
+            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
             .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
     }
 
