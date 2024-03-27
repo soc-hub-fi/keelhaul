@@ -5,7 +5,7 @@ use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
     bit_count_to_rust_uint_type_str, codegen, error,
-    model::{RefSchema, RefSchemaSvdV1_2},
+    model::{RefSchema, RefSchemaSvdV1_2, UniquePath},
 };
 use itertools::Itertools;
 
@@ -90,7 +90,7 @@ where
     }
 }
 
-impl<P, S> codegen::TestRegister<P> for Register<P, S>
+impl<P, S> UniquePath for Register<P, S>
 where
     P: num::CheckedAdd + Copy + fmt::Debug,
     S: RefSchema,
@@ -102,7 +102,13 @@ where
             .map(|path| path.name.clone())
             .collect_vec()
     }
+}
 
+impl<P, S> codegen::TestRegister<P> for Register<P, S>
+where
+    P: num::CheckedAdd + Copy + fmt::Debug,
+    S: RefSchema,
+{
     /// Get the absolute memory address of the register
     ///
     /// # Panics

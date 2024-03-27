@@ -8,7 +8,10 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
+    model::{
+        self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue,
+        UniquePath,
+    },
     util, Filters, IsAllowedOrBlocked, ItemFilter, TestRegister,
 };
 use itertools::Itertools;
@@ -528,7 +531,7 @@ fn try_dim_element_from_xml_node(
 fn check_node_count(
     node: &XmlNode,
     node_name: &str,
-    vector: &Vec<XmlNode>,
+    vector: &[XmlNode],
     expected_count: RangeInclusive<usize>,
 ) -> Result<(), PositionalError<SvdParseError>> {
     let actual_count = vector.len();

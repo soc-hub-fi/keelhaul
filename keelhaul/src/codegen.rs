@@ -14,7 +14,7 @@ use std::{
 use self::test_register::RegTestGenerator;
 use crate::{
     api,
-    model::{self, ArchPtr, Registers},
+    model::{self, ArchPtr, Registers, UniquePath},
     TestKind,
 };
 use itertools::Itertools;

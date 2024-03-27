@@ -10,6 +10,23 @@ use std::{fmt, ops};
 
 use self::schema::svd;
 
+/// Trait for types that have a unique path within a given system
+///
+/// This could be the "peripheral-cluster-register" chain on CMSIS-SVD or the bus traverse path on
+/// IP-XACT.
+pub trait UniquePath {
+    /// The path of the register used for human readable identification of the register as part of a
+    /// larger design. Might comprise components such as "peripheral, register cluster, register
+    /// name".
+    fn path(&self) -> Vec<String>;
+
+    /// Name of the top-level element containing this register, usually the peripheral or subsystem
+    /// depending on system architecture
+    fn top_container_name(&self) -> String {
+        self.path().first().unwrap().to_owned()
+    }
+}
+
 /// Reference schema
 ///
 /// Trait for signaling a reference schema. A type implementing `Schema` can be used to indicate

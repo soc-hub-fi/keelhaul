@@ -149,10 +149,12 @@ fn parse_registers_for_analysis(
 ) -> Result<Vec<Box<dyn analysis::AnalyzeRegister>>, ApiError> {
     Ok(match arch {
         ArchWidth::U32 => parse_registers::<u32>(sources, filters)?
+            .clone()
             .into_iter()
             .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
             .collect(),
         ArchWidth::U64 => parse_registers::<u64>(sources, filters)?
+            .clone()
             .into_iter()
             .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
             .collect(),
