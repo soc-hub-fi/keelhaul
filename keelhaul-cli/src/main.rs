@@ -29,11 +29,13 @@ struct Cli {
 enum Commands {
     /// Run the Keelhaul parser without doing anything
     DryRun,
-    /// Extract information from input sources
-    Info {
-        /// Lists all top level items (peripherals, usually) in the supplied sources
-        #[arg(short, long)]
-        list_top: bool,
+    /// Lists all top level items (peripherals or subsystems) in the supplied sources
+    ///
+    /// Peripherals or subsystems containing zero registers are omitted.
+    LsTop {
+        /// Only list peripherals without register counts
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        no_count: bool,
     },
     CountRegisters {},
     Coverage {
@@ -221,9 +223,18 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
             }
         }
-        Some(Commands::Info { list_top }) => {
-            if *list_top {
-                todo!() //keelhaul::list_peripherals()
+        Some(Commands::LsTop { no_count }) => {
+            let top_and_count = keelhaul::list_top(&sources, arch)?;
+            if top_and_count.is_empty() {
+                println!("keelhaul: no peripherals found in input");
+            }
+            let longest = top_and_count.iter().map(|(s, _)| s.len()).max().unwrap();
+            for (top, count) in top_and_count {
+                if *no_count {
+                    println!("{top}");
+                } else {
+                    println!("{top: <longest$} {count}");
+                }
             }
         }
         Some(Commands::CountRegisters {}) => {
