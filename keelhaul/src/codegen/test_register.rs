@@ -262,8 +262,6 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     let read_value_binding = RegTestGenerator::<P>::read_value_binding();
     let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask.is_none() {
         codegen::u_to_hexlit(reset_value.value, size)
-            .parse()
-            .unwrap()
     } else {
         // Unwrap: checked on conditional
         codegen::gen_bitand(reset_value.value, reset_value.mask.unwrap())

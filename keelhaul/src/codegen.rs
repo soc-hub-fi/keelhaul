@@ -202,7 +202,7 @@ fn gen_bitand<T: model::BitSized<T> + fmt::LowerHex + fmt::Binary + cmp::Partial
 fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + model::BitSized<T>>(
     val: T,
     bits: u32,
-) -> String {
+) -> TokenStream {
     assert!(
         T::can_represent(val),
         "value `{val:?}` cannot be represented using `{}`",
@@ -215,10 +215,15 @@ fn u_to_hexlit<T: fmt::LowerHex + cmp::PartialOrd + model::BitSized<T>>(
         64 => format!("{val:#x}u64"),
         b => panic!("invalid bit count for literal: {b}"),
     }
+    .parse()
+    .unwrap()
 }
 
 /// Get a literal binary representation of `val`, e.g., "0b10101010"
-fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + model::BitSized<T>>(val: T, bits: u32) -> String {
+fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + model::BitSized<T>>(
+    val: T,
+    bits: u32,
+) -> TokenStream {
     assert!(
         T::can_represent(val),
         "value `{val:?}` cannot be represented using `{}`",
@@ -231,6 +236,8 @@ fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + model::BitSized<T>>(val: T, bi
         64 => format!("{val:#b}u64"),
         b => panic!("invalid bit count for literal: {b}"),
     }
+    .parse()
+    .unwrap()
 }
 
 #[test]
