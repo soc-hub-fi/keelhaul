@@ -138,7 +138,10 @@ impl RegTestKind {
     /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
     ///   Error variant.
     fn error_variant_def(&self, max_value_width: PtrSize) -> Option<TokenStream> {
-        let max_value_width = format_ident!("{}", max_value_width.to_rust_type_str());
+        let max_value_width = format_ident!(
+            "{}",
+            bit_count_to_rust_uint_type_str(max_value_width.bit_count())
+        );
         match self {
             Self::Read => None,
             Self::ReadIsResetVal => Some(
@@ -363,6 +366,16 @@ fn reset_value_bitands_generate() {
     );
 }
 
+pub(crate) fn bit_count_to_rust_uint_type_str(bit_count: u32) -> &'static str {
+    match bit_count {
+        8 => "u8",
+        16 => "u16",
+        32 => "u32",
+        64 => "u64",
+        _ => panic!("{bit_count} is not a valid bit count"),
+    }
+}
+
 /// Generates test cases based on a [`Register`] definition and [`TestConfig`]
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
@@ -405,46 +418,6 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         }
     }
 
-    /// Generates a test that verifies that the read value matches with reported
-    /// reset value
-    fn gen_reset_val_test(&self, config: &TestConfig) -> Result<TokenStream, GenerateError> {
-        // Reset value test requires read test to be present. Can't check for
-        // reset value unless it's been read before.
-        debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
-
-        let read_value_binding = Self::read_value_binding();
-        let reset_val_frag = if config.force_ignore_reset_mask {
-            self.0.masked_reset().value().gen_literal_hex()
-        } else {
-            self.0.masked_reset().gen_bitand()
-        };
-        let reg_size_ty = format_ident!("{}", self.0.properties.value_size.to_rust_type_str());
-
-        match config.on_fail {
-            // If reset value is incorrect, panic
-            FailureImplKind::Panic => Ok(quote! {
-                assert_eq!(#read_value_binding, #reset_val_frag as #reg_size_ty);
-            }),
-            // If reset value is incorrect, do nothing
-            FailureImplKind::None => Ok(quote! {}),
-            FailureImplKind::ReturnError => {
-                let uid = self.0.uid();
-                let addr_hex: TokenStream = format!("{:#x}", self.0.full_addr()?).parse().unwrap();
-                let max_val_width = quote!(u64);
-                Ok(quote! {
-                    if #read_value_binding != #reset_val_frag as #reg_size_ty {
-                        return Err(Error::ReadValueIsNotResetValue {
-                                read_val: #read_value_binding as #max_val_width,
-                                reset_val: #reset_val_frag,
-                                reg_uid: #uid,
-                                reg_addr: #addr_hex,
-                            })
-                    }
-                })
-            }
-        }
-    }
-
     /// Generates a function identifier
     ///
     /// # Examples
@@ -478,26 +451,31 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
 
         // Name for the variable holding the pointer to the register
         let ptr_binding = Self::ptr_binding();
-        let reg_size_ty = format_ident!("{}", reg.properties.value_size.to_rust_type_str());
+        let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(reg.size));
         let addr_hex: TokenStream = format!("{:#x}", reg.full_addr()?).parse().unwrap();
 
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test = if reg.properties.access.is_read()
-            && config.reg_test_kinds.contains(&RegTestKind::Read)
-        {
-            self.gen_read_test()
-        } else {
-            quote!()
-        };
+        let read_test =
+            if reg.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Read) {
+                self.gen_read_test()
+            } else {
+                quote!()
+            };
 
         // Only generate reset value test if register is readable
-        let reset_val_test = if self.0.properties.access.is_read()
+        let reset_val_test = if self.0.access.is_read()
             && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
-            && u64::from(self.0.properties.reset().mask()) != 0u64
+            && u64::from(self.0.masked_reset().mask()) != 0u64
         {
-            self.gen_reset_val_test(config)?
+            gen_reset_val_test(
+                self.0.uid(),
+                self.0.full_addr()?,
+                self.0.size,
+                *self.0.masked_reset(),
+                config,
+            )?
         } else {
             quote!()
         };
@@ -542,6 +520,57 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
             }
         };
         Ok(def)
+    }
+}
+
+/// Generates a test that verifies that the read value matches with reported
+/// reset value
+///
+/// # Arguments
+///
+/// * `uid` - Register UID
+/// * `size` - The size of the register in bits
+/// * `reset_value` - A masked reset value that will be checked against
+fn gen_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
+    uid: String,
+    addr: P,
+    size: u32,
+    reset_value: model::ResetValue,
+    config: &TestConfig,
+) -> Result<TokenStream, GenerateError> {
+    // Reset value test requires read test to be present. Can't check for
+    // reset value unless it's been read before.
+    debug_assert!(config.reg_test_kinds.contains(&RegTestKind::Read));
+
+    let read_value_binding = RegTestGenerator::<P>::read_value_binding();
+    let reset_val_frag = if config.force_ignore_reset_mask {
+        reset_value.value().gen_literal_hex()
+    } else {
+        reset_value.gen_bitand()
+    };
+    let reg_size_ty = format_ident!("{}", bit_count_to_rust_uint_type_str(size));
+
+    match config.on_fail {
+        // If reset value is incorrect, panic
+        FailureImplKind::Panic => Ok(quote! {
+            assert_eq!(#read_value_binding, #reset_val_frag as #reg_size_ty);
+        }),
+        // If reset value is incorrect, do nothing
+        FailureImplKind::None => Ok(quote! {}),
+        FailureImplKind::ReturnError => {
+            let addr_hex: TokenStream = format!("{:#x}", addr).parse().unwrap();
+            let max_val_width = quote!(u64);
+            Ok(quote! {
+                if #read_value_binding != #reset_val_frag as #reg_size_ty {
+                    return Err(Error::ReadValueIsNotResetValue {
+                            read_val: #read_value_binding as #max_val_width,
+                            reset_val: #reset_val_frag,
+                            reg_uid: #uid,
+                            reg_addr: #addr_hex,
+                        })
+                }
+            })
+        }
     }
 }
 

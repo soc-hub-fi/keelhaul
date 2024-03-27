@@ -3,10 +3,11 @@
 // TODO: support deriving fields via <register derivedFrom="register1">
 
 use crate::{
+    bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
     model::{
         self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
-        Register, RegisterDimElementGroup, RegisterPropertiesGroup, Registers, ResetValue,
+        Register, RegisterDimElementGroup, Registers, ResetValue,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
@@ -193,7 +194,7 @@ fn parse_nonneg_int_works() {
 #[derive(Clone, Default)]
 struct RegPropGroupBuilder {
     /// Register bit-width.
-    pub size: Option<PtrSize>,
+    pub size: Option<u32>,
     /// Register access rights.
     pub access: Option<Access>,
     /// Register access privileges.
@@ -277,10 +278,9 @@ impl RegPropGroupBuilder {
     /// * resetValue
     /// * resetMask
     fn update_from_node(&mut self, node: &XmlNode) -> Result<(), PositionalError<SvdParseError>> {
-        if let Some(size) = process_prop_from_node_if_present("size", node, |s| {
-            let bit_count = s.parse()?;
-            PtrSize::from_bit_count(bit_count).ok_or(SvdParseError::BitCountToPtrWidth(bit_count))
-        })? {
+        if let Some(size) =
+            process_prop_from_node_if_present("size", node, |s| Ok(s.parse::<u32>()?))?
+        {
             self.size = Some(size);
         }
         if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
@@ -309,11 +309,13 @@ impl RegPropGroupBuilder {
     pub(crate) fn build(
         self,
         reg_path: &str,
-        arch_ptr_size: PtrSize,
-    ) -> Result<RegisterPropertiesGroup, error::IncompatibleTypesError> {
-        let value_size = self.size.unwrap_or_else(|| {
-            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {arch_ptr_size}");
-            arch_ptr_size
+        default_register_size_bits: Option<u32>,
+    ) -> Result<RegisterPropertiesGroup, error::SvdParseError> {
+        let size = self.size.unwrap_or_else(|| {
+            let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
+            warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
+            assert!(PtrSize::is_valid_bit_count(size_bits));
+            size_bits
         });
         let access = self.access.unwrap_or_else(|| {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
@@ -326,23 +328,57 @@ impl RegPropGroupBuilder {
             Protection::NonSecureOrSecure
         });
         let reset_value = {
-            let reset_value = self.reset_value.unwrap_or_else(|| {
+            // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
+            let size = PtrSize::from_bit_count(size).unwrap();
+            let reset_value = self.reset_value.unwrap_or( {
                 warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = 0");
-                value_size.zero_value()
+                RegValue::with_value_and_size( 0, size)?
             });
-            let reset_mask = self.reset_mask.unwrap_or_else(|| {
-                warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", value_size);
-                value_size.max_value()
+            let reset_mask = self.reset_mask.unwrap_or( {
+                warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.bit_count()));
+                size.max_value()
             });
             ResetValue::with_mask(reset_value, reset_mask)?
         };
 
         Ok(RegisterPropertiesGroup::new(
-            value_size,
+            size,
             access,
             protection,
             reset_value,
         ))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct RegisterPropertiesGroup {
+    /// Bit-width of register
+    pub size: u32,
+    /// Register access rights.
+    pub access: Access,
+    /// Register access privileges.
+    pub protection: Protection,
+    /// Expected register value after reset based on source format
+    ///
+    /// Checking for the value may require special considerations in registers
+    /// with read-only or write-only fields. These considerations are encoded in
+    /// [ResetValue].
+    pub(crate) reset_value: ResetValue,
+}
+
+impl RegisterPropertiesGroup {
+    pub(crate) const fn new(
+        size: u32,
+        access: Access,
+        protection: Protection,
+        reset_value: ResetValue,
+    ) -> Self {
+        Self {
+            size,
+            access,
+            protection,
+            reset_value,
+        }
     }
 }
 
@@ -617,7 +653,7 @@ where
                 }
                 path
             };
-            let address = {
+            let addr = {
                 let (address_base, address_cluster, _) = addr.components();
                 // TODO: use error
                 let offset = P::try_from(i * dimensions.dim_increment).expect(
@@ -630,14 +666,17 @@ where
                 parent
                     .properties
                     .clone_and_update_from_node(&register_node)?
-                    .build(&reg_path, P::ptr_size())
+                    .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
             let register = Register {
                 path,
-                addr: address,
-                properties,
+                addr,
                 dimensions: Some(dimensions.clone()),
+                size: properties.size,
+                access: properties.access,
+                protection: properties.protection,
+                reset_value: properties.reset_value,
             };
             registers.push(register);
         }
@@ -667,14 +706,17 @@ where
             parent
                 .properties
                 .clone_and_update_from_node(&register_node)?
-                .build(&reg_path, P::ptr_size())
+                .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
         let register = Register {
             path,
             addr,
-            properties,
             dimensions,
+            size: properties.size,
+            access: properties.access,
+            protection: properties.protection,
+            reset_value: properties.reset_value,
         };
         registers.push(register);
     }
@@ -755,58 +797,6 @@ where
     Ok(Some(peripheral_registers))
 }
 
-/// <https://siliconlabs.github.io/Gecko_SDK_Doc/CMSIS/SVD/html/group__svd__xml__device__gr.html>
-struct ArchitectureSize {
-    /// Defines the number of data bits uniquely selected by each address. The value for Cortex-M
-    /// based devices is 8 (byte-addressable).
-    pub address_unit_bits: usize,
-    /// Defines the number of data bit-width of the maximum single data transfer supported by the
-    /// bus infrastructure. This information is relevant for debuggers when accessing registers,
-    /// because it might be required to issue multiple accesses for accessing a resource of a bigger
-    /// size. The expected value for Cortex-M based devices is 32.
-    pub width: usize,
-}
-
-fn find_architecture_size(
-    device_node: &XmlNode,
-) -> Result<ArchitectureSize, PositionalError<SvdParseError>> {
-    // How many bits one address contains?
-    let address_unit_bits = device_node.children_with_tag_name("addressUnitBits");
-    // TODO: maybe use range "allowed_range" which can also be used with the error
-    check_node_count(device_node, "addressUnitBits", &address_unit_bits, 1..=1)?;
-
-    assert!(
-        address_unit_bits.len() == 1,
-        "device-node must define address width in bits once",
-    );
-    let address_unit_bits: usize = address_unit_bits
-        .first()
-        .unwrap()
-        .0
-        .text()
-        .unwrap()
-        .parse()
-        .unwrap();
-    // TODO: add error
-    assert!(
-        address_unit_bits == 8,
-        "{address_unit_bits}-bit addressable architectures are not yet supported",
-    );
-    // How many bits one bus transaction contains?
-    let width = device_node.children_with_tag_name("width");
-    check_node_count(device_node, "width", &width, 1..=1)?;
-    let width: usize = width.first().unwrap().0.text().unwrap().parse().unwrap();
-    // TODO: add error
-    assert!(
-        width == 8 || width == 16 || width == 32 || width == 64,
-        "{width}-bit bus width architectures are not yet supported"
-    );
-    Ok(ArchitectureSize {
-        address_unit_bits,
-        width,
-    })
-}
-
 fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
     filters: &Filters,
@@ -836,8 +826,6 @@ where
         + From<<P as TryFrom<u64>>::Error>,
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
-    // TODO: allow parsing here -> avoid parsing twice! -> massive refactor because of the generic P
-    // let architecture_size = find_architecture_size(device_node);
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
@@ -928,31 +916,4 @@ where
 
     info!("Found {} registers.", registers.len());
     Ok(registers)
-}
-
-pub fn parse_architecture_size(svd_path: impl AsRef<path::Path>) -> Result<PtrSize, SvdParseError> {
-    let svd_content = util::read_file_or_panic(svd_path.as_ref());
-    let parsed = Document::parse(&svd_content).expect("failed to parse SVD-file");
-    let root = parsed.root().into_xml_node();
-
-    let device_nodes = root.children_with_tag_name("device");
-    // TODO: use check_node_count
-    if device_nodes.len() != 1 {
-        return Err(SvdParseError::InvalidNodeCount {
-            node_name: "device".to_owned(),
-            expected_count: 1..=1,
-            actual_count: device_nodes.len(),
-        });
-    }
-    let device_node = device_nodes.first().unwrap();
-    let architecture_size = find_architecture_size(device_node).map_err(|err| {
-        // TODO: fix this
-        err.error()
-    })?;
-    match PtrSize::from_bit_count(architecture_size.width as u64) {
-        Some(size) => Ok(size),
-        None => Err(SvdParseError::PointerSizeNotSupported(
-            architecture_size.width,
-        )),
-    }
 }

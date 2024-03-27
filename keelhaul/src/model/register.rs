@@ -4,8 +4,8 @@
 use std::{fmt, hash, marker::PhantomData, ops, str};
 
 use crate::{
-    error,
-    model::{schema::svd, RefSchema, RefSchemaSvdV1_2},
+    bit_count_to_rust_uint_type_str, error,
+    model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
 use log::warn;
@@ -15,15 +15,26 @@ use log::warn;
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
+/// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
 pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
+    ///
+    /// Used for generating unique identifiers and symbol names in test cases
     pub path: RegPath<S>,
     /// Physical address of the register
     pub addr: AddrRepr<P, S>,
-    /// Defines register bit width, security and reset properties.
+    /// Bit-width of register
+    pub size: u32,
+    /// Register access rights.
+    pub access: Access,
+    /// Register access privileges.
+    pub protection: Protection,
+    /// Expected register value after reset based on source format
     ///
-    /// Cascades from higher levels to register level.
-    pub properties: RegisterPropertiesGroup,
+    /// Checking for the value may require special considerations in registers
+    /// with read-only or write-only fields. These considerations are encoded in
+    /// [ResetValue].
+    pub(crate) reset_value: ResetValue,
     pub dimensions: Option<RegisterDimElementGroup>,
 }
 
@@ -51,27 +62,22 @@ where
     }
 
     pub(crate) const fn masked_reset(&self) -> &ResetValue {
-        &self.properties.reset_value
+        &self.reset_value
     }
 }
 
 /// Hierarchical representation of a register's path
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
-pub struct RegPath<S: RefSchema>(Vec<RegPathSegment<S>>);
+pub struct RegPath<S: RefSchema>(Vec<RegPathSegment>, PhantomData<S>);
 
-pub struct RegPathSegment<S: RefSchema> {
+pub struct RegPathSegment {
     pub(crate) name: String,
-
-    /// Optional metadata indicating what caused this path segment to be generated
-    ///
-    /// For CMSIS-SVD this can be either "cluster" or "register"
-    pub(crate) source: Option<S::RegPathSegmentSource>,
 }
 
 impl<S: RefSchema> RegPath<S> {
-    pub fn new(segments: Vec<RegPathSegment<S>>) -> Self {
-        Self(segments)
+    pub fn new(segments: Vec<RegPathSegment>) -> Self {
+        Self(segments, PhantomData::default())
     }
 
     /// Joins the names of the path elements to one string using a separator
@@ -85,28 +91,19 @@ impl<S: RefSchema> RegPath<S> {
 impl RegPath<RefSchemaSvdV1_2> {
     pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
         let mut v = vec![];
-        v.push(RegPathSegment {
-            name: periph,
-            source: Some(svd::HierarchyLevel::Periph),
-        });
+        v.push(RegPathSegment { name: periph });
         if let Some(cl) = cluster {
-            v.push(RegPathSegment {
-                name: cl,
-                source: Some(svd::HierarchyLevel::Cluster),
-            });
+            v.push(RegPathSegment { name: cl });
         }
-        v.push(RegPathSegment {
-            name: reg,
-            source: Some(svd::HierarchyLevel::Reg),
-        });
+        v.push(RegPathSegment { name: reg });
         Self::new(v)
     }
 
-    pub fn periph(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+    pub fn periph(&self) -> &RegPathSegment {
         unsafe { self.0.get_unchecked(0) }
     }
 
-    pub fn reg(&self) -> &RegPathSegment<RefSchemaSvdV1_2> {
+    pub fn reg(&self) -> &RegPathSegment {
         if self.0.len() == 2 {
             unsafe { self.0.get_unchecked(1) }
         } else if self.0.len() == 3 {
@@ -257,42 +254,6 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct RegisterPropertiesGroup {
-    /// Register value bit-width.
-    pub value_size: PtrSize,
-    /// Register access rights.
-    pub access: Access,
-    /// Register access privileges.
-    pub protection: Protection,
-    /// Expected register value after reset based on source format
-    ///
-    /// Checking for the value may require special considerations in registers
-    /// with read-only or write-only fields. These considerations are encoded in
-    /// [ResetValue].
-    reset_value: ResetValue,
-}
-
-impl RegisterPropertiesGroup {
-    pub(crate) const fn new(
-        value_size: PtrSize,
-        access: Access,
-        protection: Protection,
-        reset_value: ResetValue,
-    ) -> Self {
-        Self {
-            value_size,
-            access,
-            protection,
-            reset_value,
-        }
-    }
-
-    pub(crate) const fn reset(&self) -> &ResetValue {
-        &self.reset_value
-    }
-}
-
 /// Specify the security privilege to access an address region
 #[derive(Clone, Copy)]
 pub enum Protection {
@@ -432,6 +393,18 @@ pub enum RegValue {
 }
 
 impl RegValue {
+    pub(crate) fn with_value_and_size(
+        val: u64,
+        size: PtrSize,
+    ) -> Result<Self, std::num::TryFromIntError> {
+        Ok(match size {
+            PtrSize::U8 => RegValue::U8(val.try_into()?),
+            PtrSize::U16 => RegValue::U16(val.try_into()?),
+            PtrSize::U32 => RegValue::U32(val.try_into()?),
+            PtrSize::U64 => RegValue::U64(val),
+        })
+    }
+
     pub(crate) const fn width(&self) -> PtrSize {
         match self {
             Self::U8(_) => PtrSize::U8,
@@ -616,22 +589,11 @@ pub enum PtrSize {
 }
 
 impl PtrSize {
-    /// E.g., u8, u16, u32, u64
-    #[must_use]
-    pub const fn to_rust_type_str(&self) -> &str {
-        match self {
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-        }
-    }
-
     /// Convert a bit count to [`PtrSize`]
     ///
     /// Returns None if the conversion cannot be done.
     #[must_use]
-    pub const fn from_bit_count(bc: u64) -> Option<Self> {
+    pub const fn from_bit_count(bc: u32) -> Option<Self> {
         match bc {
             8 => Some(Self::U8),
             16 => Some(Self::U16),
@@ -651,16 +613,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn zero_value(self) -> RegValue {
-        match self {
-            Self::U8 => RegValue::U8(0),
-            Self::U16 => RegValue::U16(0),
-            Self::U32 => RegValue::U32(0),
-            Self::U64 => RegValue::U64(0),
-        }
-    }
-
-    pub(crate) const fn bits(self) -> u8 {
+    pub(crate) const fn bit_count(self) -> u32 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -668,11 +621,18 @@ impl PtrSize {
             Self::U64 => 64,
         }
     }
+
+    pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
+        match bit_count {
+            8 | 16 | 32 | 64 => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_rust_type_str())
+        write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
     }
 }
 
