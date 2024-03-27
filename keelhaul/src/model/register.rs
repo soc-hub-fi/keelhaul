@@ -49,18 +49,14 @@ where
         addr: AddrRepr<P, S>,
         size: u32,
         access: svd::Access,
-        protection: Option<svd::Protection>,
         reset_value: ResetValue,
-        dimensions: Option<svd::DimElement>,
     ) -> Self {
         Self {
             path,
             addr,
             size,
             access,
-            protection,
             reset_value,
-            dimensions,
         }
     }
 

@@ -193,8 +193,6 @@ struct RegPropGroupBuilder {
     pub size: Option<u32>,
     /// Register access rights.
     pub access: Option<svd::Access>,
-    /// Register access privileges.
-    pub protection: Option<svd::Protection>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
     pub(crate) reset_value: Option<RegValue>,
@@ -285,12 +283,6 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            svd::Protection::parse_str(s)
-                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))
-        })? {
-            self.protection = Some(protection);
-        };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
             parse_nonneg_int(s).map(RegValue::U64)
         })? {
@@ -319,7 +311,6 @@ impl RegPropGroupBuilder {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
             svd::Access::ReadWrite
         });
-        let protection = self.protection;
         let reset_value = {
             // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
             let size = PtrSize::from_bit_count(size).unwrap();
@@ -334,12 +325,7 @@ impl RegPropGroupBuilder {
             ResetValue::with_mask(reset_value, reset_mask)?
         };
 
-        Ok(RegisterPropertiesGroup::new(
-            size,
-            access,
-            protection,
-            reset_value,
-        ))
+        Ok(RegisterPropertiesGroup::new(size, access, reset_value))
     }
 }
 
@@ -349,8 +335,6 @@ pub struct RegisterPropertiesGroup {
     pub size: u32,
     /// Register access rights.
     pub access: svd::Access,
-    /// Register access privileges.
-    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
@@ -360,16 +344,10 @@ pub struct RegisterPropertiesGroup {
 }
 
 impl RegisterPropertiesGroup {
-    pub(crate) const fn new(
-        size: u32,
-        access: svd::Access,
-        protection: Option<svd::Protection>,
-        reset_value: ResetValue,
-    ) -> Self {
+    pub(crate) const fn new(size: u32, access: svd::Access, reset_value: ResetValue) -> Self {
         Self {
             size,
             access,
-            protection,
             reset_value,
         }
     }
@@ -670,9 +648,7 @@ where
                 addr,
                 properties.size,
                 properties.access,
-                properties.protection,
                 properties.reset_value,
-                Some(dimensions.clone()),
             );
             registers.push(register);
         }
@@ -710,9 +686,7 @@ where
             addr,
             properties.size,
             properties.access,
-            properties.protection,
             properties.reset_value,
-            dimensions,
         );
         registers.push(register);
     }
