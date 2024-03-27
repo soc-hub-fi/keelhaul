@@ -1,14 +1,13 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{fmt, hash, marker::PhantomData, ops, str};
+use std::{fmt, hash, marker::PhantomData, str};
 
 use crate::{
     bit_count_to_rust_uint_type_str, error,
     model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
-use log::warn;
 
 /// Represents a single memory-mapped I/O register.
 ///
@@ -25,17 +24,19 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     pub addr: AddrRepr<P, S>,
     /// Bit-width of register
     pub size: u32,
-    /// Register access rights.
-    pub access: Access,
-    /// Register access privileges.
-    pub protection: Protection,
+    /// Software access rights
+    ///
+    /// Used for determining what types of tests can be generated.
+    pub access: svd::Access,
+    /// Security privilege required to access register
+    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
     pub(crate) reset_value: ResetValue,
-    pub dimensions: Option<RegisterDimElementGroup>,
+    pub dimensions: Option<svd::DimElement>,
 }
 
 impl<P, S> Register<P, S>
@@ -63,6 +64,39 @@ where
 
     pub(crate) const fn masked_reset(&self) -> &ResetValue {
         &self.reset_value
+    }
+
+    /// Whether this register is software readable or not
+    ///
+    /// Returns `false` when read operations have an undefined effect.
+    pub fn is_readable(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            ReadOnly | ReadWrite => true,
+            ReadWriteOnce | WriteOnly | WriteOnce => false,
+        }
+    }
+
+    /// Whether this register can be written to at least once after reset
+    ///
+    /// Returns `false` when write operations past the first one have an undefined effect.
+    pub fn is_writable_once(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            WriteOnly | ReadWrite | WriteOnce | ReadWriteOnce => true,
+            ReadOnly => false,
+        }
+    }
+
+    /// Whether this register can be written to at any time
+    ///
+    /// Returns `false` when write operations have an undefined effect.
+    pub fn is_writable_always(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            WriteOnly | ReadWrite => true,
+            ReadOnly | WriteOnce | ReadWriteOnce => false,
+        }
     }
 }
 
@@ -254,81 +288,6 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
     }
 }
 
-/// Specify the security privilege to access an address region
-#[derive(Clone, Copy)]
-pub enum Protection {
-    /// Secure permission required for access
-    Secure,
-    /// Non-secure or secure permission required for access
-    NonSecureOrSecure,
-    /// Privileged permission required for access
-    Privileged,
-}
-
-impl str::FromStr for Protection {
-    type Err = error::SvdParseError;
-
-    /// Convert from CMSIS-SVD `protectionStringType` string
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "s" => Ok(Self::Secure),
-            "n" => Ok(Self::NonSecureOrSecure),
-            "p" => Ok(Self::Privileged),
-            _ => Err(error::SvdParseError::InvalidProtectionType(s.to_owned())),
-        }
-    }
-}
-
-impl ToString for Protection {
-    /// Convert to CMSIS-SVD `protectionStringType` string
-    fn to_string(&self) -> String {
-        match self {
-            Self::Secure => "s",
-            Self::NonSecureOrSecure => "n",
-            Self::Privileged => "p",
-        }
-        .to_owned()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RegisterDimElementGroup {
-    pub dim: u64,
-    pub dim_increment: u64,
-    pub dim_index: Option<DimIndex>,
-    pub dim_name: Option<String>,
-    // TODO: this is not a number
-    pub dim_array_index: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub enum DimIndex {
-    NumberRange(ops::RangeInclusive<usize>),
-    LetterRange(ops::RangeInclusive<char>),
-    List(Vec<String>),
-}
-
-impl DimIndex {
-    pub fn get(&self, index: usize) -> String {
-        match self {
-            Self::NumberRange(range) => {
-                let mut range = range.clone();
-                // TODO: use error
-                range.nth(index).expect("").to_string()
-            }
-            Self::LetterRange(range) => {
-                let mut range = range.clone();
-                // TODO: use error
-                range.nth(index).expect("").to_string()
-            }
-            Self::List(list) => {
-                // TODO: use error
-                list.get(index).expect("").to_string()
-            }
-        }
-    }
-}
-
 /// Variable-length register reset value
 ///
 /// Register metadata commonly references its default value on reset, which we
@@ -460,81 +419,6 @@ impl From<RegValue> for u64 {
         }
     }
 }
-
-/// Software access rights e.g., read-only or read-write, as defined by
-/// CMSIS-SVD `accessType`.
-#[derive(Clone, Copy)]
-pub enum Access {
-    /// read-only
-    ReadOnly,
-    /// write-only
-    WriteOnly,
-    /// read-write
-    ReadWrite,
-    /// writeOnce
-    WriteOnce,
-    /// read-writeOnce
-    ReadWriteOnce,
-}
-
-impl Access {
-    /// Whether this register is software readable or not
-    #[must_use]
-    pub fn is_read(&self) -> bool {
-        match self {
-            Self::ReadOnly | Self::ReadWrite => true,
-            Self::WriteOnly => false,
-            Self::WriteOnce => {
-                warn!("a field uses write-once, assuming not readable");
-                false
-            }
-            Self::ReadWriteOnce => {
-                warn!("a field uses read-write-once, assuming readable");
-                true
-            }
-        }
-    }
-
-    /// Whether this register is software writable or not
-    #[must_use]
-    pub const fn is_write(&self) -> bool {
-        match self {
-            Self::ReadOnly => false,
-            Self::WriteOnly | Self::ReadWrite | Self::WriteOnce | Self::ReadWriteOnce => true,
-        }
-    }
-}
-
-impl str::FromStr for Access {
-    type Err = error::CommonParseError;
-
-    /// Convert from CMSIS-SVD / IP-XACT `accessType` string
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "read-only" => Ok(Self::ReadOnly),
-            "write-only" => Ok(Self::WriteOnly),
-            "read-write" => Ok(Self::ReadWrite),
-            "writeOnce" => Ok(Self::WriteOnce),
-            "read-writeOnce" => Ok(Self::ReadWriteOnce),
-            s => Err(error::CommonParseError::InvalidAccessType(s.to_owned())),
-        }
-    }
-}
-
-impl ToString for Access {
-    /// Convert into CMSIS-SVD / IP-XACT `accessType` string
-    fn to_string(&self) -> String {
-        match self {
-            Self::ReadOnly => "read-only",
-            Self::WriteOnly => "write-only",
-            Self::ReadWrite => "read-write",
-            Self::WriteOnce => "writeOnce",
-            Self::ReadWriteOnce => "read-writeOnce",
-        }
-        .to_string()
-    }
-}
-
 pub trait ArchPtr:
     Clone + Copy +
     Eq +

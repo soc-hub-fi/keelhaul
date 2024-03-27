@@ -2,25 +2,23 @@
 
 // TODO: support deriving fields via <register derivedFrom="register1">
 
-use crate::{
-    bit_count_to_rust_uint_type_str,
-    error::{self, Error, PositionalError, SvdParseError},
-    model::{
-        self, Access, AddrRepr, ArchPtr, DimIndex, Protection, PtrSize, RegPath, RegValue,
-        Register, RegisterDimElementGroup, Registers, ResetValue,
-    },
-    util, Filters, IsAllowedOrBlocked, ItemFilter,
-};
-use itertools::Itertools;
-use log::{debug, info, warn};
-use regex::Regex;
-use roxmltree::Document;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     ops::RangeInclusive,
     path,
     str::FromStr,
 };
+
+use crate::{
+    bit_count_to_rust_uint_type_str,
+    error::{self, Error, PositionalError, SvdParseError},
+    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
+    util, Filters, IsAllowedOrBlocked, ItemFilter,
+};
+use itertools::Itertools;
+use log::{info, warn};
+use regex::Regex;
+use roxmltree::Document;
 
 struct XmlNode<'a, 'input>(pub roxmltree::Node<'a, 'input>);
 
@@ -196,9 +194,9 @@ struct RegPropGroupBuilder {
     /// Register bit-width.
     pub size: Option<u32>,
     /// Register access rights.
-    pub access: Option<Access>,
+    pub access: Option<svd::Access>,
     /// Register access privileges.
-    pub protection: Option<Protection>,
+    pub protection: Option<svd::Protection>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
     pub(crate) reset_value: Option<RegValue>,
@@ -284,13 +282,15 @@ impl RegPropGroupBuilder {
             self.size = Some(size);
         }
         if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
-            Access::from_str(s).map_err(|e| e.into())
+            Ok(svd::Access::parse_str(s)
+                .ok_or_else(|| error::CommonParseError::InvalidAccessType(s.to_owned()))?)
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) =
-            process_prop_from_node_if_present("protection", node, Protection::from_str)?
-        {
+        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
+            Ok(svd::Protection::parse_str(s)
+                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))?)
+        })? {
             self.protection = Some(protection);
         };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
@@ -319,14 +319,9 @@ impl RegPropGroupBuilder {
         });
         let access = self.access.unwrap_or_else(|| {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
-            Access::ReadWrite
+            svd::Access::ReadWrite
         });
-        let protection = self.protection.unwrap_or_else(|| {
-            // This is a very common omission from SVD. We should not warn about it unless required by user
-            // TODO: allow changing this to warn! or error! via top level config
-            debug!("property 'protection' is not defined for register '{reg_path}' or any of its parents, assuming protection = NonSecureOrSecure");
-            Protection::NonSecureOrSecure
-        });
+        let protection = self.protection;
         let reset_value = {
             // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
             let size = PtrSize::from_bit_count(size).unwrap();
@@ -355,9 +350,9 @@ pub struct RegisterPropertiesGroup {
     /// Bit-width of register
     pub size: u32,
     /// Register access rights.
-    pub access: Access,
+    pub access: svd::Access,
     /// Register access privileges.
-    pub protection: Protection,
+    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
@@ -369,8 +364,8 @@ pub struct RegisterPropertiesGroup {
 impl RegisterPropertiesGroup {
     pub(crate) const fn new(
         size: u32,
-        access: Access,
-        protection: Protection,
+        access: svd::Access,
+        protection: Option<svd::Protection>,
         reset_value: ResetValue,
     ) -> Self {
         Self {
@@ -458,20 +453,21 @@ where
     }
 }
 
-impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
-    type Error = PositionalError<SvdParseError>;
-    fn try_from(value: &XmlNode) -> Result<Self, Self::Error> {
-        let dim = {
-            let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
-            parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?
-        };
-        let dim_increment = {
-            let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
-            parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
-        };
-        let dim_index = value
+fn try_dim_element_from_xml_node(
+    value: &XmlNode,
+    lvl: svd::ValidateLevel,
+) -> Result<svd::DimElement, PositionalError<SvdParseError>> {
+    let dim = {
+        let (dim, dim_node) = value.find_text_by_tag_name("dim")?;
+        parse_nonneg_int(dim).map_err(|e| err_with_pos(e, &dim_node))?
+    };
+    let dim_increment = {
+        let (dim_inc, dim_inc_node) = value.find_text_by_tag_name("dimIncrement")?;
+        parse_nonneg_int(dim_inc).map_err(|e| err_with_pos(e, &dim_inc_node))?
+    };
+    let dim_index = value
             .maybe_find_text_by_tag_name("dimIndex")
-            .map(|(index, _)| {
+            .and_then(|(index, _)| {
                 let index = index.trim();
                 let regex_numbered = Regex::new(r"^[0-9]+\-[0-9]+$").unwrap();
                 let regex_lettered = Regex::new(r"^[A-Z]\-[A-Z]$").unwrap();
@@ -493,7 +489,8 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                             .as_str()
                             .parse()
                             .unwrap();
-                        DimIndex::NumberRange(start..=end)
+                        warn!("dimIndex was present in input but was not constructed due to unfinished implementation; positions were {start} and {end}");
+                        None
                     } else {
                         // TODO: use error
                         panic!("asd");
@@ -506,7 +503,8 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                             captures.name("start").expect("").as_str().parse().unwrap();
                         // TODO: use error
                         let end: char = captures.name("end").expect("").as_str().parse().unwrap();
-                        DimIndex::LetterRange(start..=end)
+                        warn!("dimIndex was present in input but was not constructed due to unfinished implementation; positions were {start} and {end}");
+                        None
                     } else {
                         // TODO: use error
                         panic!("asd");
@@ -517,7 +515,7 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                         .map(|s| s.trim())
                         .map(|s| s.to_owned())
                         .collect_vec();
-                    DimIndex::List(parts)
+                    Some(parts)
                 } else {
                     // TODO: use error
                     // error: not supported dimIndex format: {}
@@ -525,33 +523,32 @@ impl TryFrom<&XmlNode<'_, '_>> for RegisterDimElementGroup {
                 };
                 dim_index
             });
-        let dim_name = {
-            value
-                .maybe_find_text_by_tag_name("dimName")
-                .map(|name| name.0.to_owned())
+    let dim_name = {
+        value
+            .maybe_find_text_by_tag_name("dimName")
+            .map(|name| name.0.to_owned())
+    };
+    let dim_array_index = {
+        // TODO: this is XML-element
+        None
+        /*
+        let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
+            Some(index) => {
+                let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
+                Some(a as usize)
+            }
+            None => None,
         };
-        let dim_array_index = {
-            // TODO: this is XML-element
-            None
-            /*
-            let dim_array_index = match value.maybe_find_text_by_tag_name("dimArrayIndex") {
-                Some(index) => {
-                    let a: u64 = parse_nonneg_int(index.0).map_err(|e| err_with_pos(e, &value))?;
-                    Some(a as usize)
-                }
-                None => None,
-            };
-            dim_array_index
-            */
-        };
-        Ok(Self {
-            dim,
-            dim_increment,
-            dim_index,
-            dim_name,
-            dim_array_index,
-        })
-    }
+        dim_array_index
+        */
+    };
+    let builder = svd::DimElement::builder()
+        .dim(dim)
+        .dim_increment(dim_increment)
+        .dim_index(dim_index)
+        .dim_name(dim_name)
+        .dim_array_index(dim_array_index);
+    Ok(builder.build(lvl).unwrap())
 }
 
 fn check_node_count(
@@ -601,7 +598,8 @@ where
         AddrRepr::from_base_cluster_offset(address_base, address_cluster, address_offset)
     };
     let mut registers = Vec::new();
-    let dimensions = RegisterDimElementGroup::try_from(&register_node).ok();
+    let dimensions =
+        try_dim_element_from_xml_node(&register_node, svd::ValidateLevel::Disabled).ok();
     if let Some(dimensions) = dimensions {
         // Found a list or an array of registers.
         for i in 0..dimensions.dim {
@@ -611,7 +609,7 @@ where
             let index = {
                 if let Some(dim_index) = dimensions.dim_index.clone() {
                     // Index format is defined by the user.
-                    dim_index.get(i as usize)
+                    dim_index.get(i as usize).unwrap().clone()
                 } else {
                     // Index format is not defined by the user. Just use a number.
                     i.to_string()
@@ -656,7 +654,7 @@ where
             let addr = {
                 let (address_base, address_cluster, _) = addr.components();
                 // TODO: use error
-                let offset = P::try_from(i * dimensions.dim_increment).expect(
+                let offset = P::try_from(i as u64 * dimensions.dim_increment as u64).expect(
                     "failed to transform register array's dimension increment to pointer size",
                 );
                 AddrRepr::from_base_cluster_offset(address_base, address_cluster, offset)

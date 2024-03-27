@@ -457,15 +457,14 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
         let fn_name = self.gen_test_fn_ident()?;
 
         // Only generate read test if register is readable
-        let read_test =
-            if reg.access.is_read() && config.reg_test_kinds.contains(&RegTestKind::Read) {
-                self.gen_read_test()
-            } else {
-                quote!()
-            };
+        let read_test = if reg.is_readable() && config.reg_test_kinds.contains(&RegTestKind::Read) {
+            self.gen_read_test()
+        } else {
+            quote!()
+        };
 
         // Only generate reset value test if register is readable
-        let reset_val_test = if self.0.access.is_read()
+        let reset_val_test = if self.0.is_readable()
             && config.reg_test_kinds.contains(&RegTestKind::ReadIsResetVal)
             && u64::from(self.0.masked_reset().mask()) != 0u64
         {
