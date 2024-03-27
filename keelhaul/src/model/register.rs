@@ -15,6 +15,7 @@ use itertools::Itertools;
 ///
 /// * `P` - type representing the architecture pointer size
 /// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
+#[derive(Debug)]
 pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
@@ -128,8 +129,10 @@ where
 /// Hierarchical representation of a register's path
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
+#[derive(Debug)]
 pub struct RegPath<S: RefSchema>(Vec<RegPathSegment>, PhantomData<S>);
 
+#[derive(Debug)]
 pub struct RegPathSegment {
     pub(crate) name: String,
 }
@@ -326,7 +329,7 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
 /// `val`   - The reset value
 /// `mask`  - Mask for reading from or writing into the register, to assist in
 /// writing into partially protected registers.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ResetValue {
     U8 { val: u8, mask: u8 },
     U16 { val: u16, mask: u16 },
