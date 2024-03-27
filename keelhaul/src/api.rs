@@ -9,7 +9,9 @@ mod error;
 
 use std::{path, str};
 
-use crate::{codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig};
+use crate::{
+    analysis, codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig,
+};
 use error::NotImplementedError;
 use log::info;
 use strum::EnumIter;
@@ -140,6 +142,23 @@ where
     Ok(registers.into_iter().next().unwrap())
 }
 
+fn parse_registers_for_analysis(
+    sources: &[ModelSource],
+    filters: &Filters,
+    arch: ArchWidth,
+) -> Result<Vec<Box<dyn analysis::AnalyzeRegister>>, ApiError> {
+    Ok(match arch {
+        ArchWidth::U32 => parse_registers::<u32>(sources, filters)?
+            .into_iter()
+            .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
+            .collect(),
+        ArchWidth::U64 => parse_registers::<u64>(sources, filters)?
+            .into_iter()
+            .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
+            .collect(),
+    })
+}
+
 pub fn generate_tests(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
@@ -185,4 +204,13 @@ pub fn generate_tests(
     };
 
     Ok(s)
+}
+
+pub fn count_registers_svd(
+    sources: &[ModelSource],
+    arch: ArchWidth,
+    filters: &Filters,
+) -> Result<usize, ApiError> {
+    let registers = parse_registers_for_analysis(sources, filters, arch)?;
+    Ok(registers.len())
 }
