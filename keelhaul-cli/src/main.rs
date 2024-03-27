@@ -35,6 +35,7 @@ enum Commands {
         #[arg(short, long)]
         list_top: bool,
     },
+    CountRegisters {},
     Coverage {
         /// Describes how many of the input registers supply a known reset value which can be tested
         /// for
@@ -224,6 +225,10 @@ fn main() -> anyhow::Result<()> {
             if *list_top {
                 todo!() //keelhaul::list_peripherals()
             }
+        }
+        Some(Commands::CountRegisters {}) => {
+            let output = keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
+            println!("{output}");
         }
         Some(Commands::Generate {
             tests_to_generate,
