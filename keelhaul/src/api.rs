@@ -13,6 +13,7 @@ use crate::{
     analysis, codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig,
 };
 use error::NotImplementedError;
+use itertools::Itertools;
 use log::info;
 use strum::EnumIter;
 
@@ -215,4 +216,32 @@ pub fn count_registers_svd(
 ) -> Result<usize, ApiError> {
     let registers = parse_registers_for_analysis(sources, filters, arch)?;
     Ok(registers.len())
+}
+
+/// Returns top level containers (peripherals or subsystems) and the number of registers in each
+///
+/// `Vec<(container, register count)>`
+pub fn list_top(
+    sources: &[ModelSource],
+    arch: ArchWidth,
+) -> Result<Vec<(String, usize)>, ApiError> {
+    let registers = parse_registers_for_analysis(sources, &Filters::all(), arch)?;
+
+    let tops = registers
+        .iter()
+        .map(|reg| reg.top_container_name())
+        .unique()
+        .collect_vec();
+    let tops_and_counts = tops
+        .into_iter()
+        .map(|top| {
+            let reg_count = registers
+                .iter()
+                .filter(|reg| reg.top_container_name() == top)
+                .count();
+            (top, reg_count)
+        })
+        .collect_vec();
+
+    Ok(tops_and_counts)
 }
