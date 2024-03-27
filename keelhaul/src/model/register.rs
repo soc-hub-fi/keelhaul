@@ -29,15 +29,14 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     ///
     /// Used for determining what types of tests can be generated.
     access: svd::Access,
-    /// Security privilege required to access register
-    protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
     reset_value: ResetValue,
-    dimensions: Option<svd::DimElement>,
+    // TODO: consider support for array-like registers in input
+    //dimensions: Option<svd::DimElement>,
 }
 
 impl<P, S> Register<P, S>
