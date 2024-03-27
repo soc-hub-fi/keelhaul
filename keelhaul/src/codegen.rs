@@ -235,58 +235,27 @@ fn u_to_binlit<T: fmt::Binary + cmp::PartialOrd + model::BitSized<T>>(val: T, bi
 
 #[test]
 fn reset_value_bitands_generate() {
+    use crate::codegen::gen_bitand;
+
+    assert_eq!(gen_bitand(0xb0, u8::MAX).to_string(), "0xb0u8");
     assert_eq!(
-        &ResetValue::U8 {
-            val: 0xb0,
-            mask: u8::MAX
-        }
-        .gen_bitand()
-        .to_string(),
-        "0xb0u8"
-    );
-    assert_eq!(
-        &ResetValue::U8 {
-            val: 0xb0,
-            mask: 0b0000_0001,
-        }
-        .gen_bitand()
-        .to_string(),
+        gen_bitand(0xb0, 0b0000_0001u8).to_string(),
         "(0xb0u8 & 0b1u8)"
     );
     assert_eq!(
-        &ResetValue::U8 {
-            val: 0xb0,
-            mask: 0b0000_0010,
-        }
-        .gen_bitand()
-        .to_string(),
+        gen_bitand(0xb0, 0b0000_0010u8).to_string(),
         "(0xb0u8 & 0b10u8)"
     );
     assert_eq!(
-        &ResetValue::U32 {
-            val: 0xdead_beef,
-            mask: 0b0101_0101,
-        }
-        .gen_bitand()
-        .to_string(),
+        gen_bitand(0xdead_beef, 0b0101_0101u32).to_string(),
         "(0xdeadbeefu32 & 0b1010101u32)"
     );
     assert_eq!(
-        &ResetValue::U32 {
-            val: 0xdead_beef,
-            mask: u32::MAX,
-        }
-        .gen_bitand()
-        .to_string(),
+        gen_bitand(0xdead_beef, u32::MAX).to_string(),
         "0xdeadbeefu32"
     );
     assert_eq!(
-        &ResetValue::U64 {
-            val: 0xdead_beef_cafe_f00d,
-            mask: u64::MAX,
-        }
-        .gen_bitand()
-        .to_string(),
+        gen_bitand(0xdead_beef_cafe_f00d, u64::MAX).to_string(),
         "0xdeadbeefcafef00du64"
     );
 }
