@@ -1,7 +1,3 @@
-//! SVD-file parser for register test generator.
-
-// TODO: support deriving fields via <register derivedFrom="register1">
-
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     ops::RangeInclusive,
@@ -12,7 +8,9 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
+    model::ArchPtr,
+    model::PtrSize,
+    model::{self, AddrRepr, RegPath, RegValue, Register, Registers, ResetValue},
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
 use itertools::Itertools;
@@ -288,8 +286,8 @@ impl RegPropGroupBuilder {
             self.access = Some(access);
         };
         if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            Ok(svd::Protection::parse_str(s)
-                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))?)
+            svd::Protection::parse_str(s)
+                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))
         })? {
             self.protection = Some(protection);
         };
@@ -314,7 +312,7 @@ impl RegPropGroupBuilder {
         let size = self.size.unwrap_or_else(|| {
             let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
             warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
-            assert!(PtrSize::is_valid_bit_count(size_bits));
+            assert!(model::is_valid_bit_count(size_bits));
             size_bits
         });
         let access = self.access.unwrap_or_else(|| {
@@ -423,7 +421,7 @@ where
 
         Ok(Self {
             periph_name: self.periph_name.clone(),
-            periph_base: self.periph_base.clone(),
+            periph_base: self.periph_base,
             properties: self.properties.clone_and_update_from_node(cluster_node)?,
             kind: RegisterParentKind::Cluster {
                 cluster_name,
@@ -448,7 +446,7 @@ where
             RegisterParentKind::Cluster {
                 cluster_name: _,
                 cluster_offset,
-            } => Some(cluster_offset.clone()),
+            } => Some(*cluster_offset),
         }
     }
 }
@@ -588,7 +586,7 @@ where
         name.to_owned()
     };
     let addr = {
-        let address_base = parent.periph_base.clone();
+        let address_base = parent.periph_base;
         let address_cluster = parent.cluster_address();
         let address_offset = {
             let (addr_offset_str, addr_offset_node) =
@@ -664,7 +662,7 @@ where
                 parent
                     .properties
                     .clone_and_update_from_node(&register_node)?
-                    .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
+                    .build(&reg_path, Some(P::ptr_size().bit_count()))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
             let register = Register {
@@ -704,7 +702,7 @@ where
             parent
                 .properties
                 .clone_and_update_from_node(&register_node)?
-                .build(&reg_path, Some(P::ptr_size().bit_count() as u32))
+                .build(&reg_path, Some(P::ptr_size().bit_count()))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
         let register = Register {
@@ -864,7 +862,7 @@ where
     for register in &registers {
         peripherals.insert(register.path.periph().name.clone());
         let addr: P = register.full_addr().unwrap();
-        if let Entry::Vacant(entry) = addresses.entry(addr.clone()) {
+        if let Entry::Vacant(entry) = addresses.entry(addr) {
             entry.insert(register.path.join("-"));
         } else {
             let reg2 = addresses

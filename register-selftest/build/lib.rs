@@ -11,13 +11,10 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{Context, Error};
+use anyhow::Context;
 use fs_err::{self as fs, File};
-use keelhaul::{
-    error::SvdParseError, ArchPtr, Filters, ItemFilter, ModelSource, ParseTestKindError, PtrSize,
-    RegTestKind, Registers, TestCases, TestConfig,
-};
-use log::{info, LevelFilter};
+use keelhaul::{Filters, ItemFilter, ModelSource, ParseTestKindError, TestConfig, TestKind};
+use log::LevelFilter;
 use regex::Regex;
 
 const ENV_SVD_IN: &str = "SVD_PATH";
@@ -62,13 +59,13 @@ fn rustfmt_file(path: impl AsRef<Path>) -> io::Result<()> {
     util::run_cmd("rustfmt", &[format!("{}", path.as_ref().display())])
 }
 
-fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindError> {
+fn test_types_from_env() -> Result<Option<HashSet<TestKind>>, ParseTestKindError> {
     let test_kinds = util::read_vec_from_env(ENV_TEST_KINDS, ',');
     if let Ok(test_kinds) = test_kinds {
         Ok(Some(
             test_kinds
                 .into_iter()
-                .map(|test_kind| RegTestKind::from_str(&test_kind))
+                .map(|test_kind| TestKind::from_str(&test_kind))
                 .collect::<Result<HashSet<_>, ParseTestKindError>>()?,
         ))
     } else {
@@ -76,25 +73,34 @@ fn test_types_from_env() -> Result<Option<HashSet<RegTestKind>>, ParseTestKindEr
     }
 }
 
-/// Parse SVD-file.
-///
-/// # Panics
-///
-/// - Missing path to SVD-file
-///
-/// # Errors
-///
-/// - Failed to interpret given options
-/// - Failed to parse given SVD file
-fn parse<P: ArchPtr>(
-    svd_path: impl AsRef<Path>,
-) -> Result<Registers<P, keelhaul::RefSchemaSvdV1_2>, Error>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+fn main() -> anyhow::Result<()> {
+    println!("cargo:rerun-if-env-changed={ENV_INCLUDE_PERIPHS}");
+    println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_PERIPHS}");
+    println!("cargo:rerun-if-env-changed={ENV_INCLUDE_SYMS_REGEX}");
+    println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_SYMS_REGEX}");
+    println!("cargo:rerun-if-env-changed={ENV_TEST_KINDS}");
+    println!("cargo:rerun-if-env-changed={ENV_SVD_IN}");
+    println!("cargo:rerun-if-env-changed={ENV_ARCH}");
+    println!("cargo:rerun-if-env-changed={ENV_OUT_DIR_OVERRIDE}");
+
+    // Install a logger to print useful messages into `cargo:warning={}`
+    logger::init(LevelFilter::Info);
+
+    let arch_ptr_size_bytes = match util::read_u32_from_env(ENV_ARCH)
+        .with_context(|| format!("could not detect {ENV_ARCH}"))?
+    {
+        4 => keelhaul::ArchWidth::U32,
+        8 => keelhaul::ArchWidth::U64,
+        _ => panic!("unsupported arch size"),
+    };
+    let mut test_cfg = TestConfig::new(arch_ptr_size_bytes);
+    if let Some(test_kind_set) =
+        test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
+    {
+        test_cfg = test_cfg.tests_to_generate(test_kind_set).unwrap();
+    }
+    let mut file_output = open_output_file();
+
     let periph_filter = {
         let include_peripherals = util::read_vec_from_env(ENV_INCLUDE_PERIPHS, ',').ok();
         let exclude_peripherals = util::read_vec_from_env(ENV_EXCLUDE_PERIPHS, ',').ok();
@@ -111,68 +117,19 @@ where
             .transpose()?;
         ItemFilter::regex(include_syms_regex, exclude_syms_regex)
     };
-    Ok(keelhaul::parse_registers::<_, keelhaul::RefSchemaSvdV1_2>(
-        &[ModelSource::new(
-            svd_path.as_ref().to_path_buf(),
-            keelhaul::SourceFormat::SvdV1_3,
-        )],
-        Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
-    )?
-    .into_iter()
-    .next()
-    .unwrap())
-}
-
-fn main() -> anyhow::Result<()> {
-    println!("cargo:rerun-if-env-changed={ENV_INCLUDE_PERIPHS}");
-    println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_PERIPHS}");
-    println!("cargo:rerun-if-env-changed={ENV_INCLUDE_SYMS_REGEX}");
-    println!("cargo:rerun-if-env-changed={ENV_EXCLUDE_SYMS_REGEX}");
-    println!("cargo:rerun-if-env-changed={ENV_TEST_KINDS}");
-    println!("cargo:rerun-if-env-changed={ENV_SVD_IN}");
-    println!("cargo:rerun-if-env-changed={ENV_ARCH}");
-    println!("cargo:rerun-if-env-changed={ENV_OUT_DIR_OVERRIDE}");
-
-    // Install a logger to print useful messages into `cargo:warning={}`
-    logger::init(LevelFilter::Info);
-
-    let arch_ptr_size = (util::read_u32_from_env(ENV_ARCH)
-        .with_context(|| format!("could not detect {ENV_ARCH}"))? as u8)
-        .try_into()?;
-    let mut test_cfg = TestConfig::new(arch_ptr_size);
-    if let Some(test_kind_set) =
-        test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
-    {
-        test_cfg = test_cfg.reg_test_kinds(test_kind_set)?;
-    }
-    let mut file_output = open_output_file();
 
     let svd_path = util::read_relpath_from_env(ENV_SVD_IN)
         .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
-    let test_cases: TestCases = match arch_ptr_size {
-        PtrSize::U8 => {
-            let registers = parse::<u8>(&svd_path)?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U16 => {
-            let registers = parse::<u16>(&svd_path)?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U32 => {
-            let registers = parse::<u32>(&svd_path)?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-        PtrSize::U64 => {
-            let registers = parse::<u64>(&svd_path)?;
-            TestCases::from_registers(&registers, &test_cfg)
-        }
-    }?;
-
-    file_output.write_all(test_cases.to_module_string().as_bytes())?;
+    let test_cases = keelhaul::generate_tests(
+        &[ModelSource::new(svd_path, keelhaul::SourceFormat::Svd)],
+        arch_ptr_size_bytes,
+        &test_cfg,
+        &Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
+    )?;
+    file_output.write_all(test_cases.as_bytes())?;
     let path = get_path_to_output();
     rustfmt_file(&path).unwrap_or_else(|error: io::Error| {
         panic!("Failed to format file {}. {}", path.display(), error)
     });
-    info!("Wrote {} test cases.", test_cases.test_case_count);
     Ok(())
 }

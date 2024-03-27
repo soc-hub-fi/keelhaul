@@ -1,10 +1,10 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{fmt, hash, marker::PhantomData, str};
+use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
-    bit_count_to_rust_uint_type_str, error,
+    bit_count_to_rust_uint_type_str, codegen, error,
     model::{RefSchema, RefSchemaSvdV1_2},
 };
 use itertools::Itertools;
@@ -15,6 +15,7 @@ use itertools::Itertools;
 ///
 /// * `P` - type representing the architecture pointer size
 /// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
+#[derive(Debug)]
 pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
@@ -62,21 +63,6 @@ where
         self.path.join("-")
     }
 
-    pub(crate) const fn masked_reset(&self) -> &ResetValue {
-        &self.reset_value
-    }
-
-    /// Whether this register is software readable or not
-    ///
-    /// Returns `false` when read operations have an undefined effect.
-    pub fn is_readable(&self) -> bool {
-        use svd::Access::*;
-        match self.access {
-            ReadOnly | ReadWrite => true,
-            ReadWriteOnce | WriteOnly | WriteOnce => false,
-        }
-    }
-
     /// Whether this register can be written to at least once after reset
     ///
     /// Returns `false` when write operations past the first one have an undefined effect.
@@ -100,18 +86,60 @@ where
     }
 }
 
+impl<P, S> codegen::TestRegister<P> for Register<P, S>
+where
+    P: num::CheckedAdd + Copy + fmt::Debug,
+    S: RefSchema,
+{
+    fn path(&self) -> Vec<String> {
+        self.path
+            .0
+            .iter()
+            .map(|path| path.name.clone())
+            .collect_vec()
+    }
+
+    fn addr(&self) -> P {
+        self.full_addr()
+            .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
+    }
+
+    fn size(&self) -> u32 {
+        self.size
+    }
+
+    /// Whether this register is software readable or not
+    ///
+    /// Returns `false` when read operations have an undefined effect.
+    fn is_readable(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            ReadOnly | ReadWrite => true,
+            ReadWriteOnce | WriteOnly | WriteOnce => false,
+        }
+    }
+
+    fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
+        let value = self.reset_value.value().as_u64();
+        let mask = self.reset_value.mask().as_u64();
+        Some(codegen::ValueOnReset::new(value, Some(mask)))
+    }
+}
+
 /// Hierarchical representation of a register's path
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
+#[derive(Debug)]
 pub struct RegPath<S: RefSchema>(Vec<RegPathSegment>, PhantomData<S>);
 
+#[derive(Debug)]
 pub struct RegPathSegment {
     pub(crate) name: String,
 }
 
 impl<S: RefSchema> RegPath<S> {
     pub fn new(segments: Vec<RegPathSegment>) -> Self {
-        Self(segments, PhantomData::default())
+        Self(segments, PhantomData)
     }
 
     /// Joins the names of the path elements to one string using a separator
@@ -165,8 +193,8 @@ where
     S: RefSchema,
 {
     pub fn from_vec(v: Vec<P>) -> Self {
-        assert!(v.len() != 0, "address must have at least base address");
-        Self(v, PhantomData::default())
+        assert!(!v.is_empty(), "address must have at least base address");
+        Self(v, PhantomData)
     }
 
     /// Get register's absolute memory address
@@ -301,7 +329,7 @@ impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
 /// `val`   - The reset value
 /// `mask`  - Mask for reading from or writing into the register, to assist in
 /// writing into partially protected registers.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ResetValue {
     U8 { val: u8, mask: u8 },
     U16 { val: u16, mask: u16 },
@@ -372,6 +400,16 @@ impl RegValue {
             Self::U64(_) => PtrSize::U64,
         }
     }
+
+    /// Bit-extend the value to 64-bits
+    pub(crate) fn as_u64(&self) -> u64 {
+        match self {
+            RegValue::U8(u) => *u as u64,
+            RegValue::U16(u) => *u as u64,
+            RegValue::U32(u) => *u as u64,
+            RegValue::U64(u) => *u,
+        }
+    }
 }
 
 impl fmt::LowerHex for RegValue {
@@ -419,6 +457,34 @@ impl From<RegValue> for u64 {
         }
     }
 }
+
+/// `BitSized` types have a knowable size
+pub(crate) trait BitSized<T>: fmt::Debug + Copy {
+    fn bit_count() -> u32;
+    fn all_ones() -> T;
+    fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
+        val <= Self::all_ones()
+    }
+}
+
+macro_rules! impl_bit_sized {
+    ($ty:ty, $numbits:expr) => {
+        impl BitSized<$ty> for $ty {
+            fn bit_count() -> u32 {
+                $numbits
+            }
+            fn all_ones() -> $ty {
+                <$ty>::MAX
+            }
+        }
+    };
+}
+
+impl_bit_sized!(u8, 8);
+impl_bit_sized!(u16, 16);
+impl_bit_sized!(u32, 32);
+impl_bit_sized!(u64, 64);
+
 pub trait ArchPtr:
     Clone + Copy +
     Eq +
@@ -505,30 +571,14 @@ impl PtrSize {
             Self::U64 => 64,
         }
     }
+}
 
-    pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
-        match bit_count {
-            8 | 16 | 32 | 64 => true,
-            _ => false,
-        }
-    }
+pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
+    matches!(bit_count, 8 | 16 | 32 | 64)
 }
 
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
-    }
-}
-
-impl std::convert::TryFrom<u8> for PtrSize {
-    type Error = error::NotImplementedError;
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(Self::U8),
-            2 => Ok(Self::U16),
-            4 => Ok(Self::U32),
-            8 => Ok(Self::U64),
-            other => Err(error::NotImplementedError::PtrSize(other)),
-        }
     }
 }
