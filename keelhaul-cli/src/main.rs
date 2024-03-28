@@ -274,7 +274,8 @@ fn main() -> anyhow::Result<()> {
             ignore_reset_masks,
         }) => {
             let mut config = keelhaul::TestConfig::new(arch)
-                .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())?
+                .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
+                .unwrap()
                 .derive_debug(*derive_debug)
                 .ignore_reset_masks(*ignore_reset_masks);
             if let Some(on_fail) = on_fail.as_ref() {
