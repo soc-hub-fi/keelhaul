@@ -12,4 +12,4 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.81"
 clap = { version = "4.5.3", features = ["derive"] }
-keelhaul = { version = "0.1.0", path = "../keelhaul" }
+keelhaul = { version = "0.1.0", path = "../keelhaul", features = ["rustfmt"] }
