@@ -158,5 +158,31 @@ pub fn generate_tests(
     };
     // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
-    Ok(test_cases.to_module_string())
+
+    let s = test_cases.to_module_string();
+    let s = match () {
+        #[cfg(feature = "rustfmt")]
+        () => {
+            info!("Applying rustfmt");
+            let mut buf = Vec::new();
+
+            // FIXME: allow supplying config from API
+            rustfmt::format_input(
+                rustfmt::Input::Text(s),
+                &rustfmt::config::Config::default(),
+                Some(&mut buf),
+            )
+            .unwrap()
+            .1
+            .into_iter()
+            .next()
+            .unwrap()
+            .1
+            .to_string()
+        }
+        #[cfg(not(feature = "rustfmt"))]
+        () => s,
+    };
+
+    Ok(s)
 }
