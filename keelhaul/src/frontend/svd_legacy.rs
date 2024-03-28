@@ -8,10 +8,8 @@ use std::{
 use crate::{
     bit_count_to_rust_uint_type_str,
     error::{self, Error, PositionalError, SvdParseError},
-    model::ArchPtr,
-    model::PtrSize,
-    model::{self, AddrRepr, RegPath, RegValue, Register, Registers, ResetValue},
-    util, Filters, IsAllowedOrBlocked, ItemFilter,
+    model::{self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue},
+    util, Filters, IsAllowedOrBlocked, ItemFilter, TestRegister,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -193,8 +191,6 @@ struct RegPropGroupBuilder {
     pub size: Option<u32>,
     /// Register access rights.
     pub access: Option<svd::Access>,
-    /// Register access privileges.
-    pub protection: Option<svd::Protection>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
     pub(crate) reset_value: Option<RegValue>,
@@ -285,12 +281,6 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(protection) = process_prop_from_node_if_present("protection", node, |s| {
-            svd::Protection::parse_str(s)
-                .ok_or_else(|| error::SvdParseError::InvalidProtectionType(s.to_owned()))
-        })? {
-            self.protection = Some(protection);
-        };
         if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
             parse_nonneg_int(s).map(RegValue::U64)
         })? {
@@ -319,7 +309,6 @@ impl RegPropGroupBuilder {
             warn!("property 'access' is not defined for register '{reg_path}' or any of its parents, assuming access = read-write");
             svd::Access::ReadWrite
         });
-        let protection = self.protection;
         let reset_value = {
             // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
             let size = PtrSize::from_bit_count(size).unwrap();
@@ -334,12 +323,7 @@ impl RegPropGroupBuilder {
             ResetValue::with_mask(reset_value, reset_mask)?
         };
 
-        Ok(RegisterPropertiesGroup::new(
-            size,
-            access,
-            protection,
-            reset_value,
-        ))
+        Ok(RegisterPropertiesGroup::new(size, access, reset_value))
     }
 }
 
@@ -349,8 +333,6 @@ pub struct RegisterPropertiesGroup {
     pub size: u32,
     /// Register access rights.
     pub access: svd::Access,
-    /// Register access privileges.
-    pub protection: Option<svd::Protection>,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
@@ -360,16 +342,10 @@ pub struct RegisterPropertiesGroup {
 }
 
 impl RegisterPropertiesGroup {
-    pub(crate) const fn new(
-        size: u32,
-        access: svd::Access,
-        protection: Option<svd::Protection>,
-        reset_value: ResetValue,
-    ) -> Self {
+    pub(crate) const fn new(size: u32, access: svd::Access, reset_value: ResetValue) -> Self {
         Self {
             size,
             access,
-            protection,
             reset_value,
         }
     }
@@ -665,15 +641,13 @@ where
                     .build(&reg_path, Some(P::ptr_size().bit_count()))
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
-            let register = Register {
+            let register = Register::new(
                 path,
                 addr,
-                dimensions: Some(dimensions.clone()),
-                size: properties.size,
-                access: properties.access,
-                protection: properties.protection,
-                reset_value: properties.reset_value,
-            };
+                properties.size,
+                properties.access,
+                properties.reset_value,
+            );
             registers.push(register);
         }
     } else {
@@ -705,15 +679,13 @@ where
                 .build(&reg_path, Some(P::ptr_size().bit_count()))
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
-        let register = Register {
+        let register = Register::new(
             path,
             addr,
-            dimensions,
-            size: properties.size,
-            access: properties.access,
-            protection: properties.protection,
-            reset_value: properties.reset_value,
-        };
+            properties.size,
+            properties.access,
+            properties.reset_value,
+        );
         registers.push(register);
     }
     Ok(Some(registers))
@@ -856,20 +828,20 @@ where
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
-    let registers = process_root(root, filters)?;
+    let registers = process_root::<P>(root, filters)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
-        peripherals.insert(register.path.periph().name.clone());
-        let addr: P = register.full_addr().unwrap();
+        peripherals.insert(register.top_container_name());
+        let addr: P = register.addr();
         if let Entry::Vacant(entry) = addresses.entry(addr) {
-            entry.insert(register.path.join("-"));
+            entry.insert(register.path().join("-"));
         } else {
             let reg2 = addresses
                 .get(&addr)
                 .expect("failed to find register name by key");
             warn!("Address for register {reg}@{addr:#x?} is already registered for another register {reg2}. {reg} is ignored.",
-                reg = register.path.join("-"));
+                reg = register.path().join("-"));
         }
     }
 

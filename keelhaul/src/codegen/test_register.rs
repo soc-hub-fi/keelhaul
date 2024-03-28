@@ -16,13 +16,13 @@ pub trait TestRegister<P> {
 
     /// A human-readable unique identifier for the register, usually the the path that is used to
     /// access the register.
-    fn uid(&self) -> String {
+    fn binding_id(&self) -> String {
         self.path().join("_")
     }
 
-    /// Name of the top-level element containing this register, usually the first element of the
-    /// `path`
-    fn periph_name(&self) -> String {
+    /// Name of the top-level element containing this register, usually the peripheral or subsystem
+    /// depending on system architecture
+    fn top_container_name(&self) -> String {
         self.path().first().unwrap().to_owned()
     }
 
@@ -31,7 +31,7 @@ pub trait TestRegister<P> {
         self.path().last().unwrap().to_owned()
     }
 
-    /// The address of the register
+    /// Get the absolute memory address of the register
     fn addr(&self) -> P;
 
     /// The size of the register in bits
@@ -188,7 +188,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
                 reg.reset_value()
                     .map(|value_on_reset| {
                         gen_read_is_reset_val_test(
-                            reg.uid(),
+                            reg.binding_id(),
                             reg.addr(),
                             reg.size(),
                             &value_on_reset,
@@ -225,10 +225,11 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// ```
     pub fn gen_test_def(&self) -> TokenStream {
         let fn_name = self.gen_test_fn_ident();
-        let periph_name_lc: TokenStream = self.0.periph_name().to_lowercase().parse().unwrap();
+        let periph_name_lc: TokenStream =
+            self.0.top_container_name().to_lowercase().parse().unwrap();
         let func = quote!(#periph_name_lc::#fn_name);
         let addr_hex: TokenStream = format!("{:#x}", self.0.addr()).parse().unwrap();
-        let uid = self.0.uid();
+        let uid = self.0.binding_id();
 
         quote! {
             TestCase {

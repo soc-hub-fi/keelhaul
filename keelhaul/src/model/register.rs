@@ -20,24 +20,23 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
     /// Used for generating unique identifiers and symbol names in test cases
-    pub path: RegPath<S>,
-    /// Physical address of the register
-    pub addr: AddrRepr<P, S>,
+    path: RegPath<S>,
+    /// Address of the register
+    addr: AddrRepr<P, S>,
     /// Bit-width of register
-    pub size: u32,
+    size: u32,
     /// Software access rights
     ///
     /// Used for determining what types of tests can be generated.
-    pub access: svd::Access,
-    /// Security privilege required to access register
-    pub protection: Option<svd::Protection>,
+    access: svd::Access,
     /// Expected register value after reset based on source format
     ///
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    pub(crate) reset_value: ResetValue,
-    pub dimensions: Option<svd::DimElement>,
+    reset_value: ResetValue,
+    // TODO: consider support for array-like registers in input
+    //dimensions: Option<svd::DimElement>,
 }
 
 impl<P, S> Register<P, S>
@@ -45,21 +44,26 @@ where
     P: num::CheckedAdd + Copy,
     S: RefSchema,
 {
-    /// Get register's absolute memory address
-    ///
-    /// # Errors
-    ///
-    /// Address overflows
-    pub fn full_addr(&self) -> Result<P, error::AddrOverflowError<P, S>> {
-        self.addr
-            .full()
-            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
+    pub(crate) fn new(
+        path: RegPath<S>,
+        addr: AddrRepr<P, S>,
+        size: u32,
+        access: svd::Access,
+        reset_value: ResetValue,
+    ) -> Self {
+        Self {
+            path,
+            addr,
+            size,
+            access,
+            reset_value,
+        }
     }
 
-    /// Get register's unique identifier
+    /// Get register's unique path identifier
     ///
     /// Constructed from the hierarchical path, e.g., PERIPH-CLUSTER-REG.
-    pub fn uid(&self) -> String {
+    pub fn path_id(&self) -> String {
         self.path.join("-")
     }
 
@@ -99,8 +103,15 @@ where
             .collect_vec()
     }
 
+    /// Get the absolute memory address of the register
+    ///
+    /// # Panics
+    ///
+    /// * address overflows
     fn addr(&self) -> P {
-        self.full_addr()
+        self.addr
+            .full()
+            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
             .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
     }
 
@@ -159,20 +170,6 @@ impl RegPath<RefSchemaSvdV1_2> {
         }
         v.push(RegPathSegment { name: reg });
         Self::new(v)
-    }
-
-    pub fn periph(&self) -> &RegPathSegment {
-        unsafe { self.0.get_unchecked(0) }
-    }
-
-    pub fn reg(&self) -> &RegPathSegment {
-        if self.0.len() == 2 {
-            unsafe { self.0.get_unchecked(1) }
-        } else if self.0.len() == 3 {
-            unsafe { self.0.get_unchecked(2) }
-        } else {
-            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
-        }
     }
 }
 
