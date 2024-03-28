@@ -8,29 +8,7 @@ use quote::{format_ident, quote};
 use thiserror::Error;
 
 /// Type that a test can be generated for
-pub trait TestRegister<P> {
-    /// The path of the register used for human readable identification of the register as part of a
-    /// larger design. Might comprise components such as "peripheral, register cluster, register
-    /// name".
-    fn path(&self) -> Vec<String>;
-
-    /// A human-readable unique identifier for the register, usually the the path that is used to
-    /// access the register.
-    fn binding_id(&self) -> String {
-        self.path().join("_")
-    }
-
-    /// Name of the top-level element containing this register, usually the peripheral or subsystem
-    /// depending on system architecture
-    fn top_container_name(&self) -> String {
-        self.path().first().unwrap().to_owned()
-    }
-
-    /// The name of the register, usually the final element of the `path`
-    fn name(&self) -> String {
-        self.path().last().unwrap().to_owned()
-    }
-
+pub trait TestRegister<P>: model::UniquePath {
     /// Get the absolute memory address of the register
     fn addr(&self) -> P;
 
@@ -42,6 +20,17 @@ pub trait TestRegister<P> {
 
     /// An optional, known reset value
     fn reset_value(&self) -> Option<ValueOnReset<u64>>;
+
+    /// A human-readable unique identifier for the register, usually the the path that is used to
+    /// access the register.
+    fn binding_id(&self) -> String {
+        self.path().join("_")
+    }
+
+    /// The name of the register, usually the final element of the `path`
+    fn name(&self) -> String {
+        self.path().last().unwrap().to_owned()
+    }
 }
 
 #[derive(Clone, Debug)]

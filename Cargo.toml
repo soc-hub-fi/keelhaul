@@ -1,5 +1,5 @@
 [workspace]
-members = ["keelhaul", "register-selftest"]
+members = ["keelhaul", "keelhaul-cli", "register-selftest"]
 resolver = "2"
 
 [workspace.dependencies]
