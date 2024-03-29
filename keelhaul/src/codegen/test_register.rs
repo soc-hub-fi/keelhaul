@@ -102,7 +102,7 @@ pub(crate) struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + '
 impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
-        quote!(reg_ptr)
+        quote!(_reg_ptr)
     }
 
     /// Name for the binding to the value that was read from the register
