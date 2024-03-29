@@ -82,6 +82,13 @@ Support is not planned for:
 
 - [IEEE 1685-2009](https://standards.ieee.org/ieee/1685/4013/) (IP-XACT 2009)
 
+## Limitations
+
+- While CMSIS-SVD allows specifying otherwise, the `keelhaul` currently assumes
+  that each individual address uniquely selects exactly 8-bits, as this is the
+  most common case in contemporary architectures. This limitation could be
+  lifted.
+
 ## Contributing
 
 We are in the process of adapting the library for more use cases across the SoC Hub project. Expect major changes to the
