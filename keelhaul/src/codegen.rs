@@ -1,8 +1,10 @@
 //! Generate test cases from types implementing [`TestRegister`]
 
 // Codegen API
+pub use self::test_memory::{gen_memtest_module, MemTestStrategy};
 pub use self::test_register::{ParseTestKindError, TestRegister, ValueOnReset};
 
+mod test_memory;
 mod test_register;
 
 use std::{

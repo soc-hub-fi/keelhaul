@@ -1,13 +1,15 @@
 //! Exposes functionality supported by this crate
 
 // Export API types
+pub use crate::codegen::MemTestStrategy;
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
+use crate::FailureImplKind;
 pub use error::ApiError;
 pub use svd::ValidateLevel;
 
 mod error;
 
-use std::{path, str};
+use std::{ops, path, str};
 
 use crate::{
     analysis, codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig,
@@ -250,4 +252,26 @@ pub fn list_top(
         .collect_vec();
 
     Ok(tops_and_counts)
+}
+
+pub fn generate_memtests(
+    test_ranges: &[ops::Range<u64>],
+    strategy: &MemTestStrategy,
+    on_fail: &FailureImplKind,
+) -> String {
+    #[allow(clippy::let_and_return)]
+    codegen::gen_memtest_module(test_ranges, 8, strategy, on_fail).to_string()
+}
+
+/// # Arguments
+///
+/// * `format_output` - Format the output using `rustfmt`
+#[cfg(feature = "rustfmt")]
+pub fn generate_memtests_with_format(
+    test_ranges: &[ops::Range<u64>],
+    strategy: &MemTestStrategy,
+    on_fail: &FailureImplKind,
+) -> String {
+    let s = generate_memtests(test_ranges, strategy, on_fail);
+    apply_fmt(s)
 }

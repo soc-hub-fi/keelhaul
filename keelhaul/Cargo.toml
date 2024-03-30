@@ -31,3 +31,4 @@ svd = { package = "svd-rs", version = "0.14.8", features = [
 ] }
 rustfmt = { version = "0.10.0", optional = true }
 chrono = { version = "0.4.37", default-features = false, features = ["now"] }
+indoc = "2.0.5"
