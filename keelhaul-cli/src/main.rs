@@ -1,4 +1,4 @@
-use std::{env, io, path};
+use std::{env, io, ops, path};
 
 use anyhow::{anyhow, Context};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -66,6 +66,22 @@ enum Commands {
         /// that the register values match with reset values on reset.
         #[arg(long, action = clap::ArgAction::SetTrue)]
         ignore_reset_masks: bool,
+
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        no_format: bool,
+    },
+    /// Generate memory tests
+    #[command(name = "gen-memtest")]
+    GenMemTest {
+        #[arg(long = "range", required = true, num_args = 2, action = clap::ArgAction::Append, value_parser = clap_num::maybe_hex::<u64>)]
+        ranges: Vec<u64>,
+        /// How to test the memory
+        #[arg(long, default_value = "all")]
+        strategy: MemTestStrategy,
+        /// What to do when a test fails
+        #[arg(long)]
+        on_fail: Option<FailureImplKind>,
+
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_format: bool,
     },
@@ -100,6 +116,14 @@ impl From<FailureImplKind> for keelhaul::FailureImplKind {
     }
 }
 
+impl ops::Deref for FailureImplKind {
+    type Target = keelhaul::FailureImplKind;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl ValueEnum for FailureImplKind {
     fn value_variants<'a>() -> &'a [Self] {
         &[
@@ -115,6 +139,32 @@ impl ValueEnum for FailureImplKind {
             keelhaul::FailureImplKind::None => Some(PossibleValue::new("ignore")),
             keelhaul::FailureImplKind::Panic => Some(PossibleValue::new("panic")),
             keelhaul::FailureImplKind::ReturnError => Some(PossibleValue::new("error")),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct MemTestStrategy(keelhaul::MemTestStrategy);
+
+impl From<MemTestStrategy> for keelhaul::MemTestStrategy {
+    fn from(value: MemTestStrategy) -> Self {
+        value.0
+    }
+}
+
+impl ValueEnum for MemTestStrategy {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self(keelhaul::MemTestStrategy::All),
+            Self(keelhaul::MemTestStrategy::BoundariesOnly),
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        use clap::builder::PossibleValue;
+        match self.0 {
+            keelhaul::MemTestStrategy::All => Some(PossibleValue::new("all")),
+            keelhaul::MemTestStrategy::BoundariesOnly => Some(PossibleValue::new("boundaries")),
         }
     }
 }
@@ -272,6 +322,35 @@ fn main() -> anyhow::Result<()> {
             )?,
             Commands::Coverage { .. } => {
                 todo!()
+            }
+            Commands::GenMemTest {
+                ranges,
+                strategy,
+                on_fail,
+                no_format,
+            } => {
+                let ranges = ranges
+                    .chunks(2)
+                    .map(|chunk| chunk[0]..(chunk[0] + chunk[1]))
+                    .collect::<Vec<_>>();
+                let output = if *no_format {
+                    keelhaul::generate_memtests(
+                        &ranges,
+                        &strategy.0,
+                        on_fail
+                            .as_ref()
+                            .unwrap_or(&FailureImplKind(keelhaul::FailureImplKind::ReturnError)),
+                    )
+                } else {
+                    keelhaul::generate_memtests_with_format(
+                        &ranges,
+                        &strategy.0,
+                        on_fail
+                            .as_ref()
+                            .unwrap_or(&FailureImplKind(keelhaul::FailureImplKind::ReturnError)),
+                    )
+                };
+                println!("{output}");
             }
         }
     } else {

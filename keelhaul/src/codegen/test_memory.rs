@@ -6,7 +6,7 @@ use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
-// TODO: also test arrays (see codegen)
+// TODO: generate also test arrays (see codegen)
 
 #[derive(Clone, Debug)]
 pub enum MemTestStrategy {
