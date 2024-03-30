@@ -1,4 +1,4 @@
-name: Validate
+name: Build & run headsail selftest
 
 on:
   push:
