@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-keelhaul:
+  setup:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -26,6 +26,11 @@ jobs:
         cargo --version --verbose
         rustc --version
         cargo clippy --version
+
+  check-keelhaul:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
     - name: Lint
       working-directory: ./keelhaul
       run: |
@@ -38,4 +43,22 @@ jobs:
         cargo test --all
     - name: Build
       working-directory: ./keelhaul
+      run: cargo build --release
+
+  check-keelhaul-cli:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+    - name: Lint
+      working-directory: ./keelhaul-cli
+      run: |
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+    - name: Test
+      working-directory: ./keelhaul-cli
+      run: |
+        cargo check
+        cargo test --all
+    - name: Build
+      working-directory: ./keelhaul-cli
       run: cargo build --release
