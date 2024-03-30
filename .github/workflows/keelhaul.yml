@@ -1,0 +1,36 @@
+name: Build & lint keelhaul
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CI: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-keelhaul:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Update toolchain
+      run: |
+        rustup update
+        rustup component add clippy
+    - name: Toolchain info
+      run: |
+        cargo --version --verbose
+        rustc --version
+        cargo clippy --version
+    - name: Lint
+      working-directory: ./keelhaul
+      run: |
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+    - name: Build
+      working-directory: ./keelhaul
+      run: cargo build --release
