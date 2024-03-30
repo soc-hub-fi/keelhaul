@@ -47,7 +47,8 @@ enum Commands {
         has_reset_value: bool,
     },
     /// Generate metadata tests
-    Generate {
+    #[command(name = "gen-regtest")]
+    GenRegTest {
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
         tests_to_generate: Vec<TestKind>,
@@ -254,7 +255,7 @@ fn main() -> anyhow::Result<()> {
                     keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
                 println!("{output}");
             }
-            Commands::Generate {
+            Commands::GenRegTest {
                 tests_to_generate,
                 on_fail,
                 derive_debug,
