@@ -279,8 +279,9 @@ pub(crate) fn bit_count_to_rust_uint_type_str(bit_count: u32) -> &'static str {
 
 /// Collection of all test cases for this build.
 pub struct TestCases {
-    pub preamble: String,
-    pub test_cases: Vec<String>,
+    pub preamble: TokenStream,
+    pub test_cases: Vec<TokenStream>,
+    test_case_array: TokenStream,
     pub test_case_count: usize,
 }
 
@@ -298,7 +299,10 @@ impl TestCases {
         registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
     ) -> Self {
-        let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug).to_string();
+        let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug)
+            .to_string()
+            .parse()
+            .unwrap();
 
         let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();
@@ -325,20 +329,31 @@ impl TestCases {
             pub static TEST_CASES: [TestCase; #test_case_count] = [ #test_defs_combined ];
         };
 
-        let mod_strings = create_modules(test_fns_and_defs_by_periph)
-            .into_iter()
-            .map(|ts| ts.to_string())
-            .collect::<String>();
+        let test_cases = create_modules(test_fns_and_defs_by_periph);
 
         Self {
             preamble,
-            test_cases: vec![mod_strings, format!("{test_case_array}")],
+            test_cases,
+            test_case_array,
             test_case_count,
         }
     }
 
-    #[must_use]
-    pub fn to_module_string(&self) -> String {
-        self.preamble.clone() + "\n" + &self.test_cases.join("\n")
+    pub fn to_tokens(&self) -> TokenStream {
+        let TestCases {
+            preamble,
+            test_cases,
+            test_case_array,
+            ..
+        } = self;
+        quote! {
+            #preamble
+
+            #(
+                #test_cases
+            )*
+
+            #test_case_array
+        }
     }
 }

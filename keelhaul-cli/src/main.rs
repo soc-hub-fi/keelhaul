@@ -65,6 +65,8 @@ enum Commands {
         /// that the register values match with reset values on reset.
         #[arg(long, action = clap::ArgAction::SetTrue)]
         ignore_reset_masks: bool,
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        no_format: bool,
     },
 }
 
@@ -257,6 +259,7 @@ fn main() -> anyhow::Result<()> {
                 on_fail,
                 derive_debug,
                 ignore_reset_masks,
+                no_format,
             } => generate(
                 arch,
                 tests_to_generate,
@@ -264,6 +267,7 @@ fn main() -> anyhow::Result<()> {
                 *ignore_reset_masks,
                 on_fail.as_ref(),
                 sources,
+                *no_format,
             )?,
             Commands::Coverage { .. } => {
                 todo!()
@@ -283,6 +287,7 @@ fn generate(
     ignore_reset_masks: bool,
     on_fail: Option<&FailureImplKind>,
     sources: Vec<keelhaul::ModelSource>,
+    no_format: bool,
 ) -> Result<(), anyhow::Error> {
     let mut config = keelhaul::TestConfig::new(arch)
         .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -292,7 +297,12 @@ fn generate(
     if let Some(on_fail) = on_fail {
         config = config.on_fail(on_fail.clone().into());
     }
-    let output = keelhaul::generate_tests(&sources, arch, &config, &keelhaul::Filters::all())?;
+    let filters = keelhaul::Filters::all();
+    let output = if no_format {
+        keelhaul::generate_tests(&sources, arch, &config, &filters)?
+    } else {
+        keelhaul::generate_tests_with_format(&sources, arch, &config, &filters)?
+    };
     println!("{output}");
     Ok(())
 }

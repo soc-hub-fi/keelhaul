@@ -162,6 +162,26 @@ fn parse_registers_for_analysis(
     })
 }
 
+#[cfg(feature = "rustfmt")]
+fn apply_fmt(input: String) -> String {
+    info!("Applying rustfmt");
+    let mut buf = Vec::new();
+
+    // FIXME: allow supplying config from API
+    rustfmt::format_input(
+        rustfmt::Input::Text(input),
+        &rustfmt::config::Config::default(),
+        Some(&mut buf),
+    )
+    .unwrap()
+    .1
+    .into_iter()
+    .next()
+    .unwrap()
+    .1
+    .to_string()
+}
+
 pub fn generate_tests(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
@@ -181,32 +201,18 @@ pub fn generate_tests(
     // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
 
-    let s = test_cases.to_module_string();
-    let s = match () {
-        #[cfg(feature = "rustfmt")]
-        () => {
-            info!("Applying rustfmt");
-            let mut buf = Vec::new();
+    Ok(test_cases.to_tokens().to_string())
+}
 
-            // FIXME: allow supplying config from API
-            rustfmt::format_input(
-                rustfmt::Input::Text(s),
-                &rustfmt::config::Config::default(),
-                Some(&mut buf),
-            )
-            .unwrap()
-            .1
-            .into_iter()
-            .next()
-            .unwrap()
-            .1
-            .to_string()
-        }
-        #[cfg(not(feature = "rustfmt"))]
-        () => s,
-    };
-
-    Ok(s)
+#[cfg(feature = "rustfmt")]
+pub fn generate_tests_with_format(
+    sources: &[ModelSource],
+    arch_ptr_size: ArchWidth,
+    test_cfg: &TestConfig,
+    filters: &Filters,
+) -> Result<String, ApiError> {
+    let s = generate_tests(sources, arch_ptr_size, test_cfg, filters)?;
+    Ok(apply_fmt(s))
 }
 
 pub fn count_registers_svd(
