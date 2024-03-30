@@ -12,8 +12,7 @@ env:
   BIN: headsail-selftest
 
 jobs:
-  build-headsail-selftest:
-
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,8 +32,8 @@ jobs:
         if-no-files-found: error
         retention-days: 14
 
-  run-headsail-selftest:
-    needs: build-headsail-selftest
+  run:
+    needs: build
 
     runs-on: ubuntu-latest
     container:
