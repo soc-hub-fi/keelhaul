@@ -1,0 +1,3 @@
+Generated using:
+
+`cargo deps --all-deps --no-transitive-deps | dot -Tpng > graph.png`
