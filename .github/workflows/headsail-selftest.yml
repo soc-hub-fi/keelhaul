@@ -9,7 +9,7 @@ on:
 env:
   CI: 1
   CARGO_TERM_COLOR: always
-  HEADSAIL_SELFTEST_BIN: headsail-selftest
+  BIN: headsail-selftest
 
 jobs:
   build-headsail-selftest:
@@ -28,7 +28,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: $HEADSAIL_SELFTEST_BIN
+        name: $BIN
         path: ./examples/headsail-selftest/target/riscv32imc-unknown-none-elf/release/headsail-selftest
         if-no-files-found: error
         retention-days: 14
@@ -54,11 +54,11 @@ jobs:
     - name: Download artifact
       uses: actions/download-artifact@v4
       with:
-        name: $HEADSAIL_SELFTEST_BIN
+        name: $BIN
         path: ./headsail-vp/
     - name: Create Renode peripheral symlinks
       working-directory: ./headsail-vp/
       run: ln -s $(readlink -f "./vp/devel/python_peripherals/DLA.py") "$RENODE_PATH/scripts/pydev/DLA.py"
     - name: Run Headsail selftest
       working-directory: ./headsail-vp/
-      run: ./scripts/run_on_sysctrl.sh $(readlink -f $HEADSAIL_SELFTEST_BIN)
+      run: ./scripts/run_on_sysctrl.sh $(readlink -f $BIN)
