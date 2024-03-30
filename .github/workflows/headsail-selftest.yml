@@ -14,14 +14,27 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: true
-    - name: Install requirements
-      run: rustup +nightly target add riscv32imc-unknown-none-elf
-    - name: Build Headsail selftest
+    - name: Update toolchain
+      run: |
+        rustup update
+        rustup component add clippy
+        rustup install nightly
+        rustup +nightly target add riscv32imc-unknown-none-elf
+    - name: Toolchain info
+      run: |
+        cargo --version --verbose
+        rustc --version
+        cargo clippy --version
+    - name: Lint
+      working-directory: ./examples/headsail-selftest
+      run: |
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+    - name: Build
       working-directory: ./examples/headsail-selftest
       run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) ARCH_PTR_BYTES=8 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
     - name: Upload artifact
