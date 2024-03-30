@@ -31,6 +31,11 @@ jobs:
       run: |
         cargo fmt -- --check
         cargo clippy -- -D warnings
+    - name: Test
+      working-directory: ./keelhaul
+      run: |
+        cargo check
+        cargo test --all
     - name: Build
       working-directory: ./keelhaul
       run: cargo build --release
