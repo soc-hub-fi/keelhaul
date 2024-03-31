@@ -156,7 +156,13 @@ fn parse_registers(
                     }
                     .map_err(Box::new)?
                 } else {
-                    todo!()
+                    crate::frontend::svd_parser::parse_svd_into_registers(
+                        src.path(),
+                        arch.into(),
+                        filters,
+                        vlevel,
+                    )
+                    .map_err(Box::new)?
                 };
                 registers.push(regs)
             }
