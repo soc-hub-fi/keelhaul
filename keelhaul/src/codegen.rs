@@ -315,10 +315,7 @@ impl TestCases {
         registers: &Registers<P, model::RefSchemaSvdV1_2>,
         config: &TestConfig,
     ) -> Self {
-        let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug)
-            .to_string()
-            .parse()
-            .unwrap();
+        let preamble = gen_preamble(config.arch_ptr_size.into(), config.derive_debug);
 
         let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();
