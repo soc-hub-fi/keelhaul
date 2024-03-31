@@ -1,38 +1,55 @@
 use std::{env, io, ops, path};
 
 use anyhow::{anyhow, Context};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None, author = clap::crate_authors!(), subcommand_required = true)]
 struct Cli {
-    /// CMSIS-SVD source file for memory map metadata
-    #[arg(group = "input", long, required = true, action = clap::ArgAction::Append)]
-    svd: Vec<String>,
-
-    /// IEEE 1685 source file for memory map metadata
-    #[arg(group = "input", long, required = true, action = clap::ArgAction::Append)]
-    ipxact: Vec<String>,
-
-    /// Number of bits used to represent addresses on the target CPUs architecture
-    #[arg(long, value_enum, required = true)]
-    arch: ArchWidth,
-
-    #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-    validate_level: ValidateLevel,
-
     #[command(subcommand)]
     command: Option<Command>,
+}
+
+#[derive(Args, Clone)]
+#[group(id = "input", required = true)]
+struct InputFiles {
+    /// CMSIS-SVD source file for memory map metadata
+    #[arg(long, action = clap::ArgAction::Append)]
+    svd: Vec<String>,
+
+    /// A directory of IEEE 1685 source files for memory map metadata
+    #[arg(long, action = clap::ArgAction::Append)]
+    ipxact_dir: Vec<String>,
 }
 
 #[derive(Subcommand)]
 enum Command {
     /// Run the Keelhaul parser without doing anything
-    DryRun,
+    DryRun {
+        #[command(flatten)]
+        input: InputFiles,
+
+        /// Number of bits used to represent addresses on the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: ArchWidth,
+
+        #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+        validate_level: ValidateLevel,
+    },
     /// List all top level items (peripherals or subsystems) in the supplied sources
     ///
     /// Peripherals or subsystems containing zero registers are omitted.
     LsTop {
+        #[command(flatten)]
+        input: InputFiles,
+
+        /// Number of bits used to represent addresses on the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: ArchWidth,
+
+        #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+        validate_level: ValidateLevel,
+
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_count: bool,
@@ -40,8 +57,28 @@ enum Command {
         #[arg(long, default_value = "alpha")]
         sorting: Sorting,
     },
-    CountRegisters {},
+    CountRegisters {
+        #[command(flatten)]
+        input: InputFiles,
+
+        /// Number of bits used to represent addresses on the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: ArchWidth,
+
+        #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+        validate_level: ValidateLevel,
+    },
     Coverage {
+        #[command(flatten)]
+        input: InputFiles,
+
+        /// Number of bits used to represent addresses on the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: ArchWidth,
+
+        #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+        validate_level: ValidateLevel,
+
         /// Describes how many of the input registers supply a known reset value which can be tested
         /// for
         #[arg(long)]
@@ -50,6 +87,16 @@ enum Command {
     /// Generate metadata tests
     #[command(name = "gen-regtest")]
     GenRegTest {
+        #[command(flatten)]
+        input: InputFiles,
+
+        /// Number of bits used to represent addresses on the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: ArchWidth,
+
+        #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
+        validate_level: ValidateLevel,
+
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
         tests_to_generate: Vec<TestKind>,
@@ -268,15 +315,13 @@ fn string_to_path(s: &String) -> Result<path::PathBuf, io::Error> {
         .canonicalize()
 }
 
-fn get_sources(cli: &Cli) -> anyhow::Result<Vec<keelhaul::ModelSource>> {
-    let mut sources = Vec::with_capacity(cli.svd.len() + cli.ipxact.len());
+fn get_sources(input: &InputFiles) -> anyhow::Result<Vec<keelhaul::ModelSource>> {
+    let mut sources = Vec::with_capacity(input.svd.len());
 
-    sources.extend(cli.svd.iter().map(|s| (s, keelhaul::SourceFormat::Svd)));
-    sources.extend(
-        cli.ipxact
-            .iter()
-            .map(|s| (s, keelhaul::SourceFormat::Ieee1685)),
-    );
+    if !input.ipxact_dir.is_empty() {
+        anyhow::bail!("IEE 1685/IP-XACT is not supported");
+    }
+    sources.extend(input.svd.iter().map(|s| (s, keelhaul::SourceFormat::Svd)));
 
     let sources = sources
         .into_iter()
@@ -296,12 +341,15 @@ fn get_sources(cli: &Cli) -> anyhow::Result<Vec<keelhaul::ModelSource>> {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let sources = get_sources(&cli)?;
-    let arch = cli.arch.into();
-
     if let Some(cmd) = &cli.command {
         match cmd {
-            Command::DryRun => {
+            Command::DryRun {
+                input,
+                arch,
+                validate_level,
+            } => {
+                let sources = get_sources(input)?;
+                let arch = (*arch).into();
                 match keelhaul::dry_run(&sources, arch).with_context(|| {
                     format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
                 }) {
@@ -309,8 +357,26 @@ fn main() -> anyhow::Result<()> {
                     Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
                 }
             }
-            Command::LsTop { no_count, sorting } => ls_top(&sources, arch, *sorting, *no_count)?,
-            Command::CountRegisters {} => {
+            Command::LsTop {
+                no_count,
+                sorting,
+                input,
+                arch,
+                validate_level,
+            } => {
+                let sources = get_sources(input)?;
+                let arch = (*arch).into();
+
+                ls_top(&sources, arch, *sorting, *no_count)?
+            }
+            Command::CountRegisters {
+                input,
+                arch,
+                validate_level,
+            } => {
+                let sources = get_sources(input)?;
+                let arch = (*arch).into();
+
                 let output =
                     keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
                 println!("{output}");
@@ -322,6 +388,9 @@ fn main() -> anyhow::Result<()> {
                 ignore_reset_masks,
                 no_format,
                 use_zero_as_default_reset,
+                input,
+                arch,
+                validate_level,
             } => {
                 let mut config = keelhaul::CodegenConfig::default()
                     .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -331,6 +400,9 @@ fn main() -> anyhow::Result<()> {
                 if let Some(on_fail) = on_fail {
                     config = config.on_fail(on_fail.clone().into());
                 }
+
+                let sources = get_sources(input)?;
+                let arch = (*arch).into();
 
                 generate(
                     arch,
