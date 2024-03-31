@@ -82,7 +82,30 @@ Support is not planned for:
 
 - [IEEE 1685-2009](https://standards.ieee.org/ieee/1685/4013/) (IP-XACT 2009)
 
+## Limitations
+
+- While CMSIS-SVD allows specifying otherwise, the `keelhaul` currently assumes
+  that each individual address uniquely selects exactly 8-bits, as this is the
+  most common case in contemporary architectures. This limitation could be
+  lifted.
+
 ## Contributing
 
 We are in the process of adapting the library for more use cases across the SoC Hub project. Expect major changes to the
 project architecture. The libary is an unstable target and it may be difficult to integrate changes at this point.
+
+## VS Code settings for rust-analyzer
+
+While we support the `register-selftest", the environment variable based configuration utility, you
+will need this in your VS Code settings to allow the linter to run without failing.
+
+```json
+{
+    "rust-analyzer.cargo.extraEnv": {
+        "ARCH_PTR_BYTES": "4",
+        "SVD_PATH": "/abs/path/to/keelhaul/data/test.svd",
+    },
+    // Use clippy
+    "rust-analyzer.check.command": "clippy",
+}
+```

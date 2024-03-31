@@ -47,7 +47,8 @@ enum Commands {
         has_reset_value: bool,
     },
     /// Generate metadata tests
-    Generate {
+    #[command(name = "gen-regtest")]
+    GenRegTest {
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
         tests_to_generate: Vec<TestKind>,
@@ -65,10 +66,12 @@ enum Commands {
         /// that the register values match with reset values on reset.
         #[arg(long, action = clap::ArgAction::SetTrue)]
         ignore_reset_masks: bool,
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        no_format: bool,
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum Sorting {
     Preserve,
     Alpha,
@@ -236,60 +239,96 @@ fn main() -> anyhow::Result<()> {
     let sources = get_sources(&cli)?;
     let arch = cli.arch.into();
 
-    match &cli.command {
-        Some(Commands::DryRun) => {
-            match keelhaul::dry_run(&sources, arch).with_context(|| {
-                format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
-            }) {
-                Ok(_) => println!("keelhaul: dry run completed successfully"),
-                Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
-            }
-        }
-        Some(Commands::LsTop { no_count, sorting }) => {
-            let mut top_and_count = keelhaul::list_top(&sources, arch)?;
-            if top_and_count.is_empty() {
-                println!("keelhaul: no peripherals found in input");
-            }
-            match sorting {
-                Sorting::Preserve => { /* do nothing */ }
-                Sorting::Alpha => top_and_count.sort(),
-            };
-            let longest = top_and_count.iter().map(|(s, _)| s.len()).max().unwrap();
-            for (top, count) in top_and_count {
-                if *no_count {
-                    println!("{top}");
-                } else {
-                    println!("{top: <longest$} {count}");
+    if let Some(cmd) = &cli.command {
+        match cmd {
+            Commands::DryRun => {
+                match keelhaul::dry_run(&sources, arch).with_context(|| {
+                    format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
+                }) {
+                    Ok(_) => println!("keelhaul: dry run completed successfully"),
+                    Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
                 }
             }
-        }
-        Some(Commands::CountRegisters {}) => {
-            let output = keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
-            println!("{output}");
-        }
-        Some(Commands::Generate {
-            tests_to_generate,
-            on_fail,
-            derive_debug,
-            ignore_reset_masks,
-        }) => {
-            let mut config = keelhaul::TestConfig::new(arch)
-                .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
-                .unwrap()
-                .derive_debug(*derive_debug)
-                .ignore_reset_masks(*ignore_reset_masks);
-            if let Some(on_fail) = on_fail.as_ref() {
-                config = config.on_fail(on_fail.clone().into());
+            Commands::LsTop { no_count, sorting } => ls_top(&sources, arch, *sorting, *no_count)?,
+            Commands::CountRegisters {} => {
+                let output =
+                    keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
+                println!("{output}");
             }
-            let output =
-                keelhaul::generate_tests(&sources, arch, &config, &keelhaul::Filters::all())?;
-            println!("{output}");
+            Commands::GenRegTest {
+                tests_to_generate,
+                on_fail,
+                derive_debug,
+                ignore_reset_masks,
+                no_format,
+            } => generate(
+                arch,
+                tests_to_generate,
+                *derive_debug,
+                *ignore_reset_masks,
+                on_fail.as_ref(),
+                sources,
+                *no_format,
+            )?,
+            Commands::Coverage { .. } => {
+                todo!()
+            }
         }
-        Some(Commands::Coverage { .. }) => {
-            todo!()
-        }
-        None => {}
+    } else {
+        println!("Nothing to do. Please issue a subcommand.")
     }
 
+    Ok(())
+}
+
+fn generate(
+    arch: keelhaul::ArchWidth,
+    tests_to_generate: &[TestKind],
+    derive_debug: bool,
+    ignore_reset_masks: bool,
+    on_fail: Option<&FailureImplKind>,
+    sources: Vec<keelhaul::ModelSource>,
+    no_format: bool,
+) -> Result<(), anyhow::Error> {
+    let mut config = keelhaul::TestConfig::new(arch)
+        .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
+        .unwrap()
+        .derive_debug(derive_debug)
+        .ignore_reset_masks(ignore_reset_masks);
+    if let Some(on_fail) = on_fail {
+        config = config.on_fail(on_fail.clone().into());
+    }
+    let filters = keelhaul::Filters::all();
+    let output = if no_format {
+        keelhaul::generate_tests(&sources, arch, &config, &filters)?
+    } else {
+        keelhaul::generate_tests_with_format(&sources, arch, &config, &filters)?
+    };
+    println!("{output}");
+    Ok(())
+}
+
+fn ls_top(
+    sources: &[keelhaul::ModelSource],
+    arch: keelhaul::ArchWidth,
+    sorting: Sorting,
+    no_count: bool,
+) -> Result<(), anyhow::Error> {
+    let mut top_and_count = keelhaul::list_top(sources, arch)?;
+    if top_and_count.is_empty() {
+        println!("keelhaul: no peripherals found in input");
+    }
+    match sorting {
+        Sorting::Preserve => { /* do nothing */ }
+        Sorting::Alpha => top_and_count.sort(),
+    };
+    let longest = top_and_count.iter().map(|(s, _)| s.len()).max().unwrap();
+    for (top, count) in top_and_count {
+        if no_count {
+            println!("{top}");
+        } else {
+            println!("{top: <longest$} {count}");
+        }
+    }
     Ok(())
 }
