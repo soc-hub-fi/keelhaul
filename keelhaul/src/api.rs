@@ -266,7 +266,6 @@ pub fn generate_memtests(
     strategy: &MemTestStrategy,
     on_fail: &FailureImplKind,
 ) -> String {
-    #[allow(clippy::let_and_return)]
     codegen::gen_memtest_module(test_ranges, 8, strategy, on_fail).to_string()
 }
 
