@@ -170,18 +170,25 @@ fn apply_fmt(input: String) -> String {
     let mut buf = Vec::new();
 
     // FIXME: allow supplying config from API
-    rustfmt::format_input(
-        rustfmt::Input::Text(input),
+    let formatted = rustfmt::format_input(
+        rustfmt::Input::Text(input.clone()),
         &rustfmt::config::Config::default(),
         Some(&mut buf),
-    )
-    .unwrap()
-    .1
-    .into_iter()
-    .next()
-    .unwrap()
-    .1
-    .to_string()
+    );
+
+    match formatted {
+        Ok((_, formatted, _)) => match formatted.into_iter().next() {
+            Some((_name, output)) => output.to_string(),
+            None => {
+                log::error!("rustfmt output was none, returning unformatted output.");
+                input
+            }
+        },
+        Err(e) => {
+            log::error!("rustfmt failed, returning unformatted output. Error: {e:?}");
+            input
+        }
+    }
 }
 
 pub fn generate_tests(
