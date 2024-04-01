@@ -53,7 +53,10 @@ fn gen_preamble(use_ptr: bool) -> TokenStream {
         quote!()
     };
     quote! {
-        #![doc = #mod_doc]
+        // Module documentation is provided via `_DOC` symbol. Do not use inner attributes in
+        // generated code: https://github.com/rust-lang/rfcs/issues/752
+        #[doc = #mod_doc]
+        const _DOC: () = ();
 
         #imports
     }

@@ -50,7 +50,10 @@ fn gen_preamble(arch: model::PtrSize, error_derive_debug: bool) -> TokenStream {
         .collect();
 
     quote! {
-        #![doc = #mod_doc]
+        // Module documentation is provided via `_DOC` symbol. Do not use inner attributes in
+        // generated code: https://github.com/rust-lang/rfcs/issues/752
+        #[doc = #mod_doc]
+        const _DOC: () = ();
 
         use core::ptr::*;
 
