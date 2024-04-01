@@ -1,4 +1,4 @@
-name: Build & run headsail selftest
+name: headsail-selftest
 
 on:
   push:
