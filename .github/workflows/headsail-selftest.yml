@@ -14,6 +14,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ARCH_PTR_BYTES: 8
+      INCLUDE_SYMS_REGEX: "^HPC"
     steps:
     - uses: actions/checkout@v4
       with:
@@ -34,10 +37,10 @@ jobs:
       working-directory: ./examples/headsail-selftest
       run: |
         cargo fmt -- --check
-        cargo clippy -- -D warnings
+        SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) cargo clippy -- -D warnings
     - name: Build
       working-directory: ./examples/headsail-selftest
-      run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) ARCH_PTR_BYTES=8 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
+      run: SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) cargo +nightly build --release
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
