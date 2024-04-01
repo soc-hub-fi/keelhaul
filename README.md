@@ -44,11 +44,11 @@ Use these steps to bring up support for Keelhaul in an SoC project:
 ## Further build instructions
 
 - Make sure everything compiles:
-  - `SVD_PATH=$PWD/data/test.svd cargo check`
+  - `SVD_PATH=$PWD/data/test.svd ARCH_PTR_BYTES=8 cargo check`
 - Build test cases.
-  - `SVD_PATH=$PWD/data/test.svd just build`
+  - `SVD_PATH=$PWD/data/test.svd ARCH_PTR_BYTES=8 just build`
 - Build and run (**will cause segmentation fault 8-)**).
-  - `SVD_PATH=$PWD/data/test.svd just run`
+  - `SVD_PATH=$PWD/data/test.svd ARCH_PTR_BYTES=8 just run`
 
 File with test cases can be found at `target/<debug | release>/build/register-selftest-<hash>/out/register_selftest.rs`.
 
