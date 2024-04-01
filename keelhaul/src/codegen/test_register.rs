@@ -5,7 +5,6 @@ use crate::{
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use thiserror::Error;
 
 /// Type that a test can be generated for
 pub trait TestRegister<P>: model::UniquePath {
@@ -46,10 +45,6 @@ impl<T> ValueOnReset<T> {
         Self { value, mask }
     }
 }
-
-#[derive(Error, Debug)]
-#[error("cannot parse test kind from {0}")]
-pub struct ParseTestKindError(pub(crate) String);
 
 impl crate::api::TestKind {
     /// Error variant for an error enumeration, including the comma at end

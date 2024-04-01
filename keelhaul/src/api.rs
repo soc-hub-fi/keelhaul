@@ -4,16 +4,14 @@
 pub use crate::codegen::MemTestStrategy;
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 use crate::FailureImplKind;
-pub use error::ApiError;
+pub use error::{ApiError, ParseTestKindError};
 pub use svd::ValidateLevel;
 
 mod error;
 
 use std::{ops, path, str};
 
-use crate::{
-    analysis, codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig,
-};
+use crate::{analysis, codegen, error::SvdParseError, model, Filters, TestConfig};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;

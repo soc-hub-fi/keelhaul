@@ -17,3 +17,7 @@ pub enum NotImplementedError {
     #[error("unsupported format '{1:?}' for path {0:?}")]
     UnsupportedSourceFormat(path::PathBuf, SourceFormat),
 }
+
+#[derive(Error, Debug)]
+#[error("cannot parse test kind from {0}")]
+pub struct ParseTestKindError(pub(crate) String);

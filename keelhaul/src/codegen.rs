@@ -2,7 +2,7 @@
 
 // Codegen API
 pub use self::test_memory::{gen_memtest_module, MemTestStrategy};
-pub use self::test_register::{ParseTestKindError, TestRegister, ValueOnReset};
+pub use self::test_register::{TestRegister, ValueOnReset};
 
 mod test_memory;
 mod test_register;
