@@ -14,9 +14,6 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
     - name: Update toolchain
       run: |
         rustup update
@@ -31,6 +28,9 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: Lint
       working-directory: ./keelhaul
       run: |
@@ -49,6 +49,9 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: Lint
       working-directory: ./keelhaul-cli
       run: |
