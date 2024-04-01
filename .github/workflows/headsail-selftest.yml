@@ -24,7 +24,7 @@ jobs:
         rustup component add clippy
         rustup install nightly
         rustup +nightly target add riscv32imc-unknown-none-elf
-        rustup +nightly component add rustfmt
+        rustup +nightly component add rustfmt clippy
     - name: Toolchain info
       run: |
         cargo --version --verbose
