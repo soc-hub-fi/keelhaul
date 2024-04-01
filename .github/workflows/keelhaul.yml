@@ -40,7 +40,7 @@ jobs:
       working-directory: ./keelhaul
       run: |
         cargo check
-        cargo test --all
+        cargo test -p keelhaul
     - name: Build
       working-directory: ./keelhaul
       run: cargo build --release
@@ -61,7 +61,7 @@ jobs:
       working-directory: ./keelhaul-cli
       run: |
         cargo check
-        cargo test --all
+        cargo test -p keelhaul-cli
     - name: Build
       working-directory: ./keelhaul-cli
       run: cargo build --release
