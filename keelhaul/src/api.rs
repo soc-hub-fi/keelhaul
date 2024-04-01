@@ -3,7 +3,6 @@
 // Export API types
 pub use crate::codegen::MemTestStrategy;
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
-use crate::FailureImplKind;
 pub use error::{ApiError, ParseTestKindError};
 pub use svd::ValidateLevel;
 
@@ -11,7 +10,7 @@ mod error;
 
 use std::{ops, path, str};
 
-use crate::{analysis, codegen, error::SvdParseError, model, Filters, TestConfig};
+use crate::{analysis, codegen, error::SvdParseError, model, FailureImplKind, Filters, TestConfig};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
@@ -195,14 +194,14 @@ pub fn generate_tests(
     test_cfg: &TestConfig,
     filters: &Filters,
 ) -> Result<String, ApiError> {
-    let test_cases: codegen::TestCases = match arch_ptr_size {
+    let test_cases: codegen::RegTestCases = match arch_ptr_size {
         ArchWidth::U32 => {
             let registers = parse_registers::<u32>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
+            codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
         ArchWidth::U64 => {
             let registers = parse_registers::<u64>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
+            codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
     };
     // FIXME: it would be good to have this message prior to generation
