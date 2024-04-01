@@ -369,7 +369,7 @@ fn generate(
     sources: Vec<keelhaul::ModelSource>,
     no_format: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut config = keelhaul::TestConfig::new(arch)
+    let mut config = keelhaul::TestConfig::new()
         .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
         .unwrap()
         .derive_debug(derive_debug)

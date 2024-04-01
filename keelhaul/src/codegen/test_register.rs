@@ -53,17 +53,7 @@ pub struct ParseTestKindError(pub(crate) String);
 
 impl crate::api::TestKind {
     /// Error variant for an error enumeration, including the comma at end
-    ///
-    /// # Parameters
-    ///
-    /// - `arch_ptr_width` - The architecture pointer size.
-    /// - `max_value_width` - The maximum pointee width for any register. Determines the size of the
-    ///   Error variant.
-    pub(crate) fn error_variant_def(&self, max_value_width: model::PtrSize) -> Option<TokenStream> {
-        let max_value_width = format_ident!(
-            "{}",
-            codegen::bit_count_to_rust_uint_type_str(max_value_width.bit_count())
-        );
+    pub(crate) fn error_variant_def(&self) -> Option<TokenStream> {
         match self {
             Self::Read => None,
             Self::ReadIsResetVal => Some(
@@ -74,11 +64,11 @@ impl crate::api::TestKind {
                     ///
                     /// This means that the source file (IP-XACT or SVD) claims that the register
                     /// value on reset should be `reset_val` but it was `read_val` instead.
-                    ReadValueIsNotResetValue {
+                    ReadValueIsNotResetValue<T> {
                         /// The value that was read from the register
-                        read_val: #max_value_width,
+                        read_val: T,
                         /// Expected value for this register on reset
-                        reset_val: #max_value_width,
+                        reset_val: T,
                         /// Register identifier or "full path"
                         reg_uid: &'static str,
                         /// Register address
