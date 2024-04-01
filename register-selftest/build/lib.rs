@@ -93,7 +93,7 @@ fn main() -> anyhow::Result<()> {
         8 => keelhaul::ArchWidth::U64,
         _ => panic!("unsupported arch size"),
     };
-    let mut test_cfg = TestConfig::new(arch_ptr_size_bytes);
+    let mut test_cfg = TestConfig::new();
     if let Some(test_kind_set) =
         test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
     {

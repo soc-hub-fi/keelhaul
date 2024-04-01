@@ -1,17 +1,16 @@
 //! Exposes functionality supported by this crate
 
 // Export API types
+pub use crate::codegen::MemTestStrategy;
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
-pub use error::ApiError;
+pub use error::{ApiError, ParseTestKindError};
 pub use svd::ValidateLevel;
 
 mod error;
 
-use std::{path, str};
+use std::{ops, path, str};
 
-use crate::{
-    analysis, codegen, error::SvdParseError, model, Filters, ParseTestKindError, TestConfig,
-};
+use crate::{analysis, codegen, error::SvdParseError, model, FailureImplKind, Filters, TestConfig};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
@@ -168,18 +167,25 @@ fn apply_fmt(input: String) -> String {
     let mut buf = Vec::new();
 
     // FIXME: allow supplying config from API
-    rustfmt::format_input(
-        rustfmt::Input::Text(input),
+    let formatted = rustfmt::format_input(
+        rustfmt::Input::Text(input.clone()),
         &rustfmt::config::Config::default(),
         Some(&mut buf),
-    )
-    .unwrap()
-    .1
-    .into_iter()
-    .next()
-    .unwrap()
-    .1
-    .to_string()
+    );
+
+    match formatted {
+        Ok((_, formatted, _)) => match formatted.into_iter().next() {
+            Some((_name, output)) => output.to_string(),
+            None => {
+                log::error!("rustfmt output was none, returning unformatted output.");
+                input
+            }
+        },
+        Err(e) => {
+            log::error!("rustfmt failed, returning unformatted output. Error: {e:?}");
+            input
+        }
+    }
 }
 
 pub fn generate_tests(
@@ -188,14 +194,14 @@ pub fn generate_tests(
     test_cfg: &TestConfig,
     filters: &Filters,
 ) -> Result<String, ApiError> {
-    let test_cases: codegen::TestCases = match arch_ptr_size {
+    let test_cases: codegen::RegTestCases = match arch_ptr_size {
         ArchWidth::U32 => {
             let registers = parse_registers::<u32>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
+            codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
         ArchWidth::U64 => {
             let registers = parse_registers::<u64>(sources, filters)?;
-            codegen::TestCases::from_registers(&registers, test_cfg)
+            codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
     };
     // FIXME: it would be good to have this message prior to generation
@@ -250,4 +256,25 @@ pub fn list_top(
         .collect_vec();
 
     Ok(tops_and_counts)
+}
+
+pub fn generate_memtests(
+    test_ranges: &[ops::Range<u64>],
+    strategy: &MemTestStrategy,
+    on_fail: &FailureImplKind,
+) -> String {
+    codegen::gen_memtest_module(test_ranges, 8, strategy, on_fail).to_string()
+}
+
+/// # Arguments
+///
+/// * `format_output` - Format the output using `rustfmt`
+#[cfg(feature = "rustfmt")]
+pub fn generate_memtests_with_format(
+    test_ranges: &[ops::Range<u64>],
+    strategy: &MemTestStrategy,
+    on_fail: &FailureImplKind,
+) -> String {
+    let s = generate_memtests(test_ranges, strategy, on_fail);
+    apply_fmt(s)
 }

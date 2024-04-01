@@ -1,4 +1,4 @@
 build:
-    SVD_PATH=/mnt/d/code/git/keelhaul/examples/headsail-selftest/headsail-sysctrl-v0.1.1.svd ARCH_PTR_BYTES=4 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
+    SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) ARCH_PTR_BYTES=4 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly build --release
 run:
-    SVD_PATH=/mnt/d/code/git/keelhaul/examples/headsail-selftest/headsail-sysctrl-v0.1.1.svd ARCH_PTR_BYTES=4 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly run --release
+    SVD_PATH=$(readlink -f headsail-sysctrl-v0.1.1.svd) ARCH_PTR_BYTES=4 INCLUDE_SYMS_REGEX="^HPC" cargo +nightly run --release

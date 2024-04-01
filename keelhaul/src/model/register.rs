@@ -59,35 +59,6 @@ where
             reset_value,
         }
     }
-
-    /// Get register's unique path identifier
-    ///
-    /// Constructed from the hierarchical path, e.g., PERIPH-CLUSTER-REG.
-    pub fn path_id(&self) -> String {
-        self.path.join("-")
-    }
-
-    /// Whether this register can be written to at least once after reset
-    ///
-    /// Returns `false` when write operations past the first one have an undefined effect.
-    pub fn is_writable_once(&self) -> bool {
-        use svd::Access::*;
-        match self.access {
-            WriteOnly | ReadWrite | WriteOnce | ReadWriteOnce => true,
-            ReadOnly => false,
-        }
-    }
-
-    /// Whether this register can be written to at any time
-    ///
-    /// Returns `false` when write operations have an undefined effect.
-    pub fn is_writable_always(&self) -> bool {
-        use svd::Access::*;
-        match self.access {
-            WriteOnly | ReadWrite => true,
-            ReadOnly | WriteOnce | ReadWriteOnce => false,
-        }
-    }
 }
 
 impl<P, S> UniquePath for Register<P, S>
