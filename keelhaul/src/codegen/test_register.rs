@@ -46,35 +46,6 @@ impl<T> ValueOnReset<T> {
     }
 }
 
-impl crate::api::TestKind {
-    /// Error variant for an error enumeration, including the comma at end
-    pub(crate) fn error_variant_def(&self) -> Option<TokenStream> {
-        match self {
-            Self::Read => None,
-            Self::ReadIsResetVal => Some(
-                // We try to avoid generating extra code as much as possible. Therefore we only
-                // reference existing static symbols or integers here.
-                quote! {
-                    /// The read value was not the expected value on reset
-                    ///
-                    /// This means that the source file (IP-XACT or SVD) claims that the register
-                    /// value on reset should be `reset_val` but it was `read_val` instead.
-                    ReadValueIsNotResetValue<T> {
-                        /// The value that was read from the register
-                        read_val: T,
-                        /// Expected value for this register on reset
-                        reset_val: T,
-                        /// Register identifier or "full path"
-                        reg_uid: &'static str,
-                        /// Register address
-                        reg_addr: usize,
-                    },
-                },
-            ),
-        }
-    }
-}
-
 /// Generates test cases based on a [`TestRegister`] definition and [`TestConfig`]
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
