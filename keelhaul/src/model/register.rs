@@ -397,7 +397,7 @@ impl RegValue {
     }
 
     /// Bit-extend the value to 64-bits
-    pub(crate) fn as_u64(&self) -> u64 {
+    pub fn as_u64(&self) -> u64 {
         match self {
             RegValue::U8(u) => *u as u64,
             RegValue::U16(u) => *u as u64,
@@ -549,7 +549,7 @@ impl PtrSize {
     }
 
     /// Maximum value representable by a binding of type [`PtrSize`]
-    pub(crate) const fn max_value(self) -> RegValue {
+    pub const fn max_value(self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(u8::MAX),
             Self::U16 => RegValue::U16(u16::MAX),

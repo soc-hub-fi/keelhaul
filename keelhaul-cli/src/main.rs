@@ -142,6 +142,10 @@ enum Command {
 
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_format: bool,
+
+        /// Validate that supplied memories are representable on the the target CPUs architecture
+        #[arg(long, value_enum)]
+        arch: Option<ArchWidth>,
     },
 }
 
@@ -505,11 +509,23 @@ fn main() -> anyhow::Result<()> {
                 strategy,
                 on_fail,
                 no_format,
+                arch,
             } => {
                 let ranges = ranges
                     .chunks(2)
                     .map(|chunk| chunk[0]..(chunk[0] + chunk[1]))
                     .collect::<Vec<_>>();
+                if let Some(arch) = arch {
+                    let arch: keelhaul::ArchWidth = (*arch).into();
+                    let ptr_size: keelhaul::PtrSize = arch.into();
+                    for range in &ranges {
+                        if range.start > ptr_size.max_value().as_u64()
+                            || range.end > ptr_size.max_value().as_u64()
+                        {
+                            panic!("Supplied memory addresses cannot be represented on this architecture");
+                        }
+                    }
+                }
                 let output = if *no_format {
                     keelhaul::generate_memtests(
                         &ranges,
