@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     bit_count_to_rust_uint_type_str,
-    error::{self, Error, PositionalError, SvdParseError},
+    error::{CommonParseError, Error, PositionalError, SvdParseError},
     model::{
         self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue,
         UniquePath,
@@ -280,7 +280,7 @@ impl RegPropGroupBuilder {
         }
         if let Some(access) = process_prop_from_node_if_present("access", node, |s| {
             Ok(svd::Access::parse_str(s)
-                .ok_or_else(|| error::CommonParseError::InvalidAccessType(s.to_owned()))?)
+                .ok_or_else(|| CommonParseError::InvalidAccessType(s.to_owned()))?)
         })? {
             self.access = Some(access);
         };
@@ -301,7 +301,7 @@ impl RegPropGroupBuilder {
         self,
         reg_path: &str,
         default_register_size_bits: Option<u32>,
-    ) -> Result<RegisterPropertiesGroup, error::SvdParseError> {
+    ) -> Result<RegisterPropertiesGroup, SvdParseError> {
         let size = self.size.unwrap_or_else(|| {
             let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
             warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
