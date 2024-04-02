@@ -3,7 +3,7 @@
 
 use std::{env, fs, path};
 
-const LINK_SCRIPT: &'static str = "memory.x";
+const LINK_SCRIPT: &str = "memory.x";
 
 fn main() {
     // Put link script in our output directory and ensure it's on the linker search path

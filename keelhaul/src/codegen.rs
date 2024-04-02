@@ -138,9 +138,8 @@ pub struct TestConfig {
     force_ignore_reset_mask: bool,
 }
 
-impl TestConfig {
-    #[must_use]
-    pub fn new() -> Self {
+impl Default for TestConfig {
+    fn default() -> Self {
         Self {
             tests_to_generate: iter::once(TestKind::Read).collect(),
             on_fail: FailureImplKind::ReturnError,
@@ -149,7 +148,9 @@ impl TestConfig {
             force_ignore_reset_mask: true,
         }
     }
+}
 
+impl TestConfig {
     /// Get test kinds
     ///
     /// # Errors

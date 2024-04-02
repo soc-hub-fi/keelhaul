@@ -1,0 +1,67 @@
+name: keelhaul
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CI: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  update-toolchain:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update toolchain
+      run: |
+        rustup update
+        rustup component add clippy
+    - name: Toolchain info
+      run: |
+        cargo --version --verbose
+        rustc --version
+        cargo clippy --version
+
+  build-keelhaul:
+    needs: update-toolchain
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Lint
+      working-directory: ./keelhaul
+      run: |
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+    - name: Test
+      working-directory: ./keelhaul
+      run: |
+        cargo check
+        cargo test -p keelhaul
+    - name: Build
+      working-directory: ./keelhaul
+      run: cargo build --release
+
+  build-keelhaul-cli:
+    needs: update-toolchain
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Lint
+      working-directory: ./keelhaul-cli
+      run: |
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+    - name: Test
+      working-directory: ./keelhaul-cli
+      run: |
+        cargo check
+        cargo test -p keelhaul-cli
+    - name: Build
+      working-directory: ./keelhaul-cli
+      run: cargo build --release

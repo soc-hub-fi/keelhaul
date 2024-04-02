@@ -9,7 +9,7 @@ use headsail_bsp::{rt::entry, sprintln};
 mod constants {
     pub(crate) const CHECK_FOR_POINTER_ALIGNMENT: bool = false;
 
-    pub(crate) const MINIMIZE_OUTPUT_ENV: &'static str = match option_env!("MIN_OUTPUT") {
+    pub(crate) const MINIMIZE_OUTPUT_ENV: &str = match option_env!("MIN_OUTPUT") {
         Some(v) => v,
         None => "0",
     };
@@ -115,7 +115,7 @@ fn main() -> ! {
         if CHECK_FOR_POINTER_ALIGNMENT
             && (case.addr as *const usize).align_offset(mem::align_of::<usize>()) != 0
         {
-            align_error(&case.uid, case.addr);
+            align_error(case.uid, case.addr);
             continue;
         }
         if (case.function)().is_err() {
@@ -126,5 +126,7 @@ fn main() -> ! {
 
     sprintln!("[ok]");
 
-    loop {}
+    loop {
+        unsafe { core::arch::asm!("wfi") };
+    }
 }
