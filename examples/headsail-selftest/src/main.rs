@@ -115,7 +115,7 @@ fn main() -> ! {
         if CHECK_FOR_POINTER_ALIGNMENT
             && (case.addr as *const usize).align_offset(mem::align_of::<usize>()) != 0
         {
-            align_error(&case.uid, case.addr);
+            align_error(case.uid, case.addr);
             continue;
         }
         if (case.function)().is_err() {
