@@ -220,7 +220,9 @@ fn gen_fail_frag(on_fail: &FailureImplKind) -> TokenStream {
             quote!()
         }
         FailureImplKind::Panic => quote! {
-            panic!("{}", #fail_count);
+            if #fail_count > 0 {
+                panic!("{}", #fail_count);
+            }
         },
         FailureImplKind::ReturnError => todo!(),
     }
