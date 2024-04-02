@@ -12,7 +12,7 @@ env:
   BIN: headsail-selftest
 
 jobs:
-  build:
+  build-headsail-selftest:
     runs-on: ubuntu-latest
     env:
       ARCH_PTR_BYTES: 8
@@ -49,8 +49,8 @@ jobs:
         if-no-files-found: error
         retention-days: 14
 
-  run:
-    needs: build
+  run-headsail-selftest-on-renode:
+    needs: build-headsail-selftest
 
     runs-on: ubuntu-latest
     container:

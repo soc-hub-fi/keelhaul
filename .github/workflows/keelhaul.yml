@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  setup:
+  update-toolchain:
     runs-on: ubuntu-latest
     steps:
     - name: Update toolchain
@@ -24,8 +24,8 @@ jobs:
         rustc --version
         cargo clippy --version
 
-  check-keelhaul:
-    needs: setup
+  build-keelhaul:
+    needs: update-toolchain
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -45,8 +45,8 @@ jobs:
       working-directory: ./keelhaul
       run: cargo build --release
 
-  check-keelhaul-cli:
-    needs: setup
+  build-keelhaul-cli:
+    needs: update-toolchain
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
