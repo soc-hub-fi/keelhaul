@@ -10,7 +10,7 @@ struct Cli {
     #[arg(group = "input", long, required = true, action = clap::ArgAction::Append)]
     svd: Vec<String>,
 
-    /// IEEE-1685 source file for memory map metadata
+    /// IEEE 1685 source file for memory map metadata
     #[arg(group = "input", long, required = true, action = clap::ArgAction::Append)]
     ipxact: Vec<String>,
 
