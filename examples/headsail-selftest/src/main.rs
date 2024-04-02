@@ -126,5 +126,7 @@ fn main() -> ! {
 
     sprintln!("[ok]");
 
-    loop {}
+    loop {
+        unsafe { core::arch::asm!("wfi") };
+    }
 }
