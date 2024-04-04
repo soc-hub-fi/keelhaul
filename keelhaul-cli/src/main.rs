@@ -29,7 +29,7 @@ struct Cli {
 enum Commands {
     /// Run the Keelhaul parser without doing anything
     DryRun,
-    /// Lists all top level items (peripherals or subsystems) in the supplied sources
+    /// List all top level items (peripherals or subsystems) in the supplied sources
     ///
     /// Peripherals or subsystems containing zero registers are omitted.
     LsTop {
