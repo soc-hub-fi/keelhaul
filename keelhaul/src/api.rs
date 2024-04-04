@@ -91,10 +91,10 @@ impl str::FromStr for TestKind {
 pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
     match arch {
         ArchWidth::U32 => {
-            parse_registers::<u32>(sources, &Filters::all())?;
+            parse_registers::<u32>(sources, &Filters::all(), false)?;
         }
         ArchWidth::U64 => {
-            parse_registers::<u64>(sources, &Filters::all())?;
+            parse_registers::<u64>(sources, &Filters::all(), false)?;
         }
     }
     Ok(())
@@ -107,7 +107,16 @@ type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 /// # Type arguments
 ///
 /// * `P` - architecture width, i.e., a type that can represent any address on the platform
-fn parse_registers<P>(sources: &[ModelSource], filters: &Filters) -> Result<Registers<P>, ApiError>
+///
+/// # Arguments
+///
+/// * `default_reset_value` - Assume this to be the reset value, if not provided by the source file.
+///   Provided for convenience, as `0` is a very common reset value.
+fn parse_registers<P>(
+    sources: &[ModelSource],
+    filters: &Filters,
+    use_zero_as_default_reset: bool,
+) -> Result<Registers<P>, ApiError>
 where
     P: model::ArchPtr,
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -132,9 +141,15 @@ where
 
     for src in sources {
         match src.format {
-            SourceFormat::Svd => registers.push(
-                crate::frontend::svd_legacy::parse_svd_into_registers::<P>(src.path(), filters)?,
-            ),
+            SourceFormat::Svd => {
+                let default_reset_value = use_zero_as_default_reset.then_some(0);
+
+                registers.push(crate::frontend::svd_legacy::parse_svd_into_registers::<P>(
+                    src.path(),
+                    filters,
+                    default_reset_value,
+                )?)
+            }
             SourceFormat::Ieee1685 => todo!(),
         }
     }
@@ -148,12 +163,12 @@ fn parse_registers_for_analysis(
     arch: ArchWidth,
 ) -> Result<Vec<Box<dyn analysis::AnalyzeRegister>>, ApiError> {
     Ok(match arch {
-        ArchWidth::U32 => parse_registers::<u32>(sources, filters)?
+        ArchWidth::U32 => parse_registers::<u32>(sources, filters, false)?
             .clone()
             .into_iter()
             .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
             .collect(),
-        ArchWidth::U64 => parse_registers::<u64>(sources, filters)?
+        ArchWidth::U64 => parse_registers::<u64>(sources, filters, false)?
             .clone()
             .into_iter()
             .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
@@ -193,14 +208,15 @@ pub fn generate_tests(
     arch_ptr_size: ArchWidth,
     test_cfg: &TestConfig,
     filters: &Filters,
+    use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {
     let test_cases: codegen::RegTestCases = match arch_ptr_size {
         ArchWidth::U32 => {
-            let registers = parse_registers::<u32>(sources, filters)?;
+            let registers = parse_registers::<u32>(sources, filters, use_zero_as_default_reset)?;
             codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
         ArchWidth::U64 => {
-            let registers = parse_registers::<u64>(sources, filters)?;
+            let registers = parse_registers::<u64>(sources, filters, use_zero_as_default_reset)?;
             codegen::RegTestCases::from_registers(&registers, test_cfg)
         }
     };
@@ -216,8 +232,15 @@ pub fn generate_tests_with_format(
     arch_ptr_size: ArchWidth,
     test_cfg: &TestConfig,
     filters: &Filters,
+    use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {
-    let s = generate_tests(sources, arch_ptr_size, test_cfg, filters)?;
+    let s = generate_tests(
+        sources,
+        arch_ptr_size,
+        test_cfg,
+        filters,
+        use_zero_as_default_reset,
+    )?;
     Ok(apply_fmt(s))
 }
 

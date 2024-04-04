@@ -69,6 +69,10 @@ enum Commands {
 
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_format: bool,
+
+        /// Use zero as the assumed default reset value when a reset value is not provided
+        #[arg(long = "reset-defaults-zero", action = clap::ArgAction::SetTrue)]
+        use_zero_as_default_reset: bool,
     },
     /// Generate memory tests
     #[command(name = "gen-memtest")]
@@ -311,6 +315,7 @@ fn main() -> anyhow::Result<()> {
                 derive_debug,
                 ignore_reset_masks,
                 no_format,
+                use_zero_as_default_reset,
             } => generate(
                 arch,
                 tests_to_generate,
@@ -319,6 +324,7 @@ fn main() -> anyhow::Result<()> {
                 on_fail.as_ref(),
                 sources,
                 *no_format,
+                *use_zero_as_default_reset,
             )?,
             Commands::Coverage { .. } => {
                 todo!()
@@ -368,6 +374,7 @@ fn generate(
     on_fail: Option<&FailureImplKind>,
     sources: Vec<keelhaul::ModelSource>,
     no_format: bool,
+    use_zero_as_default_reset: bool,
 ) -> Result<(), anyhow::Error> {
     let mut config = keelhaul::TestConfig::default()
         .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -379,9 +386,15 @@ fn generate(
     }
     let filters = keelhaul::Filters::all();
     let output = if no_format {
-        keelhaul::generate_tests(&sources, arch, &config, &filters)?
+        keelhaul::generate_tests(&sources, arch, &config, &filters, use_zero_as_default_reset)?
     } else {
-        keelhaul::generate_tests_with_format(&sources, arch, &config, &filters)?
+        keelhaul::generate_tests_with_format(
+            &sources,
+            arch,
+            &config,
+            &filters,
+            use_zero_as_default_reset,
+        )?
     };
     println!("{output}");
     Ok(())

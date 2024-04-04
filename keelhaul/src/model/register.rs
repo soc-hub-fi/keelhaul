@@ -34,7 +34,7 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    reset_value: ResetValue,
+    reset_value: Option<ResetValue>,
     // TODO: consider support for array-like registers in input
     //dimensions: Option<svd::DimElement>,
 }
@@ -49,7 +49,7 @@ where
         addr: AddrRepr<P, S>,
         size: u32,
         access: svd::Access,
-        reset_value: ResetValue,
+        reset_value: Option<ResetValue>,
     ) -> Self {
         Self {
             path,
@@ -108,8 +108,9 @@ where
     }
 
     fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
-        let value = self.reset_value.value().as_u64();
-        let mask = self.reset_value.mask().as_u64();
+        let reset_value = self.reset_value?;
+        let value = reset_value.value().as_u64();
+        let mask = reset_value.mask().as_u64();
         Some(codegen::ValueOnReset::new(value, Some(mask)))
     }
 }

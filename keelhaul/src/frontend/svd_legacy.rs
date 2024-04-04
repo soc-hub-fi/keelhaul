@@ -301,6 +301,7 @@ impl RegPropGroupBuilder {
         self,
         reg_path: &str,
         default_register_size_bits: Option<u32>,
+        default_reset_value: Option<u64>,
     ) -> Result<RegisterPropertiesGroup, SvdParseError> {
         let size = self.size.unwrap_or_else(|| {
             let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
@@ -315,15 +316,36 @@ impl RegPropGroupBuilder {
         let reset_value = {
             // Unwrap: `size` was validated on construction using `PtrSize::is_valid_bit_count`
             let size = PtrSize::from_bit_count(size).unwrap();
-            let reset_value = self.reset_value.unwrap_or( {
-                warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = 0");
-                RegValue::with_value_and_size( 0, size)?
-            });
-            let reset_mask = self.reset_mask.unwrap_or( {
-                warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.bit_count()));
-                size.max_value()
-            });
-            ResetValue::with_mask(reset_value, reset_mask)?
+            let reset_value = match self.reset_value {
+                Some(value) => Some(value),
+                None => {
+                    if let Some(value) = default_reset_value {
+                        warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = {:?}", value);
+                        Some(RegValue::with_value_and_size(value, size)?)
+                    } else {
+                        None
+                    }
+                }
+            };
+            let reset_mask = match self.reset_mask {
+                Some(mask) => Some(mask),
+                None => {
+                    if default_reset_value.is_some() {
+                        warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.bit_count()));
+                        Some(size.max_value())
+                    } else {
+                        None
+                    }
+                }
+            };
+            if reset_value.is_some() && reset_mask.is_some() {
+                Some(ResetValue::with_mask(
+                    reset_value.unwrap(),
+                    reset_mask.unwrap(),
+                )?)
+            } else {
+                None
+            }
         };
 
         Ok(RegisterPropertiesGroup::new(size, access, reset_value))
@@ -341,11 +363,15 @@ pub struct RegisterPropertiesGroup {
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    pub(crate) reset_value: ResetValue,
+    pub(crate) reset_value: Option<ResetValue>,
 }
 
 impl RegisterPropertiesGroup {
-    pub(crate) const fn new(size: u32, access: svd::Access, reset_value: ResetValue) -> Self {
+    pub(crate) const fn new(
+        size: u32,
+        access: svd::Access,
+        reset_value: Option<ResetValue>,
+    ) -> Self {
         Self {
             size,
             access,
@@ -553,6 +579,7 @@ fn process_registers<P: ArchPtr>(
     register_node: XmlNode,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
+    default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -641,7 +668,11 @@ where
                 parent
                     .properties
                     .clone_and_update_from_node(&register_node)?
-                    .build(&reg_path, Some(P::ptr_size().bit_count()))
+                    .build(
+                        &reg_path,
+                        Some(P::ptr_size().bit_count()),
+                        default_reset_value,
+                    )
                     .map_err(|e| err_with_pos(e, &register_node))?
             };
             let register = Register::new(
@@ -679,7 +710,11 @@ where
             parent
                 .properties
                 .clone_and_update_from_node(&register_node)?
-                .build(&reg_path, Some(P::ptr_size().bit_count()))
+                .build(
+                    &reg_path,
+                    Some(P::ptr_size().bit_count()),
+                    default_reset_value,
+                )
                 .map_err(|e| err_with_pos(e, &register_node))?
         };
         let register = Register::new(
@@ -699,6 +734,7 @@ fn process_cluster<P: ArchPtr>(
     cluster_node: XmlNode,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
+    default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -709,9 +745,13 @@ where
     let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
     let mut cluster_registers = Vec::new();
     for register_node in cluster_node.children_with_tag_name("register") {
-        if let Some(registers) =
-            process_registers(&current_parent, register_node, reg_filter, syms_regex)?
-        {
+        if let Some(registers) = process_registers(
+            &current_parent,
+            register_node,
+            reg_filter,
+            syms_regex,
+            default_reset_value,
+        )? {
             cluster_registers.extend(registers);
         }
     }
@@ -721,6 +761,7 @@ where
 fn process_peripheral<P: ArchPtr>(
     periph_node: XmlNode,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -751,6 +792,7 @@ where
             cluster_node,
             filters.reg_filter.as_ref(),
             filters.syms_filter.as_ref(),
+            default_reset_value,
         )? {
             peripheral_registers.extend(registers);
         }
@@ -761,6 +803,7 @@ where
             register_node,
             filters.reg_filter.as_ref(),
             filters.syms_filter.as_ref(),
+            default_reset_value,
         )? {
             peripheral_registers.extend(registers);
         }
@@ -771,6 +814,7 @@ where
 fn process_peripherals<P: ArchPtr>(
     peripherals_node: &XmlNode,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -780,7 +824,9 @@ where
 {
     let mut registers = Vec::new();
     for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
-        if let Some(peripheral_registers) = process_peripheral(peripheral_node, filters)? {
+        if let Some(peripheral_registers) =
+            process_peripheral(peripheral_node, filters, default_reset_value)?
+        {
             registers.extend(peripheral_registers);
         }
     }
@@ -790,6 +836,7 @@ where
 fn process_device<P: ArchPtr>(
     device_node: &XmlNode,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -800,12 +847,13 @@ where
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
-    process_peripherals(peripherals_node, filters)
+    process_peripherals(peripherals_node, filters, default_reset_value)
 }
 
 fn process_root<P: ArchPtr>(
     root_node: XmlNode,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -816,13 +864,14 @@ where
     let device_nodes = root_node.children_with_tag_name("device");
     check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
     let device_node = device_nodes.first().unwrap();
-    process_device(device_node, filters)
+    process_device(device_node, filters, default_reset_value)
 }
 
 /// Find registers from SVD XML-document.
 fn find_registers<P: ArchPtr>(
     parsed: &Document,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Registers<P, model::RefSchemaSvdV1_2>, PositionalError<SvdParseError>>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -831,7 +880,7 @@ where
     <P as TryFrom<u64>>::Error: std::fmt::Debug,
 {
     let root = parsed.root().into_xml_node();
-    let registers = process_root::<P>(root, filters)?;
+    let registers = process_root::<P>(root, filters, default_reset_value)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
@@ -866,6 +915,7 @@ where
 pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
     svd_source: &path::Path,
     filters: &Filters,
+    default_reset_value: Option<u64>,
 ) -> Result<Registers<P, model::RefSchemaSvdV1_2>, Error>
 where
     SvdParseError: From<<P as num::Num>::FromStrRadixErr>
@@ -875,7 +925,7 @@ where
 {
     let svd_content = util::read_file_or_panic(svd_source);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, filters)
+    let registers = find_registers(&parsed, filters, default_reset_value)
         .map_err(|positional| positional.with_fname(format!("{}", svd_source.display())))?;
 
     // If zero registers were chosen for generation, this run is useless.
