@@ -57,6 +57,7 @@ enum Command {
         #[arg(long, default_value = "alpha")]
         sorting: Sorting,
     },
+    /// Count the number of registers in the inputs
     CountRegisters {
         #[command(flatten)]
         input: InputFiles,
@@ -68,7 +69,8 @@ enum Command {
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
     },
-    Coverage {
+    /// Count the number of readable registers with a known reset value in the inputs
+    CountResetValues {
         #[command(flatten)]
         input: InputFiles,
 
@@ -78,11 +80,6 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
-
-        /// Describes how many of the input registers supply a known reset value which can be tested
-        /// for
-        #[arg(long)]
-        has_reset_value: bool,
     },
     /// Generate metadata tests
     #[command(name = "gen-regtest")]
@@ -412,8 +409,25 @@ fn main() -> anyhow::Result<()> {
                     *use_zero_as_default_reset,
                 )?
             }
-            Command::Coverage { .. } => {
-                todo!()
+            Command::CountResetValues {
+                input,
+                arch,
+                validate_level,
+            } => {
+                let sources = get_sources(input)?;
+                let arch = (*arch).into();
+
+                let total =
+                    keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
+                let with_reset = keelhaul::count_readable_registers_with_reset_value(
+                    &sources,
+                    arch,
+                    &keelhaul::Filters::all(),
+                )?;
+                let percent = (with_reset as f64 / total as f64) * 100.;
+                println!(
+                    "{with_reset}/{total} ({percent:.2} %) of readable registers have a known a reset value that can be tested for"
+                );
             }
             Command::GenMemTest {
                 ranges,

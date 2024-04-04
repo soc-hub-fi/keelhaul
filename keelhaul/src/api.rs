@@ -255,6 +255,18 @@ pub fn count_registers_svd(
     Ok(registers.len())
 }
 
+pub fn count_readable_registers_with_reset_value(
+    sources: &[ModelSource],
+    arch: ArchWidth,
+    filters: &Filters,
+) -> Result<usize, ApiError> {
+    let registers = parse_registers_for_analysis(sources, filters, arch)?;
+    Ok(registers
+        .iter()
+        .filter(|reg| reg.is_readable() && reg.has_reset_value())
+        .count())
+}
+
 /// Returns top level containers (peripherals or subsystems) and the number of registers in each
 ///
 /// `Vec<(container, register count)>`

@@ -4,7 +4,7 @@
 use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
-    bit_count_to_rust_uint_type_str, codegen, error,
+    analysis, bit_count_to_rust_uint_type_str, codegen, error,
     model::{RefSchema, RefSchemaSvdV1_2, UniquePath},
 };
 use itertools::Itertools;
@@ -108,10 +108,30 @@ where
     }
 
     fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
-        let reset_value = self.reset_value?;
-        let value = reset_value.value().as_u64();
-        let mask = reset_value.mask().as_u64();
-        Some(codegen::ValueOnReset::new(value, Some(mask)))
+        self.reset_value.map(|reset_value| {
+            let value = reset_value.value().as_u64();
+            let mask = reset_value.mask().as_u64();
+            codegen::ValueOnReset::new(value, Some(mask))
+        })
+    }
+}
+
+impl<P: num::CheckedAdd + Copy + fmt::Debug, S: RefSchema> analysis::AnalyzeRegister
+    for Register<P, S>
+{
+    fn has_reset_value(&self) -> bool {
+        self.reset_value.is_some()
+    }
+
+    /// Whether this register is software readable or not
+    ///
+    /// Returns `false` when read operations have an undefined effect.
+    fn is_readable(&self) -> bool {
+        use svd::Access::*;
+        match self.access {
+            ReadOnly | ReadWrite => true,
+            ReadWriteOnce | WriteOnly | WriteOnce => false,
+        }
     }
 }
 
