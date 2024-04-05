@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None, subcommand_required = true)]
+#[command(version, about, long_about = None, author = clap::crate_authors!(), subcommand_required = true)]
 struct Cli {
     /// CMSIS-SVD source file for memory map metadata
     #[arg(group = "input", long, required = true, action = clap::ArgAction::Append)]
