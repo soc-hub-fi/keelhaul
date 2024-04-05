@@ -36,6 +36,7 @@ enum Command {
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_count: bool,
+
         #[arg(long, default_value = "alpha")]
         sorting: Sorting,
     },
@@ -52,14 +53,17 @@ enum Command {
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
         tests_to_generate: Vec<TestKind>,
+
         /// What to do when a test fails
         #[arg(long)]
         on_fail: Option<FailureImplKind>,
+
         /// Derive debug on possible errors
         ///
         /// May improve output for failing tests but also increases binary size.
         #[arg(long, action = clap::ArgAction::SetTrue)]
         derive_debug: bool,
+
         /// Ignore the reset mask field when evaluating reset values for correctness
         ///
         /// Can be useful when the reset masks are misconfigured and it's good enough to just check
@@ -79,9 +83,11 @@ enum Command {
     GenMemTest {
         #[arg(long = "range", required = true, num_args = 2, action = clap::ArgAction::Append, value_parser = clap_num::maybe_hex::<u64>)]
         ranges: Vec<u64>,
+
         /// How to test the memory
         #[arg(long, default_value = "all")]
         strategy: MemTestStrategy,
+
         /// What to do when a test fails
         #[arg(long)]
         on_fail: Option<FailureImplKind>,
