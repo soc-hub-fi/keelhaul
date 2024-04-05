@@ -14,7 +14,7 @@ struct Cli {
 #[group(id = "input", required = true)]
 struct InputFiles {
     /// CMSIS-SVD source file for memory map metadata
-    #[arg(long, action = clap::ArgAction::Append)]
+    #[arg(long, requires = "arch", action = clap::ArgAction::Append)]
     svd: Vec<String>,
 
     /// A directory of IEEE 1685 source files for memory map metadata
@@ -31,10 +31,10 @@ enum Command {
 
         /// Number of bits used to represent addresses on the target CPUs architecture
         #[arg(long, value_enum)]
-        arch: ArchWidth,
+        arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: ValidateLevel,
+        validate_level: Option<ValidateLevel>,
     },
     /// List all top level items (peripherals or subsystems) in the supplied sources
     ///
@@ -45,10 +45,10 @@ enum Command {
 
         /// Number of bits used to represent addresses on the target CPUs architecture
         #[arg(long, value_enum)]
-        arch: ArchWidth,
+        arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: ValidateLevel,
+        validate_level: Option<ValidateLevel>,
 
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -64,10 +64,10 @@ enum Command {
 
         /// Number of bits used to represent addresses on the target CPUs architecture
         #[arg(long, value_enum)]
-        arch: ArchWidth,
+        arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: ValidateLevel,
+        validate_level: Option<ValidateLevel>,
     },
     /// Count the number of readable registers with a known reset value in the inputs
     CountResetValues {
@@ -76,7 +76,7 @@ enum Command {
 
         /// Number of bits used to represent addresses on the target CPUs architecture
         #[arg(long, value_enum)]
-        arch: ArchWidth,
+        arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
@@ -89,10 +89,10 @@ enum Command {
 
         /// Number of bits used to represent addresses on the target CPUs architecture
         #[arg(long, value_enum)]
-        arch: ArchWidth,
+        arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: ValidateLevel,
+        validate_level: Option<ValidateLevel>,
 
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
@@ -139,6 +139,30 @@ enum Command {
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_format: bool,
     },
+}
+
+impl Command {
+    fn input(&self) -> Option<&InputFiles> {
+        match self {
+            Command::DryRun { input, .. } => Some(input),
+            Command::LsTop { input, .. } => Some(input),
+            Command::CountRegisters { input, .. } => Some(input),
+            Command::CountResetValues { input, .. } => Some(input),
+            Command::GenRegTest { input, .. } => Some(input),
+            Command::GenMemTest { .. } => None,
+        }
+    }
+
+    fn arch(&self) -> Option<ArchWidth> {
+        match self {
+            Command::DryRun { arch, .. } => *arch,
+            Command::LsTop { arch, .. } => *arch,
+            Command::CountRegisters { arch, .. } => *arch,
+            Command::CountResetValues { arch, .. } => *arch,
+            Command::GenRegTest { arch, .. } => *arch,
+            Command::GenMemTest { arch, .. } => *arch,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -338,16 +362,25 @@ fn get_sources(input: &InputFiles) -> anyhow::Result<Vec<keelhaul::ModelSource>>
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    let sources = cli
+        .command
+        .as_ref()
+        .and_then(|cmd| cmd.input().map(get_sources))
+        .transpose()?;
+    let arch = cli
+        .command
+        .as_ref()
+        .and_then(|cmd| cmd.arch().map(|arch| arch.into()));
+
     if let Some(cmd) = &cli.command {
         match cmd {
             Command::DryRun {
-                input,
-                arch,
+                input: _input,
+                arch: _arch,
                 validate_level,
             } => {
-                let sources = get_sources(input)?;
-                let arch = (*arch).into();
-                match keelhaul::dry_run(&sources, arch).with_context(|| {
+                let sources = sources.unwrap();
+                match keelhaul::dry_run(&sources, arch.unwrap()).with_context(|| {
                     format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
                 }) {
                     Ok(_) => println!("keelhaul: dry run completed successfully"),
@@ -355,38 +388,33 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             Command::LsTop {
+                input: _input,
+                arch: _arch,
                 no_count,
                 sorting,
-                input,
-                arch,
                 validate_level,
-            } => {
-                let sources = get_sources(input)?;
-                let arch = (*arch).into();
-
-                ls_top(&sources, arch, *sorting, *no_count)?
-            }
+            } => ls_top(&sources.unwrap(), arch.unwrap(), *sorting, *no_count)?,
             Command::CountRegisters {
-                input,
-                arch,
+                input: _input,
                 validate_level,
+                arch: _arch,
             } => {
-                let sources = get_sources(input)?;
-                let arch = (*arch).into();
-
-                let output =
-                    keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
+                let output = keelhaul::count_registers_svd(
+                    &sources.unwrap(),
+                    arch.unwrap(),
+                    &keelhaul::Filters::all(),
+                )?;
                 println!("{output}");
             }
             Command::GenRegTest {
+                input: _input,
+                arch,
                 tests_to_generate,
                 on_fail,
                 derive_debug,
                 ignore_reset_masks,
                 no_format,
                 use_zero_as_default_reset,
-                input,
-                arch,
                 validate_level,
             } => {
                 let mut config = keelhaul::CodegenConfig::default()
@@ -397,31 +425,28 @@ fn main() -> anyhow::Result<()> {
                 if let Some(on_fail) = on_fail {
                     config = config.on_fail(on_fail.clone().into());
                 }
-
-                let sources = get_sources(input)?;
-                let arch = (*arch).into();
-
                 generate(
-                    arch,
+                    arch.unwrap().into(),
                     config,
-                    sources,
+                    sources.unwrap(),
                     *no_format,
                     *use_zero_as_default_reset,
                 )?
             }
             Command::CountResetValues {
-                input,
-                arch,
+                input: _input,
+                arch: _arch,
                 validate_level,
             } => {
-                let sources = get_sources(input)?;
-                let arch = (*arch).into();
-
-                let total =
-                    keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
+                let sources = sources.unwrap();
+                let total = keelhaul::count_registers_svd(
+                    &sources,
+                    arch.unwrap(),
+                    &keelhaul::Filters::all(),
+                )?;
                 let with_reset = keelhaul::count_readable_registers_with_reset_value(
                     &sources,
-                    arch,
+                    arch.unwrap(),
                     &keelhaul::Filters::all(),
                 )?;
                 let percent = (with_reset as f64 / total as f64) * 100.;
