@@ -1,4 +1,4 @@
-use std::{env, io, ops, path};
+use std::{env, io, iter, ops, path};
 
 use anyhow::{anyhow, Context};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -53,6 +53,10 @@ enum Command {
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
         no_count: bool,
+
+        /// Remove the first-line rubric
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        no_rubric: bool,
 
         #[arg(long, default_value = "alpha")]
         sorting: Sorting,
@@ -393,7 +397,14 @@ fn main() -> anyhow::Result<()> {
                 no_count,
                 sorting,
                 validate_level,
-            } => ls_top(&sources.unwrap(), arch.unwrap(), *sorting, *no_count)?,
+                no_rubric,
+            } => ls_top(
+                &sources.unwrap(),
+                arch.unwrap(),
+                *sorting,
+                *no_count,
+                *no_rubric,
+            )?,
             Command::CountRegisters {
                 input: _input,
                 validate_level,
@@ -519,6 +530,7 @@ fn ls_top(
     arch: keelhaul::ArchWidth,
     sorting: Sorting,
     no_count: bool,
+    no_rubric: bool,
 ) -> Result<(), anyhow::Error> {
     let mut top_and_count = keelhaul::list_top(sources, arch)?;
     if top_and_count.is_empty() {
@@ -528,7 +540,20 @@ fn ls_top(
         Sorting::Preserve => { /* do nothing */ }
         Sorting::Alpha => top_and_count.sort(),
     };
-    let longest = top_and_count.iter().map(|(s, _)| s.len()).max().unwrap();
+    let top_title = "Top element";
+    let count_title = "Registers";
+    let longest = top_and_count
+        .iter()
+        .map(|(s, _)| s.as_str())
+        .chain(iter::once(top_title))
+        .map(|s| s.len())
+        .max()
+        .unwrap();
+    if !no_rubric {
+        println!("{top_title: <longest$} {count_title}");
+        let count_title_len = count_title.len();
+        println!("{} {}", "-".repeat(longest), "-".repeat(count_title_len));
+    }
     for (top, count) in top_and_count {
         if no_count {
             println!("{top}");
