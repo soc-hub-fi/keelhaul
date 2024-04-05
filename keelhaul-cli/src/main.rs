@@ -22,11 +22,11 @@ struct Cli {
     validate_level: ValidateLevel,
 
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
-enum Commands {
+enum Command {
     /// Run the Keelhaul parser without doing anything
     DryRun,
     /// List all top level items (peripherals or subsystems) in the supplied sources
@@ -295,7 +295,7 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(cmd) = &cli.command {
         match cmd {
-            Commands::DryRun => {
+            Command::DryRun => {
                 match keelhaul::dry_run(&sources, arch).with_context(|| {
                     format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
                 }) {
@@ -303,13 +303,13 @@ fn main() -> anyhow::Result<()> {
                     Err(e) => println!("keelhaul: exited unsuccessfully: {e:?}"),
                 }
             }
-            Commands::LsTop { no_count, sorting } => ls_top(&sources, arch, *sorting, *no_count)?,
-            Commands::CountRegisters {} => {
+            Command::LsTop { no_count, sorting } => ls_top(&sources, arch, *sorting, *no_count)?,
+            Command::CountRegisters {} => {
                 let output =
                     keelhaul::count_registers_svd(&sources, arch, &keelhaul::Filters::all())?;
                 println!("{output}");
             }
-            Commands::GenRegTest {
+            Command::GenRegTest {
                 tests_to_generate,
                 on_fail,
                 derive_debug,
@@ -326,10 +326,10 @@ fn main() -> anyhow::Result<()> {
                 *no_format,
                 *use_zero_as_default_reset,
             )?,
-            Commands::Coverage { .. } => {
+            Command::Coverage { .. } => {
                 todo!()
             }
-            Commands::GenMemTest {
+            Command::GenMemTest {
                 ranges,
                 strategy,
                 on_fail,
