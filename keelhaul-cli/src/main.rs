@@ -322,16 +322,24 @@ fn main() -> anyhow::Result<()> {
                 ignore_reset_masks,
                 no_format,
                 use_zero_as_default_reset,
-            } => generate(
-                arch,
-                tests_to_generate,
-                *derive_debug,
-                *ignore_reset_masks,
-                on_fail.as_ref(),
-                sources,
-                *no_format,
-                *use_zero_as_default_reset,
-            )?,
+            } => {
+                let mut config = keelhaul::CodegenConfig::default()
+                    .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
+                    .unwrap()
+                    .derive_debug(*derive_debug)
+                    .ignore_reset_masks(*ignore_reset_masks);
+                if let Some(on_fail) = on_fail {
+                    config = config.on_fail(on_fail.clone().into());
+                }
+
+                generate(
+                    arch,
+                    config,
+                    sources,
+                    *no_format,
+                    *use_zero_as_default_reset,
+                )?
+            }
             Command::Coverage { .. } => {
                 todo!()
             }
@@ -374,22 +382,11 @@ fn main() -> anyhow::Result<()> {
 
 fn generate(
     arch: keelhaul::ArchWidth,
-    tests_to_generate: &[TestKind],
-    derive_debug: bool,
-    ignore_reset_masks: bool,
-    on_fail: Option<&FailureImplKind>,
+    config: keelhaul::CodegenConfig,
     sources: Vec<keelhaul::ModelSource>,
     no_format: bool,
     use_zero_as_default_reset: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut config = keelhaul::CodegenConfig::default()
-        .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
-        .unwrap()
-        .derive_debug(derive_debug)
-        .ignore_reset_masks(ignore_reset_masks);
-    if let Some(on_fail) = on_fail {
-        config = config.on_fail(on_fail.clone().into());
-    }
     let filters = keelhaul::Filters::all();
     let output = if no_format {
         keelhaul::generate_tests(&sources, arch, &config, &filters, use_zero_as_default_reset)?
