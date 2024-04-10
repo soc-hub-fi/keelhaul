@@ -41,7 +41,7 @@ impl ModelSource {
 #[derive(Clone, Debug)]
 pub enum SourceFormat {
     /// CMSIS-SVD (at least v1.3 and below)
-    Svd,
+    Svd(ValidateLevel),
     /// IP-XACT (2014, 2022)
     Ieee1685,
 }
@@ -135,7 +135,7 @@ where
                 )
                 .into())
             }
-            SourceFormat::Svd => {}
+            SourceFormat::Svd(_) => {}
         }
     }
 
@@ -143,7 +143,7 @@ where
 
     for src in sources {
         match src.format {
-            SourceFormat::Svd => {
+            SourceFormat::Svd(vlevel) => {
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
                 registers.push(crate::frontend::svd_legacy::parse_svd_into_registers::<P>(

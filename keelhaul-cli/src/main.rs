@@ -34,7 +34,7 @@ enum Command {
         arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: Option<ValidateLevel>,
+        validate_level: ValidateLevel,
     },
     /// List all top level items (peripherals or subsystems) in the supplied sources
     ///
@@ -48,7 +48,7 @@ enum Command {
         arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: Option<ValidateLevel>,
+        validate_level: ValidateLevel,
 
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -71,7 +71,7 @@ enum Command {
         arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: Option<ValidateLevel>,
+        validate_level: ValidateLevel,
     },
     /// Count the number of readable registers with a known reset value in the inputs
     CountResetValues {
@@ -96,7 +96,7 @@ enum Command {
         arch: Option<ArchWidth>,
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
-        validate_level: Option<ValidateLevel>,
+        validate_level: ValidateLevel,
 
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
@@ -164,7 +164,18 @@ impl Command {
             Command::CountRegisters { arch, .. } => *arch,
             Command::CountResetValues { arch, .. } => *arch,
             Command::GenRegTest { arch, .. } => *arch,
-            Command::GenMemTest { arch, .. } => *arch,
+            Command::GenMemTest { .. } => None,
+        }
+    }
+
+    fn validate_level(&self) -> Option<ValidateLevel> {
+        match self {
+            Command::DryRun { validate_level, .. } => Some(*validate_level),
+            Command::LsTop { validate_level, .. } => Some(*validate_level),
+            Command::CountRegisters { validate_level, .. } => Some(*validate_level),
+            Command::CountResetValues { validate_level, .. } => Some(*validate_level),
+            Command::GenRegTest { validate_level, .. } => Some(*validate_level),
+            Command::GenMemTest { .. } => None,
         }
     }
 }
@@ -251,7 +262,7 @@ impl ValueEnum for MemTestStrategy {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct ValidateLevel(keelhaul::ValidateLevel);
 
 impl From<ValidateLevel> for keelhaul::ValidateLevel {
@@ -340,13 +351,21 @@ fn string_to_path(s: &String) -> Result<path::PathBuf, io::Error> {
         .canonicalize()
 }
 
-fn get_sources(input: &InputFiles) -> anyhow::Result<Vec<keelhaul::ModelSource>> {
+fn get_sources(
+    input: &InputFiles,
+    vlevel: ValidateLevel,
+) -> anyhow::Result<Vec<keelhaul::ModelSource>> {
     let mut sources = Vec::with_capacity(input.svd.len());
 
     if !input.ipxact_dir.is_empty() {
         anyhow::bail!("IEE 1685/IP-XACT is not supported");
     }
-    sources.extend(input.svd.iter().map(|s| (s, keelhaul::SourceFormat::Svd)));
+    sources.extend(
+        input
+            .svd
+            .iter()
+            .map(|s| (s, keelhaul::SourceFormat::Svd(vlevel.into()))),
+    );
 
     let sources = sources
         .into_iter()
@@ -369,7 +388,15 @@ fn main() -> anyhow::Result<()> {
     let sources = cli
         .command
         .as_ref()
-        .and_then(|cmd| cmd.input().map(get_sources))
+        .and_then(|cmd| {
+            cmd.input().map(|input| {
+                get_sources(
+                    input,
+                    cmd.validate_level()
+                        .unwrap_or(ValidateLevel(keelhaul::ValidateLevel::Disabled)),
+                )
+            })
+        })
         .transpose()?;
     let arch = cli
         .command
