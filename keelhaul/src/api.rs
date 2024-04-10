@@ -89,8 +89,13 @@ impl str::FromStr for TestKind {
 /// Run the parser on the inputs without doing anything
 ///
 /// Good for checking whether the input files can be parsed by Keelhaul.
-pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
-    parse_registers(sources, arch, &Filters::all(), false)?;
+///
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
+pub fn dry_run(sources: &[ModelSource], arch: ArchWidth, use_legacy: bool) -> Result<(), ApiError> {
+    parse_registers(sources, arch, &Filters::all(), false, use_legacy)?;
 
     Ok(())
 }
@@ -105,11 +110,14 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
 ///
 /// * `use_zero_as_default_reset` - Assume zero as the default reset value if not provided by the
 ///   source file. Provided for convenience, as `0` is a very common reset value.
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 fn parse_registers(
     sources: &[ModelSource],
     arch: ArchWidth,
     filters: &Filters,
     use_zero_as_default_reset: bool,
+    use_legacy: bool,
 ) -> Result<model::Registers, ApiError> {
     for src in sources {
         match src.format {
@@ -136,7 +144,7 @@ fn parse_registers(
                 }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
-                let regs =
+                let regs = if use_legacy {
                     // Safety: max 3 levels of hierarchy (periph + cluster + reg)
                     unsafe {
                         crate::frontend::svd_legacy::parse_svd_into_registers(
@@ -146,8 +154,11 @@ fn parse_registers(
                             default_reset_value,
                         )
                     }
-                    .map_err(Box::new)?;
-                registers.push(regs);
+                    .map_err(Box::new)?
+                } else {
+                    todo!()
+                };
+                registers.push(regs)
             }
             SourceFormat::Ieee1685 => todo!(),
         }
@@ -156,12 +167,17 @@ fn parse_registers(
     Ok(registers.into_iter().next().unwrap())
 }
 
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 fn parse_registers_for_analysis(
     sources: &[ModelSource],
     filters: &Filters,
     arch: ArchWidth,
+    use_legacy: bool,
 ) -> Result<Vec<Box<dyn analysis::AnalyzeRegister>>, ApiError> {
-    Ok(parse_registers(sources, arch, filters, false)?
+    Ok(parse_registers(sources, arch, filters, false, use_legacy)?
         .clone()
         .into_iter()
         .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
@@ -195,14 +211,25 @@ fn apply_fmt(input: String) -> String {
     }
 }
 
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 pub fn generate_tests(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
     test_cfg: &CodegenConfig,
     filters: &Filters,
     use_zero_as_default_reset: bool,
+    use_legacy: bool,
 ) -> Result<String, ApiError> {
-    let registers = parse_registers(sources, arch_ptr_size, filters, use_zero_as_default_reset)?;
+    let registers = parse_registers(
+        sources,
+        arch_ptr_size,
+        filters,
+        use_zero_as_default_reset,
+        use_legacy,
+    )?;
     let test_cases = codegen::RegTestCases::from_registers(&registers, test_cfg);
     // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
@@ -210,6 +237,10 @@ pub fn generate_tests(
     Ok(test_cases.to_tokens().to_string())
 }
 
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 #[cfg(feature = "rustfmt")]
 pub fn generate_tests_with_format(
     sources: &[ModelSource],
@@ -217,6 +248,7 @@ pub fn generate_tests_with_format(
     test_cfg: &codegen::CodegenConfig,
     filters: &Filters,
     use_zero_as_default_reset: bool,
+    use_legacy: bool,
 ) -> Result<String, ApiError> {
     let s = generate_tests(
         sources,
@@ -224,25 +256,36 @@ pub fn generate_tests_with_format(
         test_cfg,
         filters,
         use_zero_as_default_reset,
+        use_legacy,
     )?;
     Ok(apply_fmt(s))
 }
 
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 pub fn count_registers_svd(
     sources: &[ModelSource],
     arch: ArchWidth,
     filters: &Filters,
+    use_legacy: bool,
 ) -> Result<usize, ApiError> {
-    let registers = parse_registers_for_analysis(sources, filters, arch)?;
+    let registers = parse_registers_for_analysis(sources, filters, arch, use_legacy)?;
     Ok(registers.len())
 }
 
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 pub fn count_readable_registers_with_reset_value(
     sources: &[ModelSource],
     arch: ArchWidth,
     filters: &Filters,
+    use_legacy: bool,
 ) -> Result<usize, ApiError> {
-    let registers = parse_registers_for_analysis(sources, filters, arch)?;
+    let registers = parse_registers_for_analysis(sources, filters, arch, use_legacy)?;
     Ok(registers
         .iter()
         .filter(|reg| reg.is_readable() && reg.has_reset_value())
@@ -252,11 +295,17 @@ pub fn count_readable_registers_with_reset_value(
 /// Returns top level containers (peripherals or subsystems) and the number of registers in each
 ///
 /// `Vec<(container, register count)>`
+///
+/// # Arguments
+///
+/// * `use_legacy` - Use the original, custom SVD parser instead of the new `svd-parser` based
+///   parser
 pub fn list_top(
     sources: &[ModelSource],
     arch: ArchWidth,
+    use_legacy: bool,
 ) -> Result<Vec<(String, usize)>, ApiError> {
-    let registers = parse_registers_for_analysis(sources, &Filters::all(), arch)?;
+    let registers = parse_registers_for_analysis(sources, &Filters::all(), arch, use_legacy)?;
 
     let tops = registers
         .iter()
