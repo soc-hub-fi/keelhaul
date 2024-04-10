@@ -112,8 +112,8 @@ type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 ///
 /// # Arguments
 ///
-/// * `default_reset_value` - Assume this to be the reset value, if not provided by the source file.
-///   Provided for convenience, as `0` is a very common reset value.
+/// * `use_zero_as_default_reset` - Assume zero as the default reset value if not provided by the
+///   source file. Provided for convenience, as `0` is a very common reset value.
 fn parse_registers<P>(
     sources: &[ModelSource],
     filters: &Filters,
