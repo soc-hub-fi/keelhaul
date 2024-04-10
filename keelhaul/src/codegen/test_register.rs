@@ -10,6 +10,11 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
 /// Type that a test can be generated for
+///
+/// # Type arguments
+///
+/// * `P` - Architecture pointer-width, i.e., a pointer capable of holding any representable
+///   address.
 pub(crate) trait TestRegister<P>: model::UniquePath {
     /// Get the absolute memory address of the register
     fn addr(&self) -> P;
