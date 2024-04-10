@@ -382,7 +382,7 @@ fn generate(
     no_format: bool,
     use_zero_as_default_reset: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut config = keelhaul::TestConfig::default()
+    let mut config = keelhaul::CodegenConfig::default()
         .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
         .unwrap()
         .derive_debug(derive_debug)

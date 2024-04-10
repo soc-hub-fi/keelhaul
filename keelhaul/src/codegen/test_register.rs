@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     codegen,
     model::{self, ArchPtr, UniquePath},
-    TestConfig, TestKind,
+    CodegenConfig, TestKind,
 };
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
@@ -55,7 +55,7 @@ impl<T> ValueOnReset<T> {
 /// This text is then compiled as Rust source code.
 pub(crate) struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + 'static>(
     &'r dyn TestRegister<P>,
-    &'c TestConfig,
+    &'c CodegenConfig,
 );
 
 impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
@@ -74,7 +74,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     }
 
     /// Create a [`RegTestGenerator`] from a register definition
-    pub fn from_register(reg: &'r impl TestRegister<P>, config: &'c TestConfig) -> Self {
+    pub fn from_register(reg: &'r impl TestRegister<P>, config: &'c CodegenConfig) -> Self {
         Self(reg, config)
     }
 
@@ -202,7 +202,7 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     addr: P,
     size: u32,
     reset_value: &ValueOnReset<u64>,
-    config: &TestConfig,
+    config: &CodegenConfig,
 ) -> TokenStream {
     // Reset value test requires read test to be present. Can't check for
     // reset value unless it's been read before.
@@ -297,7 +297,7 @@ impl RegTestCases {
     /// - Failed to generate test case for a register
     pub fn from_registers<P: ArchPtr + quote::IdentFragment + 'static>(
         registers: &model::Registers<P, model::RefSchemaSvdV1_2>,
-        config: &TestConfig,
+        config: &CodegenConfig,
     ) -> Self {
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();
         let preamble = codegen::gen_preamble(widest, config.derive_debug);

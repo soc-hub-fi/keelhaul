@@ -10,7 +10,9 @@ mod error;
 
 use std::{ops, path, str};
 
-use crate::{analysis, codegen, error::SvdParseError, model, FailureImplKind, Filters, TestConfig};
+use crate::{
+    analysis, codegen, error::SvdParseError, model, CodegenConfig, FailureImplKind, Filters,
+};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
@@ -206,7 +208,7 @@ fn apply_fmt(input: String) -> String {
 pub fn generate_tests(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
-    test_cfg: &TestConfig,
+    test_cfg: &CodegenConfig,
     filters: &Filters,
     use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {
@@ -230,7 +232,7 @@ pub fn generate_tests(
 pub fn generate_tests_with_format(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
-    test_cfg: &TestConfig,
+    test_cfg: &CodegenConfig,
     filters: &Filters,
     use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {

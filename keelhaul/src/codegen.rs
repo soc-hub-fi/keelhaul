@@ -118,7 +118,7 @@ pub enum FailureImplKind {
 }
 
 #[derive(Clone, Debug)]
-pub struct TestConfig {
+pub struct CodegenConfig {
     /// What types of tests to generate
     ///
     /// [RegTestKind::Read]: read register value (may cause e.g., bus failure or hang)
@@ -138,7 +138,7 @@ pub struct TestConfig {
     force_ignore_reset_mask: bool,
 }
 
-impl Default for TestConfig {
+impl Default for CodegenConfig {
     fn default() -> Self {
         Self {
             tests_to_generate: iter::once(TestKind::Read).collect(),
@@ -150,7 +150,7 @@ impl Default for TestConfig {
     }
 }
 
-impl TestConfig {
+impl CodegenConfig {
     /// Get test kinds
     ///
     /// # Errors
