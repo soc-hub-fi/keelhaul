@@ -8,7 +8,7 @@ pub enum ApiError {
     #[error("not implemented")]
     NotImplemented(#[from] NotImplementedError),
     // TODO: this is a temporary error wrapper. Factor out the variants.
-    #[error("keelhaul internal error")]
+    #[error("keelhaul returned failure")]
     Keelhaul(#[from] crate::error::Error),
 }
 

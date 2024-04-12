@@ -330,6 +330,7 @@ impl ValueEnum for TestKind {
     }
 }
 
+/// Like `PtrSize` but limited exactly to supported architecture pointer sizes.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum ArchWidth {
     #[value(name = "32")]

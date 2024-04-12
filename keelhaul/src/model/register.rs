@@ -459,8 +459,10 @@ impl From<RegValue> for u64 {
 
 /// `BitSized` types have a knowable size
 pub(crate) trait BitSized<T>: fmt::Debug + Copy {
+    /// Number of bits used to represent this type
     fn bit_count() -> u32;
     fn all_ones() -> T;
+    /// Determines wheter this type can be used to represent `val`
     fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
         val <= Self::all_ones()
     }
