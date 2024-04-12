@@ -90,7 +90,7 @@ where
             .full()
             .ok_or_else(|| error::AddrOverflowError {
                 src: self.addr.clone(),
-                size: P::ptr_size().bit_count(),
+                size: P::ptr_size().count_bits(),
                 id: Some(self.path.join("-")),
             })
             .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
@@ -562,7 +562,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn bit_count(self) -> u32 {
+    pub(crate) const fn count_bits(self) -> u32 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -578,6 +578,6 @@ pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
 
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
+        write!(f, "{}", bit_count_to_rust_uint_type_str(self.count_bits()))
     }
 }

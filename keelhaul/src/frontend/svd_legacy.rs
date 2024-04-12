@@ -331,7 +331,7 @@ impl RegPropGroupBuilder {
                 Some(mask) => Some(mask),
                 None => {
                     if default_reset_value.is_some() {
-                        warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.bit_count()));
+                        warn!("property 'resetMask' is not defined for register '{reg_path}' or any of its parents, assuming resetMask = {}::MAX", bit_count_to_rust_uint_type_str(size.count_bits()));
                         Some(size.max_value())
                     } else {
                         None
@@ -670,7 +670,7 @@ where
                     .clone_and_update_from_node(&register_node)?
                     .build(
                         &reg_path,
-                        Some(P::ptr_size().bit_count()),
+                        Some(P::ptr_size().count_bits()),
                         default_reset_value,
                     )
                     .map_err(|e| err_with_pos(e, &register_node))?
@@ -712,7 +712,7 @@ where
                 .clone_and_update_from_node(&register_node)?
                 .build(
                     &reg_path,
-                    Some(P::ptr_size().bit_count()),
+                    Some(P::ptr_size().count_bits()),
                     default_reset_value,
                 )
                 .map_err(|e| err_with_pos(e, &register_node))?
