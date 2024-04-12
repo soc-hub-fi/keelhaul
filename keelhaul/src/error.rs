@@ -16,16 +16,11 @@ pub enum CommonParseError {
 
 #[derive(Error, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-#[error("address for {0} does not fit in architecture pointer {1}")]
-pub struct AddrOverflowError<T: num::CheckedAdd, S: model::RefSchema>(
-    String,
-    model::AddrRepr<T, S>,
-);
-
-impl<T: num::CheckedAdd, S: model::RefSchema> AddrOverflowError<T, S> {
-    pub const fn new(id: String, addr: model::AddrRepr<T, S>) -> Self {
-        Self(id, addr)
-    }
+#[error("could not make {src:#x} into an address of size {size} (bits), id: {id:?}")]
+pub struct AddrOverflowError<P: num::CheckedAdd, S: model::RefSchema> {
+    pub(crate) src: model::AddrRepr<P, S>,
+    pub(crate) size: u32,
+    pub(crate) id: Option<String>,
 }
 
 #[derive(Clone, Error, Debug)]

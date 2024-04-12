@@ -77,7 +77,7 @@ where
 
 impl<P, S> codegen::TestRegister<P> for Register<P, S>
 where
-    P: num::CheckedAdd + Copy + fmt::Debug,
+    P: num::CheckedAdd + Copy + fmt::Debug + ArchPtr,
     S: RefSchema,
 {
     /// Get the absolute memory address of the register
@@ -88,7 +88,11 @@ where
     fn addr(&self) -> P {
         self.addr
             .full()
-            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
+            .ok_or_else(|| error::AddrOverflowError {
+                src: self.addr.clone(),
+                size: P::ptr_size().bit_count(),
+                id: Some(self.path.join("-")),
+            })
             .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
     }
 
