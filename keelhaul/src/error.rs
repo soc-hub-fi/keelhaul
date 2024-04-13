@@ -14,24 +14,10 @@ pub enum CommonParseError {
     InvalidAccessType(String),
 }
 
-#[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-#[error("address for {0} does not fit in architecture pointer {1}")]
-pub struct AddrOverflowError<T: num::CheckedAdd, S: model::RefSchema>(
-    String,
-    model::AddrRepr<T, S>,
-);
-
-impl<T: num::CheckedAdd, S: model::RefSchema> AddrOverflowError<T, S> {
-    pub const fn new(id: String, addr: model::AddrRepr<T, S>) -> Self {
-        Self(id, addr)
-    }
-}
-
 #[derive(Clone, Error, Debug)]
 pub enum Error {
     #[error("error while parsing SVD")]
-    SvdParse(#[from] ParseFileError<SvdParseError>),
+    SvdParse(#[from] Box<ParseFileError<SvdParseError>>),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
@@ -175,6 +161,11 @@ pub enum SvdParseError {
     Infallible(#[from] convert::Infallible),
     #[error("could not convert from int: {0}")]
     TryFromInt(#[from] std::num::TryFromIntError),
+    #[error("register: {reg_name:?}, address cannot fit in target pointer\n{inner}")]
+    ResolveAddr {
+        reg_name: String,
+        inner: model::MakeAddrError,
+    },
     #[error(
         "SVD-file must contain {}..={} {}-nodes, contained {}", expected_count.start(), expected_count.end(), node_name, actual_count
     )]

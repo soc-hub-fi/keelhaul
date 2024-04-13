@@ -5,7 +5,7 @@ use std::{cmp, fmt, hash, marker::PhantomData, str};
 
 use crate::{
     analysis, bit_count_to_rust_uint_type_str, codegen, error,
-    model::{RefSchema, RefSchemaSvdV1_2, UniquePath},
+    model::{AddrRepr, RefSchema, RefSchemaSvdV1_2, UniquePath},
 };
 use itertools::Itertools;
 
@@ -13,16 +13,15 @@ use itertools::Itertools;
 ///
 /// # Type arguments
 ///
-/// * `P` - type representing the architecture pointer size
 /// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
 #[derive(Clone, Debug)]
-pub struct Register<P: num::CheckedAdd, S: RefSchema> {
+pub struct Register<S: RefSchema> {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
     /// Used for generating unique identifiers and symbol names in test cases
     path: RegPath<S>,
     /// Address of the register
-    addr: AddrRepr<P, S>,
+    addr: AddrRepr<S>,
     /// Bit-width of register
     size: u32,
     /// Software access rights
@@ -39,14 +38,13 @@ pub struct Register<P: num::CheckedAdd, S: RefSchema> {
     //dimensions: Option<svd::DimElement>,
 }
 
-impl<P, S> Register<P, S>
+impl<S> Register<S>
 where
-    P: num::CheckedAdd + Copy,
     S: RefSchema,
 {
     pub(crate) fn new(
         path: RegPath<S>,
-        addr: AddrRepr<P, S>,
+        addr: AddrRepr<S>,
         size: u32,
         access: svd::Access,
         reset_value: Option<ResetValue>,
@@ -59,11 +57,14 @@ where
             reset_value,
         }
     }
+
+    pub(crate) fn addr(&self) -> u64 {
+        self.addr.full()
+    }
 }
 
-impl<P, S> UniquePath for Register<P, S>
+impl<S> UniquePath for Register<S>
 where
-    P: num::CheckedAdd + Copy + fmt::Debug,
     S: RefSchema,
 {
     fn path(&self) -> Vec<String> {
@@ -75,9 +76,8 @@ where
     }
 }
 
-impl<P, S> codegen::TestRegister<P> for Register<P, S>
+impl<S> codegen::TestRegister for Register<S>
 where
-    P: num::CheckedAdd + Copy + fmt::Debug,
     S: RefSchema,
 {
     /// Get the absolute memory address of the register
@@ -85,11 +85,8 @@ where
     /// # Panics
     ///
     /// * address overflows
-    fn addr(&self) -> P {
-        self.addr
-            .full()
-            .ok_or_else(|| error::AddrOverflowError::new(self.path.join("-"), self.addr.clone()))
-            .unwrap_or_else(|_| panic!("could not resolve full address for register: {:?}", &self))
+    fn addr(&self) -> u64 {
+        Register::addr(self)
     }
 
     fn size(&self) -> u32 {
@@ -116,9 +113,7 @@ where
     }
 }
 
-impl<P: num::CheckedAdd + Copy + fmt::Debug, S: RefSchema> analysis::AnalyzeRegister
-    for Register<P, S>
-{
+impl<S: RefSchema> analysis::AnalyzeRegister for Register<S> {
     fn has_reset_value(&self) -> bool {
         self.reset_value.is_some()
     }
@@ -168,146 +163,6 @@ impl RegPath<RefSchemaSvdV1_2> {
         }
         v.push(RegPathSegment { name: reg });
         Self::new(v)
-    }
-}
-
-/// Address representation
-///
-/// Addresses can be represented in many ways. This implementation provides a vector of subsequent
-/// offsets.
-///
-/// # Type arguments
-///
-/// * `P` - type representing the architecture pointer size
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AddrRepr<P: num::CheckedAdd, S: RefSchema>(Vec<P>, PhantomData<S>);
-
-impl<P, S> AddrRepr<P, S>
-where
-    P: num::CheckedAdd + Copy,
-    S: RefSchema,
-{
-    pub fn from_vec(v: Vec<P>) -> Self {
-        assert!(!v.is_empty(), "address must have at least base address");
-        Self(v, PhantomData)
-    }
-
-    /// Get register's absolute memory address
-    ///
-    /// Returns None on address overflow.
-    pub fn full(&self) -> Option<P> {
-        let (base, offsets) = self.0.split_at(1);
-        offsets.iter().try_fold(
-            // Safety: addr repr must have at least the base address element, which is checked for in `from_vec`
-            unsafe { *base.get_unchecked(0) },
-            |acc, offset| acc.checked_add(offset),
-        )
-    }
-}
-
-// SVD v1.2 only methods
-impl<P> AddrRepr<P, RefSchemaSvdV1_2>
-where
-    P: num::CheckedAdd + Copy,
-{
-    pub fn from_base_cluster_offset(base: P, cluster: Option<P>, offset: P) -> Self {
-        let mut v = vec![];
-        v.push(base);
-        if let Some(cl) = cluster {
-            v.push(cl);
-        }
-        v.push(offset);
-        Self::from_vec(v)
-    }
-
-    pub fn components(&self) -> (P, Option<P>, P) {
-        let v = &self.0;
-        if v.len() == 2 {
-            // Safety: length checked on conditional of previous line
-            unsafe { (*v.get_unchecked(0), None, *v.get_unchecked(1)) }
-        } else if v.len() == 3 {
-            // Safety: length checked on conditional of previous line
-            unsafe {
-                (
-                    *v.get_unchecked(0),
-                    Some(*v.get_unchecked(1)),
-                    *v.get_unchecked(2),
-                )
-            }
-        } else {
-            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
-        }
-    }
-
-    pub fn base(&self) -> P {
-        // Safety: `AddrRepr` must have at least base address
-        unsafe { *self.0.get_unchecked(0) }
-    }
-
-    pub fn cluster(&self) -> Option<P> {
-        // Safety: length checked
-        (self.0.len() == 3).then(|| unsafe { *self.0.get_unchecked(1) })
-    }
-
-    pub fn offset(&self) -> P {
-        let v = &self.0;
-        if v.len() == 2 {
-            // Safety: length checked on conditional of previous line
-            unsafe { *v.get_unchecked(1) }
-        } else if v.len() == 3 {
-            // Safety: length checked on conditional of previous line
-            unsafe { *v.get_unchecked(2) }
-        } else {
-            panic!("register in the CMSIS-SVD 1.2 schema must comprise of at least two elements (periph + offset)")
-        }
-    }
-}
-
-impl<P: num::CheckedAdd + fmt::LowerHex + Copy> fmt::Display for AddrRepr<P, RefSchemaSvdV1_2> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.cluster() {
-            Some(cluster) => write!(
-                f,
-                "{{ base: {:#x}, cluster: {:#x}, offset: {:#x} }}",
-                self.base(),
-                cluster,
-                self.offset()
-            ),
-            None => write!(
-                f,
-                "{{ base: {:#x}, offset: {:#x} }}",
-                self.base(),
-                self.offset()
-            ),
-        }
-    }
-}
-
-// Allow conversion from a 32-bit address representation to a 64-bit
-// representation to simplify debug implementations
-impl From<AddrRepr<u32, RefSchemaSvdV1_2>> for AddrRepr<u64, RefSchemaSvdV1_2> {
-    fn from(value: AddrRepr<u32, RefSchemaSvdV1_2>) -> Self {
-        Self::from_base_cluster_offset(
-            value.base().into(),
-            value.cluster().map(|x| x.into()),
-            value.offset().into(),
-        )
-    }
-}
-
-// 64-bit address can be fallibly converted to a 32-bit address. Returns Err on
-// overflow.
-impl<S: RefSchema> TryFrom<AddrRepr<u64, S>> for AddrRepr<u32, S> {
-    type Error = <u64 as TryInto<u32>>::Error;
-
-    fn try_from(value: AddrRepr<u64, S>) -> Result<Self, Self::Error> {
-        Ok(Self::from_vec(
-            value
-                .0
-                .into_iter()
-                .map(|v| v.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-        ))
     }
 }
 
@@ -397,7 +252,7 @@ impl RegValue {
     }
 
     /// Bit-extend the value to 64-bits
-    pub(crate) fn as_u64(&self) -> u64 {
+    pub fn as_u64(&self) -> u64 {
         match self {
             RegValue::U8(u) => *u as u64,
             RegValue::U16(u) => *u as u64,
@@ -455,8 +310,10 @@ impl From<RegValue> for u64 {
 
 /// `BitSized` types have a knowable size
 pub(crate) trait BitSized<T>: fmt::Debug + Copy {
+    /// Number of bits used to represent this type
     fn bit_count() -> u32;
     fn all_ones() -> T;
+    /// Determines wheter this type can be used to represent `val`
     fn can_represent<U: cmp::PartialOrd<T>>(val: U) -> bool {
         val <= Self::all_ones()
     }
@@ -549,7 +406,7 @@ impl PtrSize {
     }
 
     /// Maximum value representable by a binding of type [`PtrSize`]
-    pub(crate) const fn max_value(self) -> RegValue {
+    pub const fn max_value(self) -> RegValue {
         match self {
             Self::U8 => RegValue::U8(u8::MAX),
             Self::U16 => RegValue::U16(u16::MAX),
@@ -558,7 +415,7 @@ impl PtrSize {
         }
     }
 
-    pub(crate) const fn bit_count(self) -> u32 {
+    pub(crate) const fn count_bits(self) -> u32 {
         match self {
             Self::U8 => 8,
             Self::U16 => 16,
@@ -568,12 +425,8 @@ impl PtrSize {
     }
 }
 
-pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
-    matches!(bit_count, 8 | 16 | 32 | 64)
-}
-
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", bit_count_to_rust_uint_type_str(self.bit_count()))
+        write!(f, "{}", bit_count_to_rust_uint_type_str(self.count_bits()))
     }
 }
