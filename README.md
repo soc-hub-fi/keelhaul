@@ -10,6 +10,16 @@ CMSIS-SVD files.
 - Install `just`, a command runner
   - `cargo install just`
 
+## Getting started - try the CLI
+
+The easiest way to use the tool is to run the CLI and explore what it can do:
+
+```sh
+cd keelhaul-cli
+
+cargo run -- --help
+```
+
 ## SoC integration guide
 
 Use these steps to bring up support for Keelhaul in an SoC project:

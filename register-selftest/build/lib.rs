@@ -13,7 +13,7 @@ use std::{
 
 use anyhow::Context;
 use fs_err::{self as fs, File};
-use keelhaul::{Filters, ItemFilter, ModelSource, ParseTestKindError, TestConfig, TestKind};
+use keelhaul::{CodegenConfig, Filters, ItemFilter, ModelSource, ParseTestKindError, TestKind};
 use log::LevelFilter;
 use regex::Regex;
 
@@ -93,7 +93,7 @@ fn main() -> anyhow::Result<()> {
         8 => keelhaul::ArchWidth::U64,
         _ => panic!("unsupported arch size"),
     };
-    let mut test_cfg = TestConfig::default();
+    let mut test_cfg = CodegenConfig::default();
     if let Some(test_kind_set) =
         test_types_from_env().with_context(|| format!("Could not detect {ENV_TEST_KINDS}"))?
     {
@@ -125,6 +125,7 @@ fn main() -> anyhow::Result<()> {
         arch_ptr_size_bytes,
         &test_cfg,
         &Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
+        true,
     )?;
     file_output.write_all(test_cases.as_bytes())?;
     let path = get_path_to_output();
