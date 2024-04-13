@@ -1,10 +1,14 @@
 //! Encodes information about memory mapped registers. This information can be
 //! used to generate test cases.
 
+mod addr;
 mod register;
 
 // Anything that's part of the public API of register is also part of the public API of model
 pub use register::*;
+
+// Anything that's part of the internal API of register is also part of the internal API of model
+pub(crate) use addr::*;
 
 use std::{fmt, ops};
 
