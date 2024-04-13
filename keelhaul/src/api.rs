@@ -41,7 +41,7 @@ impl ModelSource {
 #[derive(Clone, Debug)]
 pub enum SourceFormat {
     /// CMSIS-SVD (at least v1.3 and below)
-    Svd,
+    Svd(ValidateLevel),
     /// IP-XACT (2014, 2022)
     Ieee1685,
 }
@@ -112,8 +112,8 @@ type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 ///
 /// # Arguments
 ///
-/// * `default_reset_value` - Assume this to be the reset value, if not provided by the source file.
-///   Provided for convenience, as `0` is a very common reset value.
+/// * `use_zero_as_default_reset` - Assume zero as the default reset value if not provided by the
+///   source file. Provided for convenience, as `0` is a very common reset value.
 fn parse_registers<P>(
     sources: &[ModelSource],
     filters: &Filters,
@@ -135,7 +135,7 @@ where
                 )
                 .into())
             }
-            SourceFormat::Svd => {}
+            SourceFormat::Svd(_) => {}
         }
     }
 
@@ -143,7 +143,12 @@ where
 
     for src in sources {
         match src.format {
-            SourceFormat::Svd => {
+            SourceFormat::Svd(vlevel) => {
+                if vlevel != ValidateLevel::Disabled {
+                    return Err(
+                        NotImplementedError::UnsupportedOption(format!("{:?}", vlevel)).into(),
+                    );
+                }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
                 registers.push(crate::frontend::svd_legacy::parse_svd_into_registers::<P>(
@@ -253,6 +258,18 @@ pub fn count_registers_svd(
 ) -> Result<usize, ApiError> {
     let registers = parse_registers_for_analysis(sources, filters, arch)?;
     Ok(registers.len())
+}
+
+pub fn count_readable_registers_with_reset_value(
+    sources: &[ModelSource],
+    arch: ArchWidth,
+    filters: &Filters,
+) -> Result<usize, ApiError> {
+    let registers = parse_registers_for_analysis(sources, filters, arch)?;
+    Ok(registers
+        .iter()
+        .filter(|reg| reg.is_readable() && reg.has_reset_value())
+        .count())
 }
 
 /// Returns top level containers (peripherals or subsystems) and the number of registers in each
