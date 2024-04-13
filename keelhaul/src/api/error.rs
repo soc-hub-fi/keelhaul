@@ -16,6 +16,8 @@ pub enum ApiError {
 pub enum NotImplementedError {
     #[error("unsupported format '{1:?}' for path {0:?}")]
     UnsupportedSourceFormat(path::PathBuf, SourceFormat),
+    #[error("unsupported option: {0:?}")]
+    UnsupportedOption(String),
 }
 
 #[derive(Error, Debug)]
