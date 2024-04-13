@@ -425,10 +425,6 @@ impl PtrSize {
     }
 }
 
-pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
-    matches!(bit_count, 8 | 16 | 32 | 64)
-}
-
 impl fmt::Display for PtrSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", bit_count_to_rust_uint_type_str(self.count_bits()))

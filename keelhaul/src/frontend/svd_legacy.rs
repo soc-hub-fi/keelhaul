@@ -229,6 +229,10 @@ where
         .transpose()
 }
 
+pub(crate) fn is_valid_bit_count(bit_count: u32) -> bool {
+    matches!(bit_count, 8 | 16 | 32 | 64)
+}
+
 impl RegPropGroupBuilder {
     /// Returns a new [`RegPropGroupBuilder`] with applicable attributes from `node`
     ///
@@ -306,7 +310,7 @@ impl RegPropGroupBuilder {
         let size = self.size.unwrap_or_else(|| {
             let size_bits = default_register_size_bits.expect("property 'size' was not defined and a default was not provided");
             warn!("property 'size' is not defined for register '{reg_path}' or any of its parents, assuming size = {size_bits}");
-            assert!(model::is_valid_bit_count(size_bits));
+            assert!(is_valid_bit_count(size_bits));
             size_bits
         });
         let access = self.access.unwrap_or_else(|| {
