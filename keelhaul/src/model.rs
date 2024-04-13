@@ -8,8 +8,6 @@ pub use register::*;
 
 use std::{fmt, ops};
 
-use self::schema::svd;
-
 /// Trait for types that have a unique path within a given system
 ///
 /// This could be the "peripheral-cluster-register" chain on CMSIS-SVD or the bus traverse path on
@@ -40,54 +38,35 @@ pub trait UniquePath {
 ///
 /// Note that the reference schema should not impact the model implementation, only the user facing
 /// output, generated variable names, etc.
-pub trait RefSchema: fmt::Debug + Clone + Copy {
-    type RegPathSegmentSource;
-}
+pub trait RefSchema: fmt::Debug + Clone + Copy {}
 
 /// Marker type indicating that the marked type references CMSIS-SVD v1.2
 #[derive(Debug, Clone, Copy)]
 pub struct RefSchemaSvdV1_2;
-impl RefSchema for RefSchemaSvdV1_2 {
-    type RegPathSegmentSource = svd::HierarchyLevel;
-}
+impl RefSchema for RefSchemaSvdV1_2 {}
 
 /// Marker type indicating that the marked type references CMSIS-SVD v1.3
 #[derive(Debug, Clone, Copy)]
 pub struct RefSchemaSvdV1_3;
-impl RefSchema for RefSchemaSvdV1_3 {
-    type RegPathSegmentSource = svd::HierarchyLevel;
-}
+impl RefSchema for RefSchemaSvdV1_3 {}
 
 /// A list of registers parsed from SVD or IP-XACT (newtype)
 ///
 /// # Type arguments
 ///
 /// * `P` - type representing the architecture pointer size
-pub struct Registers<P: num::CheckedAdd, S: RefSchema>(Vec<Register<P, S>>);
+pub struct Registers<S: RefSchema>(Vec<Register<S>>);
 
-impl<P: num::CheckedAdd, S: RefSchema> From<Vec<Register<P, S>>> for Registers<P, S> {
-    fn from(value: Vec<Register<P, S>>) -> Self {
+impl<S: RefSchema> From<Vec<Register<S>>> for Registers<S> {
+    fn from(value: Vec<Register<S>>) -> Self {
         Self(value)
     }
 }
 
-impl<P: num::CheckedAdd, S: RefSchema> ops::Deref for Registers<P, S> {
-    type Target = Vec<Register<P, S>>;
+impl<S: RefSchema> ops::Deref for Registers<S> {
+    type Target = Vec<Register<S>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-pub(crate) mod schema {
-    pub(crate) mod svd {
-        pub enum HierarchyLevel {
-            /// Peripheral
-            Periph,
-            /// Cluster
-            Cluster,
-            /// Register
-            Reg,
-        }
     }
 }

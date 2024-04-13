@@ -14,19 +14,10 @@ pub enum CommonParseError {
     InvalidAccessType(String),
 }
 
-#[derive(Error, Debug)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-#[error("could not make {src:#x} into an address of size {size} (bits), id: {id:?}")]
-pub struct AddrOverflowError<P: num::CheckedAdd, S: model::RefSchema> {
-    pub(crate) src: model::AddrRepr<P, S>,
-    pub(crate) size: u32,
-    pub(crate) id: Option<String>,
-}
-
 #[derive(Clone, Error, Debug)]
 pub enum Error {
     #[error("error while parsing SVD")]
-    SvdParse(#[from] ParseFileError<SvdParseError>),
+    SvdParse(#[from] Box<ParseFileError<SvdParseError>>),
     #[error("error while compiling regex")]
     Regex(#[from] regex::Error),
     #[error("zero entries were chosen from SVD, either the file doesn't have any register definitions, or they were all ignored by current flags")]
@@ -170,6 +161,11 @@ pub enum SvdParseError {
     Infallible(#[from] convert::Infallible),
     #[error("could not convert from int: {0}")]
     TryFromInt(#[from] std::num::TryFromIntError),
+    #[error("register: {reg_name:?}, address cannot fit in target pointer\n{inner}")]
+    ResolveAddr {
+        reg_name: String,
+        inner: model::MakeAddrError,
+    },
     #[error(
         "SVD-file must contain {}..={} {}-nodes, contained {}", expected_count.start(), expected_count.end(), node_name, actual_count
     )]

@@ -10,14 +10,9 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
 /// Type that a test can be generated for
-///
-/// # Type arguments
-///
-/// * `P` - Architecture pointer-width, i.e., a pointer capable of holding any representable
-///   address.
-pub(crate) trait TestRegister<P>: model::UniquePath {
+pub(crate) trait TestRegister: model::UniquePath {
     /// Get the absolute memory address of the register
-    fn addr(&self) -> P;
+    fn addr(&self) -> u64;
 
     /// The size of the register in bits
     fn size(&self) -> u32;
@@ -58,12 +53,9 @@ impl<T> ValueOnReset<T> {
 ///
 /// Test cases are represented by [`TokenStream`] which can be rendered to text.
 /// This text is then compiled as Rust source code.
-pub(crate) struct RegTestGenerator<'r, 'c, P: ArchPtr + quote::IdentFragment + 'static>(
-    &'r dyn TestRegister<P>,
-    &'c CodegenConfig,
-);
+pub(crate) struct RegTestGenerator<'r, 'c>(&'r dyn TestRegister, &'c CodegenConfig);
 
-impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
+impl<'r, 'c> RegTestGenerator<'r, 'c> {
     /// Name for the binding to the pointer to the memory mapped register
     fn ptr_binding() -> TokenStream {
         quote!(_reg_ptr)
@@ -79,7 +71,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     }
 
     /// Create a [`RegTestGenerator`] from a register definition
-    pub fn from_register(reg: &'r impl TestRegister<P>, config: &'c CodegenConfig) -> Self {
+    pub fn from_register(reg: &'r impl TestRegister, config: &'c CodegenConfig) -> Self {
         Self(reg, config)
     }
 
@@ -101,8 +93,7 @@ impl<'r, 'c, P: ArchPtr + quote::IdentFragment> RegTestGenerator<'r, 'c, P> {
     /// * `test_MDIO_RD_DATA_0xff40040c`
     fn gen_test_fn_ident(&self) -> Ident {
         let reg = &self.0;
-        let addr: P = reg.addr();
-        format_ident!("test_{}_{:#x}", reg.name(), addr)
+        format_ident!("test_{}_{:#x}", reg.name(), reg.addr())
     }
 
     /// Generates a test function
@@ -213,7 +204,7 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     // reset value unless it's been read before.
     debug_assert!(config.tests_to_generate.contains(&TestKind::Read));
 
-    let read_value_binding = RegTestGenerator::<P>::read_value_binding();
+    let read_value_binding = RegTestGenerator::read_value_binding();
     let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask.is_none() {
         codegen::u_to_hexlit(reset_value.value, size)
     } else {
@@ -300,8 +291,8 @@ impl RegTestCases {
     /// # Errors
     ///
     /// - Failed to generate test case for a register
-    pub fn from_registers<P: ArchPtr + quote::IdentFragment + 'static>(
-        registers: &model::Registers<P, model::RefSchemaSvdV1_2>,
+    pub fn from_registers(
+        registers: &model::Registers<model::RefSchemaSvdV1_2>,
         config: &CodegenConfig,
     ) -> Self {
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();

@@ -9,7 +9,7 @@ pub enum ApiError {
     NotImplemented(#[from] NotImplementedError),
     // TODO: this is a temporary error wrapper. Factor out the variants.
     #[error("keelhaul returned failure")]
-    Keelhaul(#[from] crate::error::Error),
+    Keelhaul(#[from] Box<crate::error::Error>),
 }
 
 #[derive(Error, Debug, Clone)]

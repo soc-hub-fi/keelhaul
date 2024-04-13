@@ -91,18 +91,12 @@ impl str::FromStr for TestKind {
 ///
 /// Good for checking whether the input files can be parsed by Keelhaul.
 pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError> {
-    match arch {
-        ArchWidth::U32 => {
-            parse_registers::<u32>(sources, &Filters::all(), false)?;
-        }
-        ArchWidth::U64 => {
-            parse_registers::<u64>(sources, &Filters::all(), false)?;
-        }
-    }
+    parse_registers(sources, arch, &Filters::all(), false)?;
+
     Ok(())
 }
 
-type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
+type Registers = model::Registers<RefSchemaSvdV1_2>;
 
 /// Run the parser on a set of `sources` and return the collection of registers contained within
 ///
@@ -114,17 +108,16 @@ type Registers<P> = model::Registers<P, RefSchemaSvdV1_2>;
 ///
 /// * `use_zero_as_default_reset` - Assume zero as the default reset value if not provided by the
 ///   source file. Provided for convenience, as `0` is a very common reset value.
-fn parse_registers<P>(
+fn parse_registers(
     sources: &[ModelSource],
+    arch: ArchWidth,
     filters: &Filters,
     use_zero_as_default_reset: bool,
-) -> Result<Registers<P>, ApiError>
+) -> Result<Registers, ApiError>
 where
-    P: model::ArchPtr,
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as str::FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
+    SvdParseError: From<<u64 as num::Num>::FromStrRadixErr>
+        + From<<u64 as str::FromStr>::Err>
+        + From<<u64 as TryFrom<u64>>::Error>,
 {
     for src in sources {
         match src.format {
@@ -151,11 +144,14 @@ where
                 }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
-                registers.push(crate::frontend::svd_legacy::parse_svd_into_registers::<P>(
+                let regs = crate::frontend::svd_legacy::parse_svd_into_registers(
                     src.path(),
+                    arch.into(),
                     filters,
                     default_reset_value,
-                )?)
+                )
+                .map_err(Box::new)?;
+                registers.push(regs);
             }
             SourceFormat::Ieee1685 => todo!(),
         }
@@ -169,18 +165,11 @@ fn parse_registers_for_analysis(
     filters: &Filters,
     arch: ArchWidth,
 ) -> Result<Vec<Box<dyn analysis::AnalyzeRegister>>, ApiError> {
-    Ok(match arch {
-        ArchWidth::U32 => parse_registers::<u32>(sources, filters, false)?
-            .clone()
-            .into_iter()
-            .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
-            .collect(),
-        ArchWidth::U64 => parse_registers::<u64>(sources, filters, false)?
-            .clone()
-            .into_iter()
-            .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
-            .collect(),
-    })
+    Ok(parse_registers(sources, arch, filters, false)?
+        .clone()
+        .into_iter()
+        .map(|reg| Box::new(reg) as Box<dyn analysis::AnalyzeRegister>)
+        .collect())
 }
 
 #[cfg(feature = "rustfmt")]
@@ -217,16 +206,8 @@ pub fn generate_tests(
     filters: &Filters,
     use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {
-    let test_cases: codegen::RegTestCases = match arch_ptr_size {
-        ArchWidth::U32 => {
-            let registers = parse_registers::<u32>(sources, filters, use_zero_as_default_reset)?;
-            codegen::RegTestCases::from_registers(&registers, test_cfg)
-        }
-        ArchWidth::U64 => {
-            let registers = parse_registers::<u64>(sources, filters, use_zero_as_default_reset)?;
-            codegen::RegTestCases::from_registers(&registers, test_cfg)
-        }
-    };
+    let registers = parse_registers(sources, arch_ptr_size, filters, use_zero_as_default_reset)?;
+    let test_cases = codegen::RegTestCases::from_registers(&registers, test_cfg);
     // FIXME: it would be good to have this message prior to generation
     info!("Wrote {} test cases.", test_cases.test_case_count);
 

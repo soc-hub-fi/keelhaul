@@ -9,10 +9,10 @@ use crate::{
     bit_count_to_rust_uint_type_str,
     error::{CommonParseError, Error, PositionalError, SvdParseError},
     model::{
-        self, AddrRepr, ArchPtr, PtrSize, RegPath, RegValue, Register, Registers, ResetValue,
-        UniquePath,
+        self, AddrRepr, ArchPtr, MakeAddrError, PtrSize, RegPath, RegValue, Register, Registers,
+        ResetValue, UniquePath,
     },
-    util, Filters, IsAllowedOrBlocked, ItemFilter, TestRegister,
+    util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
 use itertools::Itertools;
 use log::{info, warn};
@@ -380,27 +380,22 @@ impl RegisterPropertiesGroup {
     }
 }
 
-enum RegisterParentKind<P: ArchPtr> {
+enum RegisterParentKind {
     Periph,
     Cluster {
         cluster_name: String,
-        cluster_offset: P,
+        cluster_offset: u64,
     },
 }
 
-struct RegisterParent<P: ArchPtr> {
-    kind: RegisterParentKind<P>,
+struct RegisterParent {
+    kind: RegisterParentKind,
     periph_name: String,
-    periph_base: P,
+    periph_base: u64,
     properties: RegPropGroupBuilder,
 }
 
-impl<P: ArchPtr> RegisterParent<P>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-{
+impl RegisterParent {
     fn from_periph_node(periph_node: &XmlNode) -> Result<Self, PositionalError<SvdParseError>> {
         let (base_addr_str, base_addr_node) = periph_node.find_text_by_tag_name("baseAddress")?;
         let base_addr =
@@ -445,7 +440,7 @@ where
         }
     }
 
-    fn cluster_address(&self) -> Option<P> {
+    fn cluster_address(&self) -> Option<u64> {
         match &self.kind {
             RegisterParentKind::Periph => None,
             RegisterParentKind::Cluster {
@@ -574,19 +569,14 @@ fn check_node_count(
     }
 }
 
-fn process_registers<P: ArchPtr>(
-    parent: &RegisterParent<P>,
-    register_node: XmlNode,
+fn process_registers(
+    parent: &RegisterParent,
+    register_node: &XmlNode,
+    arch: PtrSize,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
     default_reset_value: Option<u64>,
-) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Option<Vec<Register<model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>> {
     let name = {
         let (name, _) = register_node.find_text_by_tag_name("name")?;
         name.to_owned()
@@ -599,11 +589,18 @@ where
                 register_node.find_text_by_tag_name("addressOffset")?;
             parse_nonneg_int(addr_offset_str).map_err(|e| err_with_pos(e, &addr_offset_node))?
         };
-        AddrRepr::from_base_cluster_offset(address_base, address_cluster, address_offset)
+        addr_repr(
+            address_base,
+            address_cluster,
+            address_offset,
+            arch,
+            name.clone(),
+            register_node,
+        )?
     };
     let mut registers = Vec::new();
     let dimensions =
-        try_dim_element_from_xml_node(&register_node, svd::ValidateLevel::Disabled).ok();
+        try_dim_element_from_xml_node(register_node, svd::ValidateLevel::Disabled).ok();
     if let Some(dimensions) = dimensions {
         // Found a list or an array of registers.
         for i in 0..dimensions.dim {
@@ -658,22 +655,23 @@ where
             let addr = {
                 let (address_base, address_cluster, _) = addr.components();
                 // TODO: use error
-                let offset = P::try_from(i as u64 * dimensions.dim_increment as u64).expect(
-                    "failed to transform register array's dimension increment to pointer size",
-                );
-                AddrRepr::from_base_cluster_offset(address_base, address_cluster, offset)
+                let offset = i as u64 * dimensions.dim_increment as u64;
+                addr_repr(
+                    address_base,
+                    address_cluster,
+                    offset,
+                    arch,
+                    subname,
+                    register_node,
+                )?
             };
             let properties = {
                 let reg_path = path.join("-");
                 parent
                     .properties
-                    .clone_and_update_from_node(&register_node)?
-                    .build(
-                        &reg_path,
-                        Some(P::ptr_size().count_bits()),
-                        default_reset_value,
-                    )
-                    .map_err(|e| err_with_pos(e, &register_node))?
+                    .clone_and_update_from_node(register_node)?
+                    .build(&reg_path, Some(arch.count_bits()), default_reset_value)
+                    .map_err(|e| err_with_pos(e, register_node))?
             };
             let register = Register::new(
                 path,
@@ -709,13 +707,9 @@ where
             let reg_path = path.join("-");
             parent
                 .properties
-                .clone_and_update_from_node(&register_node)?
-                .build(
-                    &reg_path,
-                    Some(P::ptr_size().count_bits()),
-                    default_reset_value,
-                )
-                .map_err(|e| err_with_pos(e, &register_node))?
+                .clone_and_update_from_node(register_node)?
+                .build(&reg_path, Some(arch.count_bits()), default_reset_value)
+                .map_err(|e| err_with_pos(e, register_node))?
         };
         let register = Register::new(
             path,
@@ -729,25 +723,43 @@ where
     Ok(Some(registers))
 }
 
-fn process_cluster<P: ArchPtr>(
-    parent: &RegisterParent<P>,
-    cluster_node: XmlNode,
+fn addr_repr(
+    base: u64,
+    cluster: Option<u64>,
+    offset: u64,
+    arch: PtrSize,
+    reg_name: String,
+    register_node: &XmlNode,
+) -> Result<AddrRepr<crate::RefSchemaSvdV1_2>, PositionalError<SvdParseError>> {
+    AddrRepr::from_base_cluster_offset(base, cluster, offset, arch.count_bits()).map_err(|e| {
+        err_with_pos(
+            SvdParseError::ResolveAddr {
+                reg_name: reg_name.clone(),
+                inner: MakeAddrError {
+                    id: Some(reg_name),
+                    ..e
+                },
+            },
+            register_node,
+        )
+    })
+}
+
+fn process_cluster(
+    parent: &RegisterParent,
+    cluster_node: &XmlNode,
+    arch: PtrSize,
     reg_filter: Option<&ItemFilter<String>>,
     syms_regex: Option<&ItemFilter<String>>,
     default_reset_value: Option<u64>,
-) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
-    let current_parent = parent.clone_and_update_from_cluster(&cluster_node)?;
+) -> Result<Option<Vec<Register<model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>> {
+    let current_parent = parent.clone_and_update_from_cluster(cluster_node)?;
     let mut cluster_registers = Vec::new();
     for register_node in cluster_node.children_with_tag_name("register") {
         if let Some(registers) = process_registers(
             &current_parent,
-            register_node,
+            &register_node,
+            arch,
             reg_filter,
             syms_regex,
             default_reset_value,
@@ -758,17 +770,12 @@ where
     Ok(Some(cluster_registers))
 }
 
-fn process_peripheral<P: ArchPtr>(
+fn process_peripheral(
     periph_node: XmlNode,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Option<Vec<Register<P, model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Option<Vec<Register<model::RefSchemaSvdV1_2>>>, PositionalError<SvdParseError>> {
     let periph = RegisterParent::from_periph_node(&periph_node)?;
     let periph_name = &periph.periph_name;
 
@@ -789,7 +796,8 @@ where
     for cluster_node in registers_node.children_with_tag_name("cluster") {
         if let Some(registers) = process_cluster(
             &periph,
-            cluster_node,
+            &cluster_node,
+            arch,
             filters.reg_filter.as_ref(),
             filters.syms_filter.as_ref(),
             default_reset_value,
@@ -800,7 +808,8 @@ where
     for register_node in registers_node.children_with_tag_name("register") {
         if let Some(registers) = process_registers(
             &periph,
-            register_node,
+            &register_node,
+            arch,
             filters.reg_filter.as_ref(),
             filters.syms_filter.as_ref(),
             default_reset_value,
@@ -811,21 +820,16 @@ where
     Ok(Some(peripheral_registers))
 }
 
-fn process_peripherals<P: ArchPtr>(
+fn process_peripherals(
     peripherals_node: &XmlNode,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Vec<Register<model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>> {
     let mut registers = Vec::new();
     for peripheral_node in peripherals_node.children_with_tag_name("peripheral") {
         if let Some(peripheral_registers) =
-            process_peripheral(peripheral_node, filters, default_reset_value)?
+            process_peripheral(peripheral_node, arch, filters, default_reset_value)?
         {
             registers.extend(peripheral_registers);
         }
@@ -833,59 +837,44 @@ where
     Ok(registers)
 }
 
-fn process_device<P: ArchPtr>(
+fn process_device(
     device_node: &XmlNode,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Vec<Register<model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>> {
     let peripherals_nodes = device_node.children_with_tag_name("peripherals");
     check_node_count(device_node, "peripherals", &peripherals_nodes, 1..=1)?;
     let peripherals_node = peripherals_nodes.first().unwrap();
-    process_peripherals(peripherals_node, filters, default_reset_value)
+    process_peripherals(peripherals_node, arch, filters, default_reset_value)
 }
 
-fn process_root<P: ArchPtr>(
+fn process_root(
     root_node: XmlNode,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Vec<Register<P, model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Vec<Register<model::RefSchemaSvdV1_2>>, PositionalError<SvdParseError>> {
     let device_nodes = root_node.children_with_tag_name("device");
     check_node_count(&root_node, "device", &device_nodes, 1..=1)?;
     let device_node = device_nodes.first().unwrap();
-    process_device(device_node, filters, default_reset_value)
+    process_device(device_node, arch, filters, default_reset_value)
 }
 
 /// Find registers from SVD XML-document.
-fn find_registers<P: ArchPtr>(
+fn find_registers(
     parsed: &Document,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Registers<P, model::RefSchemaSvdV1_2>, PositionalError<SvdParseError>>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Registers<model::RefSchemaSvdV1_2>, PositionalError<SvdParseError>> {
     let root = parsed.root().into_xml_node();
-    let registers = process_root::<P>(root, filters, default_reset_value)?;
+    let registers = process_root(root, arch, filters, default_reset_value)?;
     let mut peripherals = HashSet::new();
     let mut addresses = HashMap::new();
     for register in &registers {
         peripherals.insert(register.top_container_name());
-        let addr: P = register.addr();
+        let addr = register.addr();
         if let Entry::Vacant(entry) = addresses.entry(addr) {
             entry.insert(register.path().join("-"));
         } else {
@@ -909,24 +898,21 @@ where
 /// # Arguments
 ///
 /// * `svd_path`        - The path to the SVD file
+/// * `arch`            - The size used by the architecture to represent addresses
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-pub(crate) fn parse_svd_into_registers<P: ArchPtr>(
+pub(crate) fn parse_svd_into_registers(
     svd_source: &path::Path,
+    arch: PtrSize,
     filters: &Filters,
     default_reset_value: Option<u64>,
-) -> Result<Registers<P, model::RefSchemaSvdV1_2>, Error>
-where
-    SvdParseError: From<<P as num::Num>::FromStrRadixErr>
-        + From<<P as FromStr>::Err>
-        + From<<P as TryFrom<u64>>::Error>,
-    <P as TryFrom<u64>>::Error: std::fmt::Debug,
-{
+) -> Result<Registers<model::RefSchemaSvdV1_2>, Error> {
     let svd_content = util::read_file_or_panic(svd_source);
     let parsed = Document::parse(&svd_content).expect("Failed to parse SVD content.");
-    let registers = find_registers(&parsed, filters, default_reset_value)
-        .map_err(|positional| positional.with_fname(format!("{}", svd_source.display())))?;
+    let registers = find_registers(&parsed, arch, filters, default_reset_value)
+        .map_err(|positional| positional.with_fname(format!("{}", svd_source.display())))
+        .map_err(Box::new)?;
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
