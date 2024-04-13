@@ -402,13 +402,21 @@ fn main() -> anyhow::Result<()> {
         .command
         .as_ref()
         .and_then(|cmd| cmd.arch().map(|arch| arch.into()));
+    if let Some(cmd) = cli.command.as_ref() {
+        if cmd
+            .validate_level()
+            .is_some_and(|l| l.0 != keelhaul::ValidateLevel::Disabled)
+        {
+            anyhow::bail!("validate level not implemented");
+        }
+    }
 
     if let Some(cmd) = &cli.command {
         match cmd {
             Command::DryRun {
                 input: _input,
                 arch: _arch,
-                validate_level,
+                validate_level: _,
             } => {
                 let sources = sources.unwrap();
                 match keelhaul::dry_run(&sources, arch.unwrap()).with_context(|| {
@@ -423,7 +431,7 @@ fn main() -> anyhow::Result<()> {
                 arch: _arch,
                 no_count,
                 sorting,
-                validate_level,
+                validate_level: _,
                 no_rubric,
             } => ls_top(
                 &sources.unwrap(),
@@ -434,7 +442,7 @@ fn main() -> anyhow::Result<()> {
             )?,
             Command::CountRegisters {
                 input: _input,
-                validate_level,
+                validate_level: _,
                 arch: _arch,
             } => {
                 let output = keelhaul::count_registers_svd(
@@ -453,7 +461,7 @@ fn main() -> anyhow::Result<()> {
                 ignore_reset_masks,
                 no_format,
                 use_zero_as_default_reset,
-                validate_level,
+                validate_level: _,
             } => {
                 let mut config = keelhaul::CodegenConfig::default()
                     .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -474,7 +482,7 @@ fn main() -> anyhow::Result<()> {
             Command::CountResetValues {
                 input: _input,
                 arch: _arch,
-                validate_level,
+                validate_level: _,
             } => {
                 let sources = sources.unwrap();
                 let total = keelhaul::count_registers_svd(
