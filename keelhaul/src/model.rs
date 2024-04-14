@@ -55,16 +55,16 @@ pub struct RefSchemaSvdV1_3;
 impl RefSchema for RefSchemaSvdV1_3 {}
 
 /// A list of registers parsed from SVD or IP-XACT (newtype)
-pub struct Registers<S: RefSchema>(Vec<Register<S>>);
+pub struct Registers(Vec<Register>);
 
-impl<S: RefSchema> From<Vec<Register<S>>> for Registers<S> {
-    fn from(value: Vec<Register<S>>) -> Self {
+impl From<Vec<Register>> for Registers {
+    fn from(value: Vec<Register>) -> Self {
         Self(value)
     }
 }
 
-impl<S: RefSchema> ops::Deref for Registers<S> {
-    type Target = Vec<Register<S>>;
+impl ops::Deref for Registers {
+    type Target = Vec<Register>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

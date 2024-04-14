@@ -5,23 +5,19 @@ use std::{cmp, fmt, hash, str};
 
 use crate::{
     analysis, bit_count_to_rust_uint_type_str, codegen, error,
-    model::{AddrRepr, RefSchema, UniquePath},
+    model::{AddrRepr, UniquePath},
 };
 use itertools::Itertools;
 
 /// Represents a single memory-mapped I/O register.
-///
-/// # Type arguments
-///
-/// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
 #[derive(Clone, Debug)]
-pub struct Register<S: RefSchema> {
+pub struct Register {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
     /// Used for generating unique identifiers and symbol names in test cases
     path: RegPath,
     /// Address of the register
-    addr: AddrRepr<S>,
+    addr: AddrRepr,
     /// Bit-width of register
     size: u32,
     /// Software access rights
@@ -38,13 +34,10 @@ pub struct Register<S: RefSchema> {
     //dimensions: Option<svd::DimElement>,
 }
 
-impl<S> Register<S>
-where
-    S: RefSchema,
-{
+impl Register {
     pub(crate) fn new(
         path: RegPath,
-        addr: AddrRepr<S>,
+        addr: AddrRepr,
         size: u32,
         access: svd::Access,
         reset_value: Option<ResetValue>,
@@ -63,10 +56,7 @@ where
     }
 }
 
-impl<S> UniquePath for Register<S>
-where
-    S: RefSchema,
-{
+impl UniquePath for Register {
     fn path(&self) -> Vec<String> {
         self.path
             .0
@@ -76,10 +66,7 @@ where
     }
 }
 
-impl<S> codegen::TestRegister for Register<S>
-where
-    S: RefSchema,
-{
+impl codegen::TestRegister for Register {
     /// Get the absolute memory address of the register
     ///
     /// # Panics
@@ -113,7 +100,7 @@ where
     }
 }
 
-impl<S: RefSchema> analysis::AnalyzeRegister for Register<S> {
+impl analysis::AnalyzeRegister for Register {
     fn has_reset_value(&self) -> bool {
         self.reset_value.is_some()
     }
