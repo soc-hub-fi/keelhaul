@@ -1,4 +1,4 @@
-use std::{env, io, iter, ops, path};
+use std::{env, iter, ops, path};
 
 use anyhow::{anyhow, Context};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -348,12 +348,13 @@ impl From<ArchWidth> for keelhaul::ArchWidth {
     }
 }
 
-fn string_to_path(s: &String) -> Result<path::PathBuf, io::Error> {
+fn string_to_path(s: &str) -> path::PathBuf {
     env::current_dir()
         .expect("cannot access current working dir")
         .join(s)
         // Canonicalize paths for clear output
         .canonicalize()
+        .unwrap_or_else(|_| panic!("file does not exist: {s}"))
 }
 
 fn get_sources(
@@ -374,8 +375,8 @@ fn get_sources(
 
     let sources = sources
         .into_iter()
-        .map(|(s, f)| string_to_path(s).map(|p| keelhaul::ModelSource::new(p, f)))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|(s, f)| keelhaul::ModelSource::new(string_to_path(s), f))
+        .collect::<Vec<_>>();
 
     // Make sure all source paths correspond to a file
     for s in sources.iter() {
