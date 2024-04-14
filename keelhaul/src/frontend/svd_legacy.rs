@@ -644,11 +644,14 @@ fn process_registers(
             // Remove array brackets from the register name.
             let subname = subname.replace(['[', ']'], "");
             let path = {
-                let path = RegPath::from_components(
-                    parent.periph_name.clone(),
-                    parent.cluster_name(),
-                    subname.to_owned(),
-                );
+                // Safety: max 3 levels of hierarchy (periph + cluster + reg)
+                let path = unsafe {
+                    RegPath::from_components(
+                        parent.periph_name.clone(),
+                        parent.cluster_name(),
+                        subname.to_owned(),
+                    )
+                };
                 let reg_path = path.join("-");
                 if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                     info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
@@ -689,11 +692,14 @@ fn process_registers(
     } else {
         // Found a single register.
         let path = {
-            let path = RegPath::from_components(
-                parent.periph_name.clone(),
-                parent.cluster_name(),
-                name.to_owned(),
-            );
+            // Safety: max 3 levels of hierarchy (periph + cluster + reg)
+            let path = unsafe {
+                RegPath::from_components(
+                    parent.periph_name.clone(),
+                    parent.cluster_name(),
+                    name.to_owned(),
+                )
+            };
             let reg_path = path.join("-");
             if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
                 info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
@@ -906,7 +912,12 @@ fn find_registers(
 /// * `reg_filter`      - What registers to include or exclude
 /// * `periph_filter`   - What peripherals to include or exclude
 /// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
-pub(crate) fn parse_svd_into_registers(
+///
+/// # Safety
+///
+/// May work incorrectly for CMSIS-SVD v1.3 or above, where the maximum of 3 levels of hierarchy can
+/// be surpassed.
+pub(crate) unsafe fn parse_svd_into_registers(
     svd_source: &path::Path,
     arch: PtrSize,
     filters: &Filters,

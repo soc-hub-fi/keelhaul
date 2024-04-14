@@ -144,13 +144,17 @@ where
                 }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
-                let regs = crate::frontend::svd_legacy::parse_svd_into_registers(
-                    src.path(),
-                    arch.into(),
-                    filters,
-                    default_reset_value,
-                )
-                .map_err(Box::new)?;
+                let regs =
+                    // Safety: max 3 levels of hierarchy (periph + cluster + reg)
+                    unsafe {
+                        crate::frontend::svd_legacy::parse_svd_into_registers(
+                            src.path(),
+                            arch.into(),
+                            filters,
+                            default_reset_value,
+                        )
+                    }
+                    .map_err(Box::new)?;
                 registers.push(regs);
             }
             SourceFormat::Ieee1685 => todo!(),
