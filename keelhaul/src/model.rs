@@ -55,10 +55,6 @@ pub struct RefSchemaSvdV1_3;
 impl RefSchema for RefSchemaSvdV1_3 {}
 
 /// A list of registers parsed from SVD or IP-XACT (newtype)
-///
-/// # Type arguments
-///
-/// * `P` - type representing the architecture pointer size
 pub struct Registers<S: RefSchema>(Vec<Register<S>>);
 
 impl<S: RefSchema> From<Vec<Register<S>>> for Registers<S> {
