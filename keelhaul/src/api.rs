@@ -137,11 +137,6 @@ fn parse_registers(
     for src in sources {
         match src.format {
             SourceFormat::Svd(vlevel) => {
-                if vlevel != ValidateLevel::Disabled {
-                    return Err(
-                        NotImplementedError::UnsupportedOption(format!("{:?}", vlevel)).into(),
-                    );
-                }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
                 let regs = if use_legacy {

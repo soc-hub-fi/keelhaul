@@ -454,14 +454,6 @@ fn main() -> anyhow::Result<()> {
         .command
         .as_ref()
         .and_then(|cmd| cmd.arch().map(|arch| arch.into()));
-    if let Some(cmd) = cli.command.as_ref() {
-        if cmd
-            .validate_level()
-            .is_some_and(|l| l.0 != keelhaul::ValidateLevel::Disabled)
-        {
-            anyhow::bail!("validate level not implemented");
-        }
-    }
 
     if let Some(cmd) = &cli.command {
         match cmd {
