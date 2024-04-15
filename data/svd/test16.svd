@@ -6,6 +6,7 @@
     <description></description>
     <addressUnitBits>8</addressUnitBits>
     <width>16</width>
+    <size>16</size>
     <peripherals>
         <peripheral>
             <name>peripheral1</name>
@@ -61,7 +62,7 @@
             <registers>
                 <register>
                     <!-- This register is actually an array of registers. -->
-                    <name>register1</name>
+                    <name>register[%s]</name>
                     <addressOffset>0x0</addressOffset>
                     <dim>2</dim>
                     <dimIncrement>0x40</dimIncrement>
