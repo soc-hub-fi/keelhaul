@@ -236,6 +236,15 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
 fn gen_test_mod_wrapper(
     test_fns_and_defs_by_periph: HashMap<String, Vec<(String, output::TestCaseInstance)>>,
 ) -> Vec<TokenStream> {
+    let mut test_fns_and_defs_by_periph = test_fns_and_defs_by_periph.into_iter().collect_vec();
+    // Sort by address of first item
+    test_fns_and_defs_by_periph.sort_by_key(|(_periph, fns_and_instances)| {
+        fns_and_instances
+            .iter()
+            .map(|(_, instance)| instance.addr)
+            .min()
+            .unwrap()
+    });
     test_fns_and_defs_by_periph
         .into_iter()
         .map(|(periph_name, test_fns_and_defs)| {
@@ -292,6 +301,9 @@ impl RegTestCases {
     ///
     /// - Failed to generate test case for a register
     pub fn from_registers(registers: &model::Registers, config: &CodegenConfig) -> Self {
+        let mut registers = registers.to_vec();
+        registers.sort_by_key(|r| r.addr());
+
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();
         let preamble = codegen::gen_preamble(widest, config.derive_debug);
 
@@ -310,12 +322,13 @@ impl RegTestCases {
         }
 
         // Duplicate all test struct instances into one big list
-        let test_instances = test_fns_and_instances_by_periph
+        let mut test_instances = test_fns_and_instances_by_periph
             .values()
             .flatten()
             .map(|(_func, instance)| instance)
             .cloned()
             .collect_vec();
+        test_instances.sort_by_key(|inst| inst.addr);
         let test_case_count = test_instances.len();
         let test_instances_combined: TokenStream = test_instances
             .into_iter()
