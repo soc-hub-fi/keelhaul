@@ -11,25 +11,25 @@ use quote::{format_ident, quote, ToTokens};
 
 /// Type that a test can be generated for
 pub(crate) trait TestRegister: model::UniquePath {
-    /// Get the absolute memory address of the register
+    /// Absolute memory address of the register
     fn addr(&self) -> u64;
 
-    /// The size of the register in bits
+    /// Size of the register in bits
     fn size(&self) -> u32;
 
     /// Whether reading the register has a defined effect
     fn is_readable(&self) -> bool;
 
-    /// An optional, known reset value
+    /// Optional, known reset value
     fn reset_value(&self) -> Option<model::ValueOnReset>;
 
-    /// A human-readable unique identifier for the register, usually the the path that is used to
+    /// Human-readable unique identifier for the register, usually the the path that is used to
     /// access the register.
     fn binding_id(&self) -> String {
         self.path().join("_")
     }
 
-    /// The name of the register, usually the final element of the `path`
+    /// Name of the register, usually the final element of the `path`
     fn name(&self) -> String {
         self.path().last().unwrap().to_owned()
     }
