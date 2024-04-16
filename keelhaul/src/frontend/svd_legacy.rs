@@ -9,8 +9,8 @@ use crate::{
     bit_count_to_rust_uint_type_str,
     error::{CommonParseError, Error, PositionalError, SvdParseError},
     model::{
-        AddrRepr, ArchPtr, MakeAddrError, PtrSize, RegPath, RegValue, Register, Registers,
-        ResetValue, UniquePath,
+        AddrRepr, ArchPtr, MakeAddrError, PtrSize, RegPath, Register, Registers, UniquePath,
+        ValueOnReset,
     },
     util, Filters, IsAllowedOrBlocked, ItemFilter,
 };
@@ -196,9 +196,9 @@ struct RegPropGroupBuilder {
     pub access: Option<svd::Access>,
     /// Register value after reset.
     /// Actual reset value is calculated using reset value and reset mask.
-    pub(crate) reset_value: Option<RegValue>,
+    pub(crate) reset_value: Option<u64>,
     /// Register bits with defined reset value are marked as high.
-    pub(crate) reset_mask: Option<RegValue>,
+    pub(crate) reset_mask: Option<u64>,
 }
 
 /// Add text position information to an [`SvdParseError`] converting it into a [`PositionalError`]
@@ -288,14 +288,14 @@ impl RegPropGroupBuilder {
         })? {
             self.access = Some(access);
         };
-        if let Some(reset_value) = process_prop_from_node_if_present("resetValue", node, |s| {
-            parse_nonneg_int(s).map(RegValue::U64)
-        })? {
+        if let Some(reset_value) =
+            process_prop_from_node_if_present("resetValue", node, parse_nonneg_int)?
+        {
             self.reset_value = Some(reset_value);
         };
-        if let Some(reset_mask) = process_prop_from_node_if_present("resetMask", node, |s| {
-            parse_nonneg_int(s).map(RegValue::U64)
-        })? {
+        if let Some(reset_mask) =
+            process_prop_from_node_if_present("resetMask", node, parse_nonneg_int)?
+        {
             self.reset_mask = Some(reset_mask);
         };
         Ok(())
@@ -325,7 +325,7 @@ impl RegPropGroupBuilder {
                 None => {
                     if let Some(value) = default_reset_value {
                         warn!("property 'resetValue' is not defined for register '{reg_path}' or any of its parents, assuming resetValue = {:?}", value);
-                        Some(RegValue::with_value_and_size(value, size)?)
+                        Some(value)
                     } else {
                         None
                     }
@@ -342,13 +342,12 @@ impl RegPropGroupBuilder {
                     }
                 }
             };
-            if reset_value.is_some() && reset_mask.is_some() {
-                Some(ResetValue::with_mask(
-                    reset_value.unwrap(),
-                    reset_mask.unwrap(),
-                )?)
-            } else {
-                None
+            // CMSIS-SVD requires both a reset value and a reset mask
+            match (reset_value, reset_mask) {
+                (Some(value), Some(mask)) => {
+                    Some(ValueOnReset::new(value, Some(mask), size.count_bits()))
+                }
+                _ => None,
             }
         };
 
@@ -367,14 +366,14 @@ pub struct RegisterPropertiesGroup {
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    pub(crate) reset_value: Option<ResetValue>,
+    pub(crate) reset_value: Option<ValueOnReset>,
 }
 
 impl RegisterPropertiesGroup {
     pub(crate) const fn new(
         size: u32,
         access: svd::Access,
-        reset_value: Option<ResetValue>,
+        reset_value: Option<ValueOnReset>,
     ) -> Self {
         Self {
             size,

@@ -5,7 +5,7 @@ pub use self::test_memory::MemTestStrategy;
 
 // Internal codegen API
 pub(crate) use self::test_memory::gen_memtest_module;
-pub(crate) use self::test_register::{RegTestCases, TestRegister, ValueOnReset};
+pub(crate) use self::test_register::{RegTestCases, TestRegister};
 
 mod test_memory;
 mod test_register;

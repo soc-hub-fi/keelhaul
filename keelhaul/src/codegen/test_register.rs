@@ -21,7 +21,7 @@ pub(crate) trait TestRegister: model::UniquePath {
     fn is_readable(&self) -> bool;
 
     /// An optional, known reset value
-    fn reset_value(&self) -> Option<ValueOnReset<u64>>;
+    fn reset_value(&self) -> Option<model::ValueOnReset>;
 
     /// A human-readable unique identifier for the register, usually the the path that is used to
     /// access the register.
@@ -32,20 +32,6 @@ pub(crate) trait TestRegister: model::UniquePath {
     /// The name of the register, usually the final element of the `path`
     fn name(&self) -> String {
         self.path().last().unwrap().to_owned()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ValueOnReset<T> {
-    /// Known value on reset
-    value: T,
-    /// An optional reset mask, indicating which bits have the defined reset value
-    mask: Option<T>,
-}
-
-impl<T> ValueOnReset<T> {
-    pub(crate) fn new(value: T, mask: Option<T>) -> Self {
-        Self { value, mask }
     }
 }
 
@@ -192,7 +178,7 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     uid: String,
     addr: P,
     size: u32,
-    reset_value: &ValueOnReset<u64>,
+    reset_value: &model::ValueOnReset,
     config: &CodegenConfig,
 ) -> TokenStream {
     // Reset value test requires read test to be present. Can't check for
@@ -200,11 +186,11 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
     debug_assert!(config.tests_to_generate.contains(&TestKind::Read));
 
     let read_value_binding = RegTestGenerator::read_value_binding();
-    let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask.is_none() {
-        codegen::u_to_hexlit(reset_value.value, size)
+    let reset_val_frag = if config.force_ignore_reset_mask || reset_value.mask().is_none() {
+        codegen::u_to_hexlit(reset_value.value(), size)
     } else {
         // Unwrap: checked on conditional
-        codegen::gen_bitand(reset_value.value, reset_value.mask.unwrap())
+        codegen::gen_bitand(reset_value.value(), reset_value.mask().unwrap())
     };
     let reg_size_ty = format_ident!("{}", codegen::bit_count_to_rust_uint_type_str(size));
 
