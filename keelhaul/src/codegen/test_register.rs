@@ -167,7 +167,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///     uid: "test_something",
     /// }
     /// ```
-    pub fn gen_test_def(&self) -> TokenStream {
+    pub fn gen_test_case_struct_instance(&self) -> TokenStream {
         let fn_name = self.gen_test_fn_ident();
         let periph_name_lc: TokenStream =
             self.0.top_container_name().to_lowercase().parse().unwrap();
@@ -295,20 +295,20 @@ impl RegTestCases {
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();
         let preamble = codegen::gen_preamble(widest, config.derive_debug);
 
-        let mut test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>> =
+        let mut test_fns_and_instances_by_periph: HashMap<String, Vec<(String, String)>> =
             HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
             let test_fn = test_gen.gen_test_fn().to_string();
-            let test_def = test_gen.gen_test_def().to_string();
-            test_fns_and_defs_by_periph
+            let test_instance = test_gen.gen_test_case_struct_instance().to_string();
+            test_fns_and_instances_by_periph
                 .entry(register.top_container_name())
                 .or_default()
-                .push((test_fn, test_def));
+                .push((test_fn, test_instance));
         }
 
         // Duplicate all test definitions into one big list
-        let test_defs = test_fns_and_defs_by_periph
+        let test_defs = test_fns_and_instances_by_periph
             .values()
             .flatten()
             .map(|(_func, def)| def)
@@ -320,7 +320,7 @@ impl RegTestCases {
             pub static TEST_CASES: [TestCase; #test_case_count] = [ #test_defs_combined ];
         };
 
-        let test_cases = gen_test_mod_wrapper(test_fns_and_defs_by_periph);
+        let test_cases = gen_test_mod_wrapper(test_fns_and_instances_by_periph);
 
         Self {
             preamble,
