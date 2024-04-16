@@ -1,27 +1,23 @@
 //! `Register` is the main primitive of the model generator. It represents all available metadata
 //! for a given register and enables the generation of test cases.
 
-use std::{cmp, fmt, hash, marker::PhantomData, str};
+use std::{cmp, fmt, hash, str};
 
 use crate::{
     analysis, bit_count_to_rust_uint_type_str, codegen, error,
-    model::{AddrRepr, RefSchema, RefSchemaSvdV1_2, UniquePath},
+    model::{AddrRepr, UniquePath},
 };
 use itertools::Itertools;
 
 /// Represents a single memory-mapped I/O register.
-///
-/// # Type arguments
-///
-/// * `S` - marker type indicating the schema this register was constructed from (IP-XACT or SVD)
 #[derive(Clone, Debug)]
-pub struct Register<S: RefSchema> {
+pub struct Register {
     /// Hierarchical path to this register, e.g. `PERIPH-CLUSTER-REG` in CMSIS-SVD 1.2 and prior
     ///
     /// Used for generating unique identifiers and symbol names in test cases
-    path: RegPath<S>,
+    path: RegPath,
     /// Address of the register
-    addr: AddrRepr<S>,
+    addr: AddrRepr,
     /// Bit-width of register
     size: u32,
     /// Software access rights
@@ -38,13 +34,10 @@ pub struct Register<S: RefSchema> {
     //dimensions: Option<svd::DimElement>,
 }
 
-impl<S> Register<S>
-where
-    S: RefSchema,
-{
+impl Register {
     pub(crate) fn new(
-        path: RegPath<S>,
-        addr: AddrRepr<S>,
+        path: RegPath,
+        addr: AddrRepr,
         size: u32,
         access: svd::Access,
         reset_value: Option<ResetValue>,
@@ -63,10 +56,7 @@ where
     }
 }
 
-impl<S> UniquePath for Register<S>
-where
-    S: RefSchema,
-{
+impl UniquePath for Register {
     fn path(&self) -> Vec<String> {
         self.path
             .0
@@ -76,10 +66,7 @@ where
     }
 }
 
-impl<S> codegen::TestRegister for Register<S>
-where
-    S: RefSchema,
-{
+impl codegen::TestRegister for Register {
     /// Get the absolute memory address of the register
     ///
     /// # Panics
@@ -113,7 +100,7 @@ where
     }
 }
 
-impl<S: RefSchema> analysis::AnalyzeRegister for Register<S> {
+impl analysis::AnalyzeRegister for Register {
     fn has_reset_value(&self) -> bool {
         self.reset_value.is_some()
     }
@@ -134,16 +121,16 @@ impl<S: RefSchema> analysis::AnalyzeRegister for Register<S> {
 ///
 /// E.g., PERIPH-CLUSTER-REG or PERIPH-REG
 #[derive(Clone, Debug)]
-pub struct RegPath<S: RefSchema>(Vec<RegPathSegment>, PhantomData<S>);
+pub struct RegPath(Vec<RegPathSegment>);
 
 #[derive(Clone, Debug)]
 pub struct RegPathSegment {
     pub(crate) name: String,
 }
 
-impl<S: RefSchema> RegPath<S> {
+impl RegPath {
     pub fn new(segments: Vec<RegPathSegment>) -> Self {
-        Self(segments, PhantomData)
+        Self(segments)
     }
 
     /// Joins the names of the path elements to one string using a separator
@@ -154,8 +141,12 @@ impl<S: RefSchema> RegPath<S> {
 }
 
 // SVD v1.2 only methods
-impl RegPath<RefSchemaSvdV1_2> {
-    pub fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
+impl RegPath {
+    /// # Safety
+    ///
+    /// `from_components` can only be used for CMSIS-SVD inputs with a maximum of 3 levels of
+    /// hierarchy. CMSIS-SVD v1.3 and above can have more.
+    pub unsafe fn from_components(periph: String, cluster: Option<String>, reg: String) -> Self {
         let mut v = vec![];
         v.push(RegPathSegment { name: periph });
         if let Some(cl) = cluster {

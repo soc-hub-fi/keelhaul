@@ -1,6 +1,5 @@
-use std::{fmt, marker::PhantomData};
+use std::fmt;
 
-use crate::model::{RefSchema, RefSchemaSvdV1_2};
 use thiserror::Error;
 
 /// Valid address representation
@@ -8,13 +7,12 @@ use thiserror::Error;
 /// Addresses can be represented in many ways. This implementation provides a vector of subsequent
 /// offsets to allow construction and retrieval based on hierarchical formats.
 #[derive(Clone, Debug)]
-pub(crate) struct AddrRepr<S: RefSchema> {
+pub(crate) struct AddrRepr {
     /// Consequtive offsets to comprise the full address
     offsets: Vec<u64>,
-    schema: PhantomData<S>,
 }
 
-impl<S: RefSchema> AddrRepr<S> {
+impl AddrRepr {
     /// Returns an error if the address cannot be represented using supplied size
     ///
     /// # Arguments
@@ -27,10 +25,7 @@ impl<S: RefSchema> AddrRepr<S> {
 
         make_addr(v.clone(), size, None)?;
 
-        Ok(Self {
-            offsets: v,
-            schema: PhantomData,
-        })
+        Ok(Self { offsets: v })
     }
 
     /// Get register's absolute memory address
@@ -113,7 +108,7 @@ fn make_addr(offsets: Vec<u64>, size: u32, id: Option<String>) -> Result<u64, Ma
 }
 
 // SVD v1.2 only methods
-impl AddrRepr<RefSchemaSvdV1_2> {
+impl AddrRepr {
     pub fn from_base_cluster_offset(
         base: u64,
         cluster: Option<u64>,
@@ -172,7 +167,7 @@ impl AddrRepr<RefSchemaSvdV1_2> {
     }
 }
 
-impl fmt::Display for AddrRepr<RefSchemaSvdV1_2> {
+impl fmt::Display for AddrRepr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.cluster() {
             Some(cluster) => write!(

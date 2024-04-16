@@ -10,9 +10,7 @@ mod error;
 
 use std::{ops, path, str};
 
-use crate::{
-    analysis, codegen, error::SvdParseError, model, CodegenConfig, FailureImplKind, Filters,
-};
+use crate::{analysis, codegen, model, CodegenConfig, FailureImplKind, Filters};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
@@ -96,8 +94,6 @@ pub fn dry_run(sources: &[ModelSource], arch: ArchWidth) -> Result<(), ApiError>
     Ok(())
 }
 
-type Registers = model::Registers<RefSchemaSvdV1_2>;
-
 /// Run the parser on a set of `sources` and return the collection of registers contained within
 ///
 /// # Type arguments
@@ -113,12 +109,7 @@ fn parse_registers(
     arch: ArchWidth,
     filters: &Filters,
     use_zero_as_default_reset: bool,
-) -> Result<Registers, ApiError>
-where
-    SvdParseError: From<<u64 as num::Num>::FromStrRadixErr>
-        + From<<u64 as str::FromStr>::Err>
-        + From<<u64 as TryFrom<u64>>::Error>,
-{
+) -> Result<model::Registers, ApiError> {
     for src in sources {
         match src.format {
             SourceFormat::Ieee1685 => {
@@ -144,13 +135,17 @@ where
                 }
                 let default_reset_value = use_zero_as_default_reset.then_some(0);
 
-                let regs = crate::frontend::svd_legacy::parse_svd_into_registers(
-                    src.path(),
-                    arch.into(),
-                    filters,
-                    default_reset_value,
-                )
-                .map_err(Box::new)?;
+                let regs =
+                    // Safety: max 3 levels of hierarchy (periph + cluster + reg)
+                    unsafe {
+                        crate::frontend::svd_legacy::parse_svd_into_registers(
+                            src.path(),
+                            arch.into(),
+                            filters,
+                            default_reset_value,
+                        )
+                    }
+                    .map_err(Box::new)?;
                 registers.push(regs);
             }
             SourceFormat::Ieee1685 => todo!(),

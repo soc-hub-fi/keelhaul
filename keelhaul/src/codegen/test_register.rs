@@ -291,10 +291,7 @@ impl RegTestCases {
     /// # Errors
     ///
     /// - Failed to generate test case for a register
-    pub fn from_registers(
-        registers: &model::Registers<model::RefSchemaSvdV1_2>,
-        config: &CodegenConfig,
-    ) -> Self {
+    pub fn from_registers(registers: &model::Registers, config: &CodegenConfig) -> Self {
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();
         let preamble = codegen::gen_preamble(widest, config.derive_debug);
 
