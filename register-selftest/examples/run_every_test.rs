@@ -1,7 +1,7 @@
 use register_selftest::Error;
 
 fn main() {
-    for (_index, test_case) in register_selftest::TEST_CASES.iter().enumerate() {
+    for test_case in register_selftest::TEST_CASES.iter() {
         println!("{}", test_case.uid);
         (test_case.function)().unwrap_or_else(|err| match err {
             Error::ReadValueIsNotResetValue {
