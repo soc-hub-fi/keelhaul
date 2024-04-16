@@ -70,3 +70,20 @@ impl ops::Deref for Registers {
         &self.0
     }
 }
+
+pub(crate) fn bits_required(val: u64) -> u32 {
+    64 - val.leading_zeros()
+}
+
+#[test]
+fn bits_required_works() {
+    let test = bits_required;
+
+    assert_eq!(test(u64::MAX), 64);
+    assert_eq!(test(u32::MAX.into()), 32);
+    assert_eq!(test(u16::MAX.into()), 16);
+    assert_eq!(test(u8::MAX.into()), 8);
+    assert_eq!(test(0b1), 1);
+    assert_eq!(test(0b11), 2);
+    assert_eq!(test(0b101), 3);
+}
