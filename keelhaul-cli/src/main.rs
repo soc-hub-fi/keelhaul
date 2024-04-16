@@ -137,7 +137,7 @@ enum Command {
         strategy: MemTestStrategy,
 
         /// What to do when a test fails
-        #[arg(long)]
+        #[arg(long, default_value = FailureImplKind(keelhaul::FailureImplKind::Panic))]
         on_fail: Option<FailureImplKind>,
 
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -236,6 +236,16 @@ impl ValueEnum for FailureImplKind {
             keelhaul::FailureImplKind::None => Some(PossibleValue::new("ignore")),
             keelhaul::FailureImplKind::Panic => Some(PossibleValue::new("panic")),
             keelhaul::FailureImplKind::ReturnError => Some(PossibleValue::new("error")),
+        }
+    }
+}
+
+impl From<FailureImplKind> for clap::builder::OsStr {
+    fn from(value: FailureImplKind) -> Self {
+        match value.0 {
+            keelhaul::FailureImplKind::None => "none".into(),
+            keelhaul::FailureImplKind::Panic => "panic".into(),
+            keelhaul::FailureImplKind::ReturnError => "error".into(),
         }
     }
 }
