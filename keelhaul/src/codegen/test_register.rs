@@ -6,8 +6,8 @@ use crate::{
     CodegenConfig, TestKind,
 };
 use itertools::Itertools;
-use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote, ToTokens};
 
 /// Type that a test can be generated for
 pub(crate) trait TestRegister: model::UniquePath {
@@ -91,9 +91,9 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///
     /// * `test_MCR_0xfff00004`
     /// * `test_MDIO_RD_DATA_0xff40040c`
-    fn gen_test_fn_ident(&self) -> Ident {
+    fn gen_test_fn_name(&self) -> String {
         let reg = &self.0;
-        format_ident!("test_{}_{:#x}", reg.name(), reg.addr())
+        format!("test_{}_{:#x}", reg.name(), reg.addr())
     }
 
     /// Generates a test function
@@ -116,7 +116,7 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
         let reg_size_ty = format_ident!("{}", codegen::bit_count_to_rust_uint_type_str(reg.size()));
         let addr_hex: TokenStream = format!("{:#x}", reg.addr()).parse().unwrap();
 
-        let fn_name = self.gen_test_fn_ident();
+        let fn_name: TokenStream = self.gen_test_fn_name().parse().unwrap();
 
         // Only generate read test if register is readable
         let gen_read_test = reg.is_readable() && config.tests_to_generate.contains(&TestKind::Read);
@@ -167,20 +167,15 @@ impl<'r, 'c> RegTestGenerator<'r, 'c> {
     ///     uid: "test_something",
     /// }
     /// ```
-    pub fn gen_test_case_struct_instance(&self) -> TokenStream {
-        let fn_name = self.gen_test_fn_ident();
-        let periph_name_lc: TokenStream =
-            self.0.top_container_name().to_lowercase().parse().unwrap();
-        let func = quote!(#periph_name_lc::#fn_name);
-        let addr_hex: TokenStream = format!("{:#x}", self.0.addr()).parse().unwrap();
+    pub fn gen_test_case_struct_instance(&self) -> output::TestCaseInstance {
+        let fn_name = self.gen_test_fn_name();
+        let periph_name_lc = self.0.top_container_name().to_lowercase();
         let uid = self.0.binding_id();
 
-        quote! {
-            TestCase {
-                function: #func,
-                addr: #addr_hex,
-                uid: #uid,
-            }
+        output::TestCaseInstance {
+            func_path: vec![periph_name_lc, fn_name],
+            addr: self.0.addr(),
+            uid,
         }
     }
 }
@@ -239,7 +234,7 @@ fn gen_read_is_reset_val_test<P: ArchPtr + quote::IdentFragment + 'static>(
 
 /// Place test cases in modules.
 fn gen_test_mod_wrapper(
-    test_fns_and_defs_by_periph: HashMap<String, Vec<(String, String)>>,
+    test_fns_and_defs_by_periph: HashMap<String, Vec<(String, output::TestCaseInstance)>>,
 ) -> Vec<TokenStream> {
     test_fns_and_defs_by_periph
         .into_iter()
@@ -248,7 +243,12 @@ fn gen_test_mod_wrapper(
             let (test_fns, test_defs): (Vec<_>, Vec<_>) = test_fns_and_defs.into_iter().unzip();
 
             // Create array for test definitions
-            let test_defs_combined: TokenStream = test_defs.join(", ").parse().unwrap();
+            let test_defs_combined: TokenStream = test_defs
+                .into_iter()
+                .map(|i| i.into_token_stream().to_string())
+                .join(", ")
+                .parse()
+                .unwrap();
             let len = test_fns.len();
             let value: TokenStream = quote!( [#test_defs_combined] );
             let test_def_arr = quote! {
@@ -295,29 +295,36 @@ impl RegTestCases {
         let widest = registers.iter().map(|reg| reg.size()).max().unwrap();
         let preamble = codegen::gen_preamble(widest, config.derive_debug);
 
-        let mut test_fns_and_instances_by_periph: HashMap<String, Vec<(String, String)>> =
-            HashMap::new();
+        let mut test_fns_and_instances_by_periph: HashMap<
+            String,
+            Vec<(String, output::TestCaseInstance)>,
+        > = HashMap::new();
         for register in registers.iter() {
             let test_gen = RegTestGenerator::from_register(register, config);
             let test_fn = test_gen.gen_test_fn().to_string();
-            let test_instance = test_gen.gen_test_case_struct_instance().to_string();
+            let test_instance = test_gen.gen_test_case_struct_instance();
             test_fns_and_instances_by_periph
                 .entry(register.top_container_name())
                 .or_default()
                 .push((test_fn, test_instance));
         }
 
-        // Duplicate all test definitions into one big list
-        let test_defs = test_fns_and_instances_by_periph
+        // Duplicate all test struct instances into one big list
+        let test_instances = test_fns_and_instances_by_periph
             .values()
             .flatten()
-            .map(|(_func, def)| def)
+            .map(|(_func, instance)| instance)
             .cloned()
             .collect_vec();
-        let test_case_count = test_defs.len();
-        let test_defs_combined: TokenStream = test_defs.join(",").parse().unwrap();
+        let test_case_count = test_instances.len();
+        let test_instances_combined: TokenStream = test_instances
+            .into_iter()
+            .map(|i| i.into_token_stream().to_string())
+            .join(",")
+            .parse()
+            .unwrap();
         let test_case_array = quote! {
-            pub static TEST_CASES: [TestCase; #test_case_count] = [ #test_defs_combined ];
+            pub static TEST_CASES: [TestCase; #test_case_count] = [ #test_instances_combined ];
         };
 
         let test_cases = gen_test_mod_wrapper(test_fns_and_instances_by_periph);
@@ -345,6 +352,51 @@ impl RegTestCases {
             )*
 
             #test_case_array
+        }
+    }
+}
+
+mod output {
+    //! Types representing things placed into codegen outputs and their [`quote::ToTokens`]
+    //! implementations.
+
+    use proc_macro2::TokenStream;
+    use quote::{quote, ToTokens, TokenStreamExt};
+
+    /// Example:
+    ///
+    /// ```rust,ignore
+    /// TestCase {
+    ///     function: foo::test_something_0xdeafbeef,
+    ///     addr: 0xdeafbeef,
+    ///     uid: "test_something",
+    /// }
+    /// ```
+    #[derive(Clone)]
+    pub(crate) struct TestCaseInstance {
+        pub(crate) func_path: Vec<String>,
+        pub(crate) addr: u64,
+        pub(crate) uid: String,
+    }
+
+    impl ToTokens for TestCaseInstance {
+        fn to_tokens(&self, tokens: &mut TokenStream) {
+            let TestCaseInstance {
+                func_path,
+                addr,
+                uid,
+            } = self;
+
+            let func_path: TokenStream = func_path.join("::").parse().unwrap();
+            let addr_hex: TokenStream = format!("{:#x}", addr).parse().unwrap();
+
+            tokens.append_all(quote! {
+                TestCase {
+                    function: #func_path,
+                    addr: #addr_hex,
+                    uid: #uid,
+                }
+            });
         }
     }
 }
