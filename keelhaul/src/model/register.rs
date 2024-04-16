@@ -4,8 +4,8 @@
 use std::{cmp, fmt, hash, str};
 
 use crate::{
-    analysis, bit_count_to_rust_uint_type_str, codegen, error,
-    model::{AddrRepr, UniquePath},
+    analysis, bit_count_to_rust_uint_type_str, codegen,
+    model::{bits_required, AddrRepr, UniquePath},
 };
 use itertools::Itertools;
 
@@ -29,7 +29,7 @@ pub struct Register {
     /// Checking for the value may require special considerations in registers
     /// with read-only or write-only fields. These considerations are encoded in
     /// [ResetValue].
-    reset_value: Option<ResetValue>,
+    reset_value: Option<ValueOnReset>,
     // TODO: consider support for array-like registers in input
     //dimensions: Option<svd::DimElement>,
 }
@@ -40,7 +40,7 @@ impl Register {
         addr: AddrRepr,
         size: u32,
         access: svd::Access,
-        reset_value: Option<ResetValue>,
+        reset_value: Option<ValueOnReset>,
     ) -> Self {
         Self {
             path,
@@ -91,12 +91,8 @@ impl codegen::TestRegister for Register {
         }
     }
 
-    fn reset_value(&self) -> Option<crate::ValueOnReset<u64>> {
-        self.reset_value.map(|reset_value| {
-            let value = reset_value.value().as_u64();
-            let mask = reset_value.mask().as_u64();
-            codegen::ValueOnReset::new(value, Some(mask))
-        })
+    fn reset_value(&self) -> Option<ValueOnReset> {
+        self.reset_value
     }
 }
 
@@ -157,10 +153,8 @@ impl RegPath {
     }
 }
 
-/// Variable-length register reset value
-///
 /// Register metadata commonly references its default value on reset, which we
-/// can automatically check for correctness. CMSIS-SVD mandates that reset
+/// can automatically check for correctness. CMSIS-SVD requires that reset
 /// values are always reported with their appropriate reset mask. This enables
 /// test cases to avoid reading from write-only bits or writing to read-only
 /// bits.
@@ -171,131 +165,35 @@ impl RegPath {
 /// `mask`  - Mask for reading from or writing into the register, to assist in
 /// writing into partially protected registers.
 #[derive(Clone, Copy, Debug)]
-pub enum ResetValue {
-    U8 { val: u8, mask: u8 },
-    U16 { val: u16, mask: u16 },
-    U32 { val: u32, mask: u32 },
-    U64 { val: u64, mask: u64 },
+pub(crate) struct ValueOnReset {
+    /// Known value on reset
+    value: u64,
+    /// An optional reset mask, indicating which bits have the defined reset value
+    ///
+    /// Required by CMSIS-SVD but not required by our generator.
+    mask: Option<u64>,
 }
 
-impl ResetValue {
-    pub(crate) const fn with_mask(
-        value: RegValue,
-        mask: RegValue,
-    ) -> Result<Self, error::IncompatibleTypesError> {
-        match (value, mask) {
-            (RegValue::U8(val), RegValue::U8(mask)) => Ok(Self::U8 { val, mask }),
-            (RegValue::U16(val), RegValue::U16(mask)) => Ok(Self::U16 { val, mask }),
-            (RegValue::U32(val), RegValue::U32(mask)) => Ok(Self::U32 { val, mask }),
-            (RegValue::U64(val), RegValue::U64(mask)) => Ok(Self::U64 { val, mask }),
-            (val, mask) => Err(error::IncompatibleTypesError(val.width(), mask.width())),
+impl ValueOnReset {
+    /// # Arguments
+    ///
+    /// * `size` - register size, required for the assertion that the reset value fits the register
+    pub(crate) fn new(value: u64, mask: Option<u64>, size: u32) -> Self {
+        // Check that `size` can still represent this value
+        assert!(bits_required(value) <= size);
+        if let Some(mask) = mask {
+            assert!(bits_required(mask) <= size);
         }
+
+        Self { value, mask }
     }
 
-    pub(crate) const fn value(&self) -> RegValue {
-        match self {
-            Self::U8 { val, .. } => RegValue::U8(*val),
-            Self::U16 { val, .. } => RegValue::U16(*val),
-            Self::U32 { val, .. } => RegValue::U32(*val),
-            Self::U64 { val, .. } => RegValue::U64(*val),
-        }
+    pub(crate) fn value(&self) -> u64 {
+        self.value
     }
 
-    pub(crate) const fn mask(&self) -> RegValue {
-        match self {
-            Self::U8 { mask, .. } => RegValue::U8(*mask),
-            Self::U16 { mask, .. } => RegValue::U16(*mask),
-            Self::U32 { mask, .. } => RegValue::U32(*mask),
-            Self::U64 { mask, .. } => RegValue::U64(*mask),
-        }
-    }
-}
-
-/// Variable-length register value
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum RegValue {
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-}
-
-impl RegValue {
-    pub(crate) fn with_value_and_size(
-        val: u64,
-        size: PtrSize,
-    ) -> Result<Self, std::num::TryFromIntError> {
-        Ok(match size {
-            PtrSize::U8 => RegValue::U8(val.try_into()?),
-            PtrSize::U16 => RegValue::U16(val.try_into()?),
-            PtrSize::U32 => RegValue::U32(val.try_into()?),
-            PtrSize::U64 => RegValue::U64(val),
-        })
-    }
-
-    pub(crate) const fn width(&self) -> PtrSize {
-        match self {
-            Self::U8(_) => PtrSize::U8,
-            Self::U16(_) => PtrSize::U16,
-            Self::U32(_) => PtrSize::U32,
-            Self::U64(_) => PtrSize::U64,
-        }
-    }
-
-    /// Bit-extend the value to 64-bits
-    pub fn as_u64(&self) -> u64 {
-        match self {
-            RegValue::U8(u) => *u as u64,
-            RegValue::U16(u) => *u as u64,
-            RegValue::U32(u) => *u as u64,
-            RegValue::U64(u) => *u,
-        }
-    }
-}
-
-impl fmt::LowerHex for RegValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::U8(u) => u.fmt(f),
-            Self::U16(u) => u.fmt(f),
-            Self::U32(u) => u.fmt(f),
-            Self::U64(u) => u.fmt(f),
-        }
-    }
-}
-
-impl From<u64> for RegValue {
-    fn from(value: u64) -> Self {
-        Self::U64(value)
-    }
-}
-
-impl From<u32> for RegValue {
-    fn from(value: u32) -> Self {
-        Self::U32(value)
-    }
-}
-
-impl From<u16> for RegValue {
-    fn from(value: u16) -> Self {
-        Self::U16(value)
-    }
-}
-
-impl From<u8> for RegValue {
-    fn from(value: u8) -> Self {
-        Self::U8(value)
-    }
-}
-
-impl From<RegValue> for u64 {
-    fn from(value: RegValue) -> Self {
-        match value {
-            RegValue::U8(v) => Self::from(v),
-            RegValue::U16(v) => Self::from(v),
-            RegValue::U32(v) => Self::from(v),
-            RegValue::U64(v) => v,
-        }
+    pub(crate) fn mask(&self) -> Option<u64> {
+        self.mask
     }
 }
 
@@ -397,12 +295,12 @@ impl PtrSize {
     }
 
     /// Maximum value representable by a binding of type [`PtrSize`]
-    pub const fn max_value(self) -> RegValue {
+    pub const fn max_value(self) -> u64 {
         match self {
-            Self::U8 => RegValue::U8(u8::MAX),
-            Self::U16 => RegValue::U16(u16::MAX),
-            Self::U32 => RegValue::U32(u32::MAX),
-            Self::U64 => RegValue::U64(u64::MAX),
+            Self::U8 => u8::MAX as u64,
+            Self::U16 => u16::MAX as u64,
+            Self::U32 => u32::MAX as u64,
+            Self::U64 => u64::MAX,
         }
     }
 

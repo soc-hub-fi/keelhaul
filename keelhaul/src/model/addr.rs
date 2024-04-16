@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::model::bits_required;
 use thiserror::Error;
 
 /// Valid address representation
@@ -55,23 +56,6 @@ pub struct MakeAddrError {
     pub(crate) size: u32,
     /// Optional identifier
     pub(crate) id: Option<String>,
-}
-
-fn bits_required(val: u64) -> u32 {
-    64 - val.leading_zeros()
-}
-
-#[test]
-fn bits_required_works() {
-    let test = bits_required;
-
-    assert_eq!(test(u64::MAX), 64);
-    assert_eq!(test(u32::MAX.into()), 32);
-    assert_eq!(test(u16::MAX.into()), 16);
-    assert_eq!(test(u8::MAX.into()), 8);
-    assert_eq!(test(0b1), 1);
-    assert_eq!(test(0b11), 2);
-    assert_eq!(test(0b101), 3);
 }
 
 /// Construct an address from given offsets

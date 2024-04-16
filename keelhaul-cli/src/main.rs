@@ -521,9 +521,7 @@ fn main() -> anyhow::Result<()> {
                     let arch: keelhaul::ArchWidth = (*arch).into();
                     let ptr_size: keelhaul::PtrSize = arch.into();
                     for range in &ranges {
-                        if range.start > ptr_size.max_value().as_u64()
-                            || range.end > ptr_size.max_value().as_u64()
-                        {
+                        if range.start > ptr_size.max_value() || range.end > ptr_size.max_value() {
                             panic!("Supplied memory addresses cannot be represented on this architecture");
                         }
                     }
