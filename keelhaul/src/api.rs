@@ -2,7 +2,7 @@
 
 // Export API types
 pub use crate::codegen::{CodegenConfig, FailureImplKind, MemTestStrategy};
-pub use crate::filtering::{Filters, ItemFilter};
+pub use crate::filtering::{Filter, Filters, ListFilter, RegexFilter};
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::{ApiError, ParseTestKindError};
 pub use svd::ValidateLevel;

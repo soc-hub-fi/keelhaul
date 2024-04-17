@@ -8,7 +8,7 @@ use std::{
 use crate::{
     codegen::bit_count_to_rust_uint_type_str,
     error::{CommonParseError, Error, PositionalError, SvdParseError},
-    filtering::{Filters, IsAllowedOrBlocked, ItemFilter},
+    filtering::{Filter, Filters},
     model::{
         AddrRepr, ArchPtr, MakeAddrError, PtrSize, RegPath, Register, Registers, UniquePath,
         ValueOnReset,
@@ -577,8 +577,8 @@ fn process_registers(
     parent: &RegisterParent,
     register_node: &XmlNode,
     arch: PtrSize,
-    reg_filter: Option<&ItemFilter>,
-    syms_regex: Option<&ItemFilter>,
+    reg_filter: Option<&dyn Filter>,
+    path_filter: Option<&dyn Filter>,
     default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register>>, PositionalError<SvdParseError>> {
     let name = {
@@ -637,8 +637,8 @@ fn process_registers(
             // FIXME: block WITH brackets or WITOUT brackets? maybe both?
             // FIXME: we match against only the register's name, not the path. This is not a
             // great way to exclude registers. We should match against the entire path.
-            if reg_filter.is_some_and(|f| f.is_blocked(&subname)) {
-                info!("register {subname} is was not included due to values set in PATH_EXCLUDES");
+            if reg_filter.as_ref().is_some_and(|f| f.is_blocked(&subname)) {
+                info!("register {subname} was blocked by register filter");
                 return Ok(None);
             }
             // Remove array brackets from the register name.
@@ -653,8 +653,11 @@ fn process_registers(
                     )
                 };
                 let reg_path = path.join("-");
-                if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
-                    info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
+                if path_filter
+                    .as_ref()
+                    .is_some_and(|f| f.is_blocked(&reg_path))
+                {
+                    info!("Register {reg_path} was blocked by path filter");
                     return Ok(None);
                 }
                 path
@@ -701,8 +704,8 @@ fn process_registers(
                 )
             };
             let reg_path = path.join("-");
-            if syms_regex.is_some_and(|f| f.is_blocked(&reg_path)) {
-                info!("Register {reg_path} was not included due to regex set in SYMS_REGEX");
+            if path_filter.is_some_and(|f| f.is_blocked(&reg_path)) {
+                info!("Register {reg_path} was blocked by path filter");
                 return Ok(None);
             }
             path
@@ -710,7 +713,7 @@ fn process_registers(
         // FIXME: we match against only the register's name, not the path. This is not a
         // great way to exclude registers. We should match against the entire path.
         if reg_filter.is_some_and(|f| f.is_blocked(&name)) {
-            info!("register {name} is was not included due to values set in PATH_EXCLUDES");
+            info!("register {name} was blocked by register filter");
             return Ok(None);
         }
         let properties = {
@@ -759,8 +762,8 @@ fn process_cluster(
     parent: &RegisterParent,
     cluster_node: &XmlNode,
     arch: PtrSize,
-    reg_filter: Option<&ItemFilter>,
-    syms_regex: Option<&ItemFilter>,
+    reg_filter: Option<&dyn Filter>,
+    path_filter: Option<&dyn Filter>,
     default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register>>, PositionalError<SvdParseError>> {
     let current_parent = parent.clone_and_update_from_cluster(cluster_node)?;
@@ -771,7 +774,7 @@ fn process_cluster(
             &register_node,
             arch,
             reg_filter,
-            syms_regex,
+            path_filter,
             default_reset_value,
         )? {
             cluster_registers.extend(registers);
@@ -808,8 +811,8 @@ fn process_peripheral(
             &periph,
             &cluster_node,
             arch,
-            filters.reg.as_ref(),
-            filters.path.as_ref(),
+            filters.reg.as_deref(),
+            filters.path.as_deref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);
@@ -820,8 +823,8 @@ fn process_peripheral(
             &periph,
             &register_node,
             arch,
-            filters.reg.as_ref(),
-            filters.path.as_ref(),
+            filters.reg.as_deref(),
+            filters.path.as_deref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);
@@ -909,9 +912,7 @@ fn find_registers(
 ///
 /// * `svd_path`        - The path to the SVD file
 /// * `arch`            - The size used by the architecture to represent addresses
-/// * `reg_filter`      - What registers to include or exclude
-/// * `periph_filter`   - What peripherals to include or exclude
-/// * `syms_filter` -   - What symbols to include or exclude (applying to full register identifier)
+/// * `filters`         - What registers to include or exclude
 ///
 /// # Safety
 ///

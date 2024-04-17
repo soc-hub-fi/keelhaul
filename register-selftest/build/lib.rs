@@ -13,7 +13,9 @@ use std::{
 
 use anyhow::Context;
 use fs_err::{self as fs, File};
-use keelhaul::{CodegenConfig, Filters, ItemFilter, ModelSource, ParseTestKindError, TestKind};
+use keelhaul::{
+    CodegenConfig, Filters, ListFilter, ModelSource, ParseTestKindError, RegexFilter, TestKind,
+};
 use log::LevelFilter;
 use regex::Regex;
 
@@ -104,19 +106,17 @@ fn main() -> anyhow::Result<()> {
     let periph_filter = {
         let include_peripherals = util::read_vec_from_env(ENV_INCLUDE_PERIPHS, ',').ok();
         let exclude_peripherals = util::read_vec_from_env(ENV_EXCLUDE_PERIPHS, ',').ok();
-        ItemFilter::list(include_peripherals, exclude_peripherals.unwrap_or_default())
+        Box::new(ListFilter::new(
+            include_peripherals,
+            exclude_peripherals.unwrap_or_default(),
+        ))
     };
-    let syms_filter = {
-        let include_syms_regex = env::var(ENV_INCLUDE_SYMS_REGEX)
-            .ok()
-            .map(|s| Regex::new(&s))
-            .transpose()?;
-        let exclude_syms_regex = env::var(ENV_EXCLUDE_SYMS_REGEX)
-            .ok()
-            .map(|s| Regex::new(&s))
-            .transpose()?;
-        ItemFilter::regex(include_syms_regex, exclude_syms_regex)
-    };
+    let syms_filter: Option<Box<dyn keelhaul::Filter>> = env::var(ENV_INCLUDE_SYMS_REGEX)
+        .ok()
+        .map(|s| Regex::new(&s))
+        .transpose()?
+        .map(RegexFilter::new)
+        .map(|f| -> Box<dyn keelhaul::Filter> { Box::new(f) });
 
     let svd_path = util::read_relpath_from_env(ENV_SVD_IN)
         .with_context(|| format!("Could not detect {ENV_SVD_IN}"))?;
@@ -127,7 +127,7 @@ fn main() -> anyhow::Result<()> {
         )],
         arch_ptr_size_bytes,
         &test_cfg,
-        &Filters::from_filters(None, Some(periph_filter), Some(syms_filter)),
+        &Filters::from_filters(None, Some(periph_filter), syms_filter),
         true,
     )?;
     file_output.write_all(test_cases.as_bytes())?;
