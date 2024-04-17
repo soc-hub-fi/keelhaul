@@ -2,6 +2,7 @@
 
 // Export API types
 pub use crate::codegen::MemTestStrategy;
+pub use crate::filtering::{Filters, ItemFilter};
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::{ApiError, ParseTestKindError};
 pub use svd::ValidateLevel;
@@ -10,7 +11,7 @@ mod error;
 
 use std::{ops, path, str};
 
-use crate::{analysis, codegen, model, CodegenConfig, FailureImplKind, Filters};
+use crate::{analysis, codegen, model, CodegenConfig, FailureImplKind};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
