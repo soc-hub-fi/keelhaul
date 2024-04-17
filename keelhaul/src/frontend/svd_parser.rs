@@ -204,7 +204,7 @@ fn select_regs_from_periphs(
     size: u32,
 ) -> Vec<Register> {
     info!(
-        "Found {} peripherals: {}",
+        "Scanning {} peripherals: {}",
         periphs.len(),
         periphs.iter().map(|p| p.name()).join(", ")
     );
@@ -254,11 +254,24 @@ pub(crate) fn parse_svd_into_registers(
 
     // TODO: error handling
     let device = svd_parser::parse_with_config(&svd_xml, &parse_config).unwrap();
-    let mut periphs = device.peripherals.clone();
-    periphs.sort_by_key(|p| p.name.clone());
+
+    // Filter out top-level elements
+    let mut top_elems = device.peripherals.clone();
+    if let Some(f) = filters.top.as_ref() {
+        let total = top_elems.len();
+        top_elems = top_elems
+            .into_iter()
+            .filter(|p| f.is_allowed(p.name()))
+            .collect_vec();
+        let selected = top_elems.len();
+        info!(
+            "Top filter selected {selected}/{total} of top elements: {}",
+            top_elems.iter().map(|p| p.name()).join(", "),
+        );
+    }
 
     // TODO: error handling
-    let registers = select_regs_from_periphs(&device, &periphs, arch.count_bits());
+    let registers = select_regs_from_periphs(&device, &top_elems, arch.count_bits());
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
@@ -267,6 +280,6 @@ pub(crate) fn parse_svd_into_registers(
         return Err(Error::ZeroEntries);
     }
 
-    info!("Found {} registers.", registers.len());
+    info!("Discovered {} registers", registers.len());
     Ok(registers.into())
 }
