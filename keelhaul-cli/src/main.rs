@@ -8,6 +8,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
+
+    #[command(flatten)]
+    verbose: clap_verbosity_flag::Verbosity,
 }
 
 #[derive(Args, Clone)]
@@ -400,6 +403,11 @@ fn get_sources(
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Install a logger to print useful messages to stderr
+    env_logger::Builder::new()
+        .filter_module("keelhaul", cli.verbose.log_level_filter())
+        .init();
 
     let sources = cli
         .command
