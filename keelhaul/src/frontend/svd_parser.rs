@@ -2,7 +2,7 @@ use std::{fmt, iter, path};
 
 use crate::{
     error::Error,
-    model::{self, AddrRepr, RegPath, RegPathSegment, Register, Registers},
+    model::{self, AddrRepr, RegPath, RegPathSegment, Register, Registers, UniquePath},
     util, Filters, PtrSize,
 };
 use itertools::Itertools;
@@ -271,7 +271,26 @@ pub(crate) fn parse_svd_into_registers(
     }
 
     // TODO: error handling
-    let registers = select_regs_from_periphs(&device, &top_elems, arch.count_bits());
+    let mut registers = select_regs_from_periphs(&device, &top_elems, arch.count_bits());
+
+    if let Some(f) = filters.path.as_ref() {
+        let remaining = registers.len();
+        registers = registers
+            .into_iter()
+            .filter(|reg| {
+                f.is_allowed(
+                    &reg.path()
+                        // Dash '-' is used as the path combiner
+                        .join("-"),
+                )
+            })
+            .collect_vec();
+        let selected = registers.len();
+        info!(
+            "Path filter selected {selected}/{remaining} of remaining registers: {}",
+            top_elems.iter().map(|p| p.name()).join(", "),
+        );
+    }
 
     // If zero registers were chosen for generation, this run is useless.
     // Therefore we treat it as an error.
