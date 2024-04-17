@@ -1,11 +1,14 @@
 use regex::Regex;
 
 pub struct Filters {
-    /// Filter based on register name (leaf node in input)
-    pub(crate) reg: Option<ItemFilter>,
     /// Filter top-level items (peripherals or subsystems)
     pub(crate) top: Option<ItemFilter>,
-    /// Filter the full path
+    /// Filter based on register name (leaf node in input)
+    pub(crate) reg: Option<ItemFilter>,
+    /// Filter based on the full path to the register
+    ///
+    /// Dash ('-') is used as the separator between path segments, e.g.,
+    /// "PERIPH_NAME-CLUSTER_NAME-REG_NAME".
     pub(crate) path: Option<ItemFilter>,
 }
 
