@@ -10,7 +10,7 @@ pub use register::*;
 // Anything that's part of the internal API of register is also part of the internal API of model
 pub(crate) use addr::*;
 
-use std::{fmt, ops};
+use std::ops;
 
 /// Trait for types that have a unique path within a given system
 ///
@@ -28,31 +28,6 @@ pub trait UniquePath {
         self.path().first().unwrap().to_owned()
     }
 }
-
-/// Reference schema
-///
-/// Trait for signaling a reference schema. A type implementing `Schema` can be used to indicate
-/// that another type is based on a particular schema which may impact e.g., how messages are
-/// formatted.
-///
-/// For instance, a register path implementing `RefSchemaSvd` might talk about `clusters` while a
-/// register path implementing `RefSchemaIeee1685_2014` might talk about "register blocks".
-///
-/// # N.b. for implementors
-///
-/// Note that the reference schema should not impact the model implementation, only the user facing
-/// output, generated variable names, etc.
-pub trait RefSchema: fmt::Debug + Clone + Copy {}
-
-/// Marker type indicating that the marked type references CMSIS-SVD v1.2
-#[derive(Debug, Clone, Copy)]
-pub struct RefSchemaSvdV1_2;
-impl RefSchema for RefSchemaSvdV1_2 {}
-
-/// Marker type indicating that the marked type references CMSIS-SVD v1.3
-#[derive(Debug, Clone, Copy)]
-pub struct RefSchemaSvdV1_3;
-impl RefSchema for RefSchemaSvdV1_3 {}
 
 /// A list of registers parsed from SVD or IP-XACT (newtype)
 pub struct Registers(Vec<Register>);
