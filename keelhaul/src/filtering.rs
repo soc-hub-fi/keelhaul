@@ -2,11 +2,11 @@ use regex::Regex;
 
 pub struct Filters {
     /// Filter based on register name (leaf node in input)
-    pub(crate) reg: Option<ItemFilter<String>>,
+    pub(crate) reg: Option<ItemFilter>,
     /// Filter top-level items (peripherals or subsystems)
-    pub(crate) top: Option<ItemFilter<String>>,
+    pub(crate) top: Option<ItemFilter>,
     /// Filter the full path
-    pub(crate) path_regex: Option<ItemFilter<String>>,
+    pub(crate) path_regex: Option<ItemFilter>,
 }
 
 impl Filters {
@@ -19,10 +19,11 @@ impl Filters {
         }
     }
 
+    /// Specify each filter
     pub fn from_filters(
-        reg_filter: Option<ItemFilter<String>>,
-        periph_filter: Option<ItemFilter<String>>,
-        syms_filter: Option<ItemFilter<String>>,
+        reg_filter: Option<ItemFilter>,
+        periph_filter: Option<ItemFilter>,
+        syms_filter: Option<ItemFilter>,
     ) -> Self {
         Self {
             reg: reg_filter,
@@ -32,14 +33,14 @@ impl Filters {
     }
 }
 
-/// What items of type `T` are allowed or not
-pub enum ItemFilter<T: PartialEq> {
+/// Filter out items by blocking them, or by setting an allow list
+pub enum ItemFilter {
     List {
         // If set, only the specified items are allowed. If not set, all items are
         // allowed except the ones listed in blocklist.
-        allow_list: Option<Vec<T>>,
+        allow_list: Option<Vec<String>>,
         // These items are always blocked even if present in `white_list`
-        block_list: Vec<T>,
+        block_list: Vec<String>,
     },
     Regex {
         // If set, only items matching the regex are allowed
@@ -49,24 +50,22 @@ pub enum ItemFilter<T: PartialEq> {
     },
 }
 
-pub(crate) trait IsAllowedOrBlocked<V> {
-    fn is_allowed(&self, value: V) -> bool;
-    fn is_blocked(&self, value: V) -> bool;
+pub(crate) trait IsAllowedOrBlocked {
+    fn is_allowed(&self, value: &str) -> bool;
+    fn is_blocked(&self, value: &str) -> bool {
+        !self.is_allowed(value)
+    }
 }
 
-impl<T, V> IsAllowedOrBlocked<V> for ItemFilter<T>
-where
-    T: PartialEq + From<V>,
-    V: Into<T> + ToString + Clone,
-{
-    fn is_allowed(&self, value: V) -> bool {
+impl IsAllowedOrBlocked for ItemFilter {
+    fn is_allowed(&self, value: &str) -> bool {
         match self {
             Self::List {
                 allow_list,
                 block_list,
             } => {
                 // Items in block list are always blocked
-                if block_list.contains(&value.clone().into()) {
+                if block_list.contains(&value.into()) {
                     return false;
                 }
                 allow_list
@@ -86,21 +85,17 @@ where
             }
         }
     }
-
-    fn is_blocked(&self, value: V) -> bool {
-        !self.is_allowed(value)
-    }
 }
 
-impl<T: PartialEq> ItemFilter<T> {
-    pub fn list(white_list: Option<Vec<T>>, block_list: Vec<T>) -> ItemFilter<T> {
+impl ItemFilter {
+    pub fn list(white_list: Option<Vec<String>>, block_list: Vec<String>) -> ItemFilter {
         Self::List {
             allow_list: white_list,
             block_list,
         }
     }
 
-    pub const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter<T> {
+    pub const fn regex(allow: Option<Regex>, block: Option<Regex>) -> ItemFilter {
         Self::Regex { allow, block }
     }
 }

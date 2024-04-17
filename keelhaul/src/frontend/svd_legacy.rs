@@ -577,8 +577,8 @@ fn process_registers(
     parent: &RegisterParent,
     register_node: &XmlNode,
     arch: PtrSize,
-    reg_filter: Option<&ItemFilter<String>>,
-    syms_regex: Option<&ItemFilter<String>>,
+    reg_filter: Option<&ItemFilter>,
+    syms_regex: Option<&ItemFilter>,
     default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register>>, PositionalError<SvdParseError>> {
     let name = {
@@ -759,8 +759,8 @@ fn process_cluster(
     parent: &RegisterParent,
     cluster_node: &XmlNode,
     arch: PtrSize,
-    reg_filter: Option<&ItemFilter<String>>,
-    syms_regex: Option<&ItemFilter<String>>,
+    reg_filter: Option<&ItemFilter>,
+    syms_regex: Option<&ItemFilter>,
     default_reset_value: Option<u64>,
 ) -> Result<Option<Vec<Register>>, PositionalError<SvdParseError>> {
     let current_parent = parent.clone_and_update_from_cluster(cluster_node)?;
