@@ -240,6 +240,10 @@ pub(crate) fn parse_svd_into_registers(
     filters: &Filters,
     validate_level: crate::ValidateLevel,
 ) -> Result<Registers, Error> {
+    if filters.reg.is_some() {
+        log::warn!("register level filtering is not implemented, reg filter is ignored");
+    }
+
     let svd_xml = util::read_file_or_panic(svd_source);
 
     let parse_config = svd_parser::Config::default();
