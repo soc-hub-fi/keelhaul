@@ -809,7 +809,7 @@ fn process_peripheral(
             &cluster_node,
             arch,
             filters.reg.as_ref(),
-            filters.path_regex.as_ref(),
+            filters.path.as_ref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);
@@ -821,7 +821,7 @@ fn process_peripheral(
             &register_node,
             arch,
             filters.reg.as_ref(),
-            filters.path_regex.as_ref(),
+            filters.path.as_ref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);

@@ -6,7 +6,7 @@ pub struct Filters {
     /// Filter top-level items (peripherals or subsystems)
     pub(crate) top: Option<ItemFilter>,
     /// Filter the full path
-    pub(crate) path_regex: Option<ItemFilter>,
+    pub(crate) path: Option<ItemFilter>,
 }
 
 impl Filters {
@@ -15,7 +15,7 @@ impl Filters {
         Self {
             reg: None,
             top: None,
-            path_regex: None,
+            path: None,
         }
     }
 
@@ -28,7 +28,7 @@ impl Filters {
         Self {
             reg: reg_filter,
             top: periph_filter,
-            path_regex: syms_filter,
+            path: syms_filter,
         }
     }
 }
