@@ -789,7 +789,7 @@ fn process_peripheral(
     let periph_name = &periph.periph_name;
 
     if filters
-        .periph_filter
+        .top
         .as_ref()
         .is_some_and(|f| f.is_blocked(&periph_name.to_lowercase()))
     {
@@ -807,8 +807,8 @@ fn process_peripheral(
             &periph,
             &cluster_node,
             arch,
-            filters.reg_filter.as_ref(),
-            filters.syms_filter.as_ref(),
+            filters.reg.as_ref(),
+            filters.path_regex.as_ref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);
@@ -819,8 +819,8 @@ fn process_peripheral(
             &periph,
             &register_node,
             arch,
-            filters.reg_filter.as_ref(),
-            filters.syms_filter.as_ref(),
+            filters.reg.as_ref(),
+            filters.path_regex.as_ref(),
             default_reset_value,
         )? {
             peripheral_registers.extend(registers);

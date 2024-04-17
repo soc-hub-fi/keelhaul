@@ -90,18 +90,21 @@ impl<T: PartialEq> ItemFilter<T> {
 // TODO: Move ItemFilter to api.rs
 
 pub struct Filters {
-    pub(crate) reg_filter: Option<ItemFilter<String>>,
-    pub(crate) periph_filter: Option<ItemFilter<String>>,
-    pub(crate) syms_filter: Option<ItemFilter<String>>,
+    /// Filter based on register name (leaf node in input)
+    pub(crate) reg: Option<ItemFilter<String>>,
+    /// Filter top-level items (peripherals or subsystems)
+    pub(crate) top: Option<ItemFilter<String>>,
+    /// Filter the full path
+    pub(crate) path_regex: Option<ItemFilter<String>>,
 }
 
 impl Filters {
     /// Take all registers in input
     pub fn all() -> Self {
         Self {
-            reg_filter: None,
-            periph_filter: None,
-            syms_filter: None,
+            reg: None,
+            top: None,
+            path_regex: None,
         }
     }
 
@@ -111,9 +114,9 @@ impl Filters {
         syms_filter: Option<ItemFilter<String>>,
     ) -> Self {
         Self {
-            reg_filter,
-            periph_filter,
-            syms_filter,
+            reg: reg_filter,
+            top: periph_filter,
+            path_regex: syms_filter,
         }
     }
 }
