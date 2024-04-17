@@ -794,7 +794,7 @@ fn process_peripheral(
         .as_ref()
         .is_some_and(|f| f.is_blocked(&periph_name.to_lowercase()))
     {
-        info!("Peripheral {periph_name} was not included due to values set in INCLUDE_PERIPHERALS and/or EXCLUDE_PERIPHERALS");
+        info!("Peripheral {periph_name} was blocked by top filter");
         return Ok(None);
     }
 
