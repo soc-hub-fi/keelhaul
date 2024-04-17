@@ -3,11 +3,11 @@
 // Export full API at crate root
 pub use api::*;
 
-pub(crate) mod analysis;
+mod analysis;
 mod api;
-pub(crate) mod codegen;
-pub mod error;
+mod codegen;
+mod error;
 mod filtering;
-pub(crate) mod frontend;
+mod frontend;
 mod model;
 mod util;
