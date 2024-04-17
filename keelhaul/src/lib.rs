@@ -1,4 +1,5 @@
-//! Common types and functions for register test generator.
+//! Keelhaul --- Generate executable memory-mapped I/O verification test cases from IP-XACT or
+//! CMSIS-SVD files.
 
 // Export full API at crate root
 pub use api::*;
