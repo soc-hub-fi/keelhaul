@@ -1,4 +1,4 @@
-use std::ops;
+use std::{ops, str};
 
 use regex::Regex;
 
@@ -79,6 +79,14 @@ pub struct RegexFilter(Regex);
 impl RegexFilter {
     pub const fn new(re: Regex) -> RegexFilter {
         RegexFilter(re)
+    }
+}
+
+impl str::FromStr for RegexFilter {
+    type Err = regex::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::new(Regex::new(s)?))
     }
 }
 
