@@ -4,7 +4,8 @@
 use std::{cmp, fmt, hash, str};
 
 use crate::{
-    analysis, bit_count_to_rust_uint_type_str, codegen,
+    analysis,
+    codegen::{self, bit_count_to_rust_uint_type_str},
     model::{bits_required, AddrRepr, UniquePath},
 };
 use itertools::Itertools;
@@ -244,32 +245,15 @@ pub trait ArchPtr:
     // Allow creating new values from 64-bit integers at runtime (if they fit)
     TryFrom<u64>
     {
-    fn ptr_size() -> PtrSize;
 }
 
-impl ArchPtr for u8 {
-    fn ptr_size() -> PtrSize {
-        PtrSize::U8
-    }
-}
+impl ArchPtr for u8 {}
 
-impl ArchPtr for u16 {
-    fn ptr_size() -> PtrSize {
-        PtrSize::U16
-    }
-}
+impl ArchPtr for u16 {}
 
-impl ArchPtr for u32 {
-    fn ptr_size() -> PtrSize {
-        PtrSize::U32
-    }
-}
+impl ArchPtr for u32 {}
 
-impl ArchPtr for u64 {
-    fn ptr_size() -> PtrSize {
-        PtrSize::U64
-    }
-}
+impl ArchPtr for u64 {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PtrSize {
