@@ -24,15 +24,11 @@ impl Filters {
 
     /// Specify each filter
     pub fn from_filters(
-        reg_filter: Option<ItemFilter>,
-        periph_filter: Option<ItemFilter>,
-        syms_filter: Option<ItemFilter>,
+        reg: Option<ItemFilter>,
+        top: Option<ItemFilter>,
+        path: Option<ItemFilter>,
     ) -> Self {
-        Self {
-            reg: reg_filter,
-            top: periph_filter,
-            path: syms_filter,
-        }
+        Self { reg, top, path }
     }
 }
 
@@ -91,9 +87,9 @@ impl IsAllowedOrBlocked for ItemFilter {
 }
 
 impl ItemFilter {
-    pub fn list(white_list: Option<Vec<String>>, block_list: Vec<String>) -> ItemFilter {
+    pub fn list(allow_list: Option<Vec<String>>, block_list: Vec<String>) -> ItemFilter {
         Self::List {
-            allow_list: white_list,
+            allow_list,
             block_list,
         }
     }
