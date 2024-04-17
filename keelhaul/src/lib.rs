@@ -11,5 +11,3 @@ mod filtering;
 pub(crate) mod frontend;
 mod model;
 mod util;
-
-pub use codegen::*;

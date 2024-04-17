@@ -1,7 +1,7 @@
 //! Exposes functionality supported by this crate
 
 // Export API types
-pub use crate::codegen::MemTestStrategy;
+pub use crate::codegen::{CodegenConfig, FailureImplKind, MemTestStrategy};
 pub use crate::filtering::{Filters, ItemFilter};
 pub use crate::model::{PtrSize, RefSchemaSvdV1_2, RefSchemaSvdV1_3};
 pub use error::{ApiError, ParseTestKindError};
@@ -11,7 +11,7 @@ mod error;
 
 use std::{ops, path, str};
 
-use crate::{analysis, codegen, model, CodegenConfig, FailureImplKind};
+use crate::{analysis, codegen, model};
 use error::NotImplementedError;
 use itertools::Itertools;
 use log::info;
@@ -214,7 +214,7 @@ pub fn generate_tests(
 pub fn generate_tests_with_format(
     sources: &[ModelSource],
     arch_ptr_size: ArchWidth,
-    test_cfg: &CodegenConfig,
+    test_cfg: &codegen::CodegenConfig,
     filters: &Filters,
     use_zero_as_default_reset: bool,
 ) -> Result<String, ApiError> {

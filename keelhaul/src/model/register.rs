@@ -4,7 +4,8 @@
 use std::{cmp, fmt, hash, str};
 
 use crate::{
-    analysis, bit_count_to_rust_uint_type_str, codegen,
+    analysis,
+    codegen::{self, bit_count_to_rust_uint_type_str},
     model::{bits_required, AddrRepr, UniquePath},
 };
 use itertools::Itertools;

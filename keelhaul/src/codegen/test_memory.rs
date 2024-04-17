@@ -1,6 +1,9 @@
 use std::ops;
 
-use crate::{bit_count_to_rust_uint_type_str, codegen, FailureImplKind};
+use crate::{
+    codegen::{self, bit_count_to_rust_uint_type_str},
+    FailureImplKind,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};

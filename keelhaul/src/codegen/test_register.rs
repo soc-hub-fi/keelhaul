@@ -3,11 +3,13 @@ use std::collections::HashMap;
 use crate::{
     codegen,
     model::{self, ArchPtr, UniquePath},
-    CodegenConfig, TestKind,
+    TestKind,
 };
 use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
+
+use super::CodegenConfig;
 
 /// Type that a test can be generated for
 pub(crate) trait TestRegister: model::UniquePath {

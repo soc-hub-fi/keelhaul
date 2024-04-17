@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    bit_count_to_rust_uint_type_str,
+    codegen::bit_count_to_rust_uint_type_str,
     error::{CommonParseError, Error, PositionalError, SvdParseError},
     filtering::{Filters, IsAllowedOrBlocked, ItemFilter},
     model::{
