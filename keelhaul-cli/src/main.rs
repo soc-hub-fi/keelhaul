@@ -1,4 +1,4 @@
-use std::{env, iter, ops, path};
+use std::{env, iter, ops, path, str::FromStr};
 
 use anyhow::{anyhow, Context};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -8,6 +8,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
+
+    #[command(flatten)]
+    verbose: clap_verbosity_flag::Verbosity,
 }
 
 #[derive(Args, Clone)]
@@ -125,6 +128,14 @@ enum Command {
         /// Use zero as the assumed default reset value when a reset value is not provided
         #[arg(long = "reset-defaults-zero", action = clap::ArgAction::SetTrue)]
         use_zero_as_default_reset: bool,
+
+        /// Filter top elements using a regex
+        #[arg(long = "filter-top")]
+        filter_top_regex: Option<String>,
+
+        /// Filter register paths using a regex. Dash (`-`) is the separator between path elements.
+        #[arg(long = "filter-path")]
+        filter_path_regex: Option<String>,
     },
     /// Generate memory tests
     #[command(name = "gen-memtest")]
@@ -401,6 +412,11 @@ fn get_sources(
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    // Install a logger to print useful messages to stderr
+    env_logger::Builder::new()
+        .filter_module("keelhaul", cli.verbose.log_level_filter())
+        .init();
+
     let sources = cli
         .command
         .as_ref()
@@ -478,6 +494,8 @@ fn main() -> anyhow::Result<()> {
                 no_format,
                 use_zero_as_default_reset,
                 validate_level: _,
+                filter_top_regex,
+                filter_path_regex,
             } => {
                 let mut config = keelhaul::CodegenConfig::default()
                     .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -487,8 +505,24 @@ fn main() -> anyhow::Result<()> {
                 if let Some(on_fail) = on_fail {
                     config = config.on_fail(on_fail.clone().into());
                 }
+
+                let filters = keelhaul::Filters::from_filters(
+                    None,
+                    filter_top_regex
+                        .as_ref()
+                        .map(|s| keelhaul::RegexFilter::from_str(s))
+                        .transpose()?
+                        .map(|f| -> Box<dyn keelhaul::Filter> { Box::new(f) }),
+                    filter_path_regex
+                        .as_ref()
+                        .map(|s| keelhaul::RegexFilter::from_str(s))
+                        .transpose()?
+                        .map(|f| -> Box<dyn keelhaul::Filter> { Box::new(f) }),
+                );
+
                 generate(
                     arch.unwrap().into(),
+                    filters,
                     config,
                     sources.unwrap(),
                     *no_format,
@@ -565,12 +599,12 @@ fn main() -> anyhow::Result<()> {
 
 fn generate(
     arch: keelhaul::ArchWidth,
+    filters: keelhaul::Filters,
     config: keelhaul::CodegenConfig,
     sources: Vec<keelhaul::ModelSource>,
     no_format: bool,
     use_zero_as_default_reset: bool,
 ) -> Result<(), anyhow::Error> {
-    let filters = keelhaul::Filters::all();
     let output = if no_format {
         keelhaul::generate_tests(&sources, arch, &config, &filters, use_zero_as_default_reset)?
     } else {
