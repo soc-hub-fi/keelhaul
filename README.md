@@ -20,6 +20,9 @@ cd keelhaul-cli
 cargo run -- --help
 ```
 
+N.b., SoC Hub chip verification so far has used the custom parser available for all subcommands via
+`--use-legacy`.
+
 ## SoC integration guide (register-selftest)
 
 See also. [register-selftest](./register-selftest/README.md).
