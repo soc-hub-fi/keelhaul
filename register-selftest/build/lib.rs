@@ -129,6 +129,7 @@ fn main() -> anyhow::Result<()> {
         &test_cfg,
         &Filters::from_filters(None, Some(periph_filter), syms_filter),
         true,
+        true,
     )?;
     file_output.write_all(test_cases.as_bytes())?;
     let path = get_path_to_output();

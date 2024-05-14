@@ -38,6 +38,10 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
+
+        /// Use the original, custom SVD parser instead of the new `svd-parser` based parser
+        #[arg(long, action = clap::ArgAction::SetTrue, requires = "svd")]
+        use_legacy: bool,
     },
     /// List all top level items (peripherals or subsystems) in the supplied sources
     ///
@@ -52,6 +56,10 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
+
+        /// Use the original, custom SVD parser instead of the new `svd-parser` based parser
+        #[arg(long, action = clap::ArgAction::SetTrue, requires = "svd")]
+        use_legacy: bool,
 
         /// Only list peripherals without register counts
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -75,6 +83,10 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
+
+        /// Use the original, custom SVD parser instead of the new `svd-parser` based parser
+        #[arg(long, action = clap::ArgAction::SetTrue, requires = "svd")]
+        use_legacy: bool,
     },
     /// Count the number of readable registers with a known reset value in the inputs
     CountResetValues {
@@ -87,6 +99,10 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
+
+        /// Use the original, custom SVD parser instead of the new `svd-parser` based parser
+        #[arg(long, action = clap::ArgAction::SetTrue, requires = "svd")]
+        use_legacy: bool,
     },
     /// Generate metadata tests
     #[command(name = "gen-regtest")]
@@ -100,6 +116,10 @@ enum Command {
 
         #[arg(long = "validate", default_value = ValidateLevel(keelhaul::ValidateLevel::Disabled), requires = "svd")]
         validate_level: ValidateLevel,
+
+        /// Use the original, custom SVD parser instead of the new `svd-parser` based parser
+        #[arg(long, action = clap::ArgAction::SetTrue, requires = "svd")]
+        use_legacy: bool,
 
         /// Type of test to be generated. Chain multiple for more kinds.
         #[arg(short = 't', long = "test", required = true, action = clap::ArgAction::Append)]
@@ -434,14 +454,6 @@ fn main() -> anyhow::Result<()> {
         .command
         .as_ref()
         .and_then(|cmd| cmd.arch().map(|arch| arch.into()));
-    if let Some(cmd) = cli.command.as_ref() {
-        if cmd
-            .validate_level()
-            .is_some_and(|l| l.0 != keelhaul::ValidateLevel::Disabled)
-        {
-            anyhow::bail!("validate level not implemented");
-        }
-    }
 
     if let Some(cmd) = &cli.command {
         match cmd {
@@ -449,9 +461,10 @@ fn main() -> anyhow::Result<()> {
                 input: _input,
                 arch: _arch,
                 validate_level: _,
+                use_legacy,
             } => {
                 let sources = sources.unwrap();
-                match keelhaul::dry_run(&sources, arch.unwrap()).with_context(|| {
+                match keelhaul::dry_run(&sources, arch.unwrap(), *use_legacy).with_context(|| {
                     format!("could not execute dry run for arch: {arch:?}, sources: {sources:?}")
                 }) {
                     Ok(_) => println!("keelhaul: dry run completed successfully"),
@@ -465,22 +478,26 @@ fn main() -> anyhow::Result<()> {
                 sorting,
                 validate_level: _,
                 no_rubric,
+                use_legacy,
             } => ls_top(
                 &sources.unwrap(),
                 arch.unwrap(),
                 *sorting,
                 *no_count,
                 *no_rubric,
+                *use_legacy,
             )?,
             Command::CountRegisters {
                 input: _input,
                 validate_level: _,
                 arch: _arch,
+                use_legacy,
             } => {
                 let output = keelhaul::count_registers_svd(
                     &sources.unwrap(),
                     arch.unwrap(),
                     &keelhaul::Filters::all(),
+                    *use_legacy,
                 )?;
                 println!("{output}");
             }
@@ -496,6 +513,7 @@ fn main() -> anyhow::Result<()> {
                 validate_level: _,
                 filter_top_regex,
                 filter_path_regex,
+                use_legacy,
             } => {
                 let mut config = keelhaul::CodegenConfig::default()
                     .tests_to_generate(tests_to_generate.iter().cloned().map(|tk| tk.0).collect())
@@ -527,23 +545,27 @@ fn main() -> anyhow::Result<()> {
                     sources.unwrap(),
                     *no_format,
                     *use_zero_as_default_reset,
+                    *use_legacy,
                 )?
             }
             Command::CountResetValues {
                 input: _input,
                 arch: _arch,
                 validate_level: _,
+                use_legacy,
             } => {
                 let sources = sources.unwrap();
                 let total = keelhaul::count_registers_svd(
                     &sources,
                     arch.unwrap(),
                     &keelhaul::Filters::all(),
+                    *use_legacy,
                 )?;
                 let with_reset = keelhaul::count_readable_registers_with_reset_value(
                     &sources,
                     arch.unwrap(),
                     &keelhaul::Filters::all(),
+                    *use_legacy,
                 )?;
                 let percent = (with_reset as f64 / total as f64) * 100.;
                 println!(
@@ -604,9 +626,17 @@ fn generate(
     sources: Vec<keelhaul::ModelSource>,
     no_format: bool,
     use_zero_as_default_reset: bool,
+    use_legacy: bool,
 ) -> Result<(), anyhow::Error> {
     let output = if no_format {
-        keelhaul::generate_tests(&sources, arch, &config, &filters, use_zero_as_default_reset)?
+        keelhaul::generate_tests(
+            &sources,
+            arch,
+            &config,
+            &filters,
+            use_zero_as_default_reset,
+            use_legacy,
+        )?
     } else {
         keelhaul::generate_tests_with_format(
             &sources,
@@ -614,6 +644,7 @@ fn generate(
             &config,
             &filters,
             use_zero_as_default_reset,
+            use_legacy,
         )?
     };
     println!("{output}");
@@ -626,8 +657,9 @@ fn ls_top(
     sorting: Sorting,
     no_count: bool,
     no_rubric: bool,
+    use_legacy: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut top_and_count = keelhaul::list_top(sources, arch)?;
+    let mut top_and_count = keelhaul::list_top(sources, arch, use_legacy)?;
     if top_and_count.is_empty() {
         println!("keelhaul: no peripherals found in input");
     }
