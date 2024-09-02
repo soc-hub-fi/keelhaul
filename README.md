@@ -7,7 +7,7 @@ CMSIS-SVD files.
 
 - Make sure to run `git submodule update --init` or equivalent
 - Install Rust from <https://rustup.rs/>
-- Install `just`, a command runner
+- Install `just`, a command runner for access to convenient build job automation
   - `cargo install just`
 
 ## Getting started - try the CLI
